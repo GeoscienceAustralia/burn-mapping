@@ -2,6 +2,9 @@
 
 
 
+
+
+
 import numpy as np
 import math
 """
@@ -21,17 +24,17 @@ def geometric_median(X,tol,MaxInter):
     NDATES = len(X[0])
     l = 0
     y0 = np.nanmean(X,axis=1)
-    if len(y0[np.isnan(y0)])==NDATES:
+    if len(y0[np.isnan(y0)])>0:
         geoMedian = y0
     else:
         eps = 10**2
         while ( np.sqrt(np.sum(eps**2))> tol and l< MaxInter):
 
             EucDist = np.transpose(np.transpose(X) - y0)
-            EucNorm = np.sqrt(np.sum(EucDist**2,axis=1))
+            EucNorm = np.sqrt(np.sum(EucDist**2,axis=0))
             NotNaN = np.where(~np.isnan(EucNorm))[0]
             y1=np.sum(X[:,NotNaN]/EucNorm[NotNaN],axis=1)/(np.sum(1/EucNorm[NotNaN]))
-            if len(y1[~np.isnan(y1)])!=NDATES:
+            if len(y1[np.isnan(y1)])>0:
                 eps = 0
             else:
                 eps = y1 - y0
