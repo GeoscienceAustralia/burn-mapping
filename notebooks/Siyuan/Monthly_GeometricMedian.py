@@ -120,6 +120,7 @@ for ni in range(0,NPIX):
     X[3,:] = stack.nir[goodcovInd,row[ni],col[ni]]
     X[4,:] = stack.swir1[goodcovInd,row[ni],col[ni]]
     X[5,:] = stack.swir2[goodcovInd,row[ni],col[ni]]
+    X[X<0] = np.nan
     GeoMed[:,row[ni],col[ni]] = geometric_median(X,tol,MaxIter)
 end = time.monotonic()
 elapsed = end - start
@@ -127,7 +128,8 @@ print("Finished with %.1f minutes" % (elapsed/60))
 
 
 #save Geometric median to netcdf
-filename = "Geometric_median_Sumac_TAS_100m_"+str(year)+'-'+str(mon)+".nc"
+datestr=datetime(year,mon,1).strftime("%Y%m")
+filename = "Geometric_median_Sumac_TAS_100m_"+datestr+".nc"
 ds = xr.Dataset({'blue':(('y','x'),GeoMed[0,:,:]),'green':(('y','x'),GeoMed[1,:,:]),'red':(('y','x'),GeoMed[2,:,:]),               'nir':(('y','x'),GeoMed[3,:,:]),'swir1':(('y','x'),GeoMed[4,:,:]),'swir2':(('y','x'),GeoMed[5,:,:])},               coords={'x':stack.x[:],'y':stack.y[:]},attrs={'geospatial_bounds_crs':'EPSG:4326','lat_min':latmin,                                                        'lat_max':latmax,'lon_min':lonmin,                                                        'lon_max':lonmax})
 ds.to_netcdf('/g/data/xc0/project/Burn_Mapping/Geometric_Median/Monthly_GM/'+filename,'w')
 
