@@ -55,9 +55,11 @@ def spectral_angle(ref,obs):
     denom = np.sqrt(sum(ref**2)*sum(obs**2))
     if ~np.isnan(numer) and ~np.isnan(denom):
         alpha = np.arccos(numer/denom)*180./math.pi
+	cosdist = 1 - np.sum(ref*obs)/(np.sqrt(np.sum(ref**2))*np.sqrt(np.su(obs**2)))
     else:
         alpha = np.nan
-    return alpha
+	cosdist = np.nan
+    return alpha,cosdist
 
 
 def medoid(X):

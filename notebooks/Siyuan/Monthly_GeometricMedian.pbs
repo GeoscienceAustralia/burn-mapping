@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -P fj4
+#PBS -q normal
+#PBS -l ncpus=1
+#PBS -l mem=64GB
+#PBS -l walltime=3:00:00
+#PBS -l software=python
+#PBS -l wd
+
+module use /g/data/v10/public/modules/modulefiles
+module load dea
+module load agdc-py3-prod
+cd /g/data/xc0/user/tian/DEA/
+
+fname="Geometric_median_Sumac_TAS_"$Year
+echo "Start Processing for $Year month $mon"
+python3 Monthly_GeometricMedian.py $Year $mon
+filename=$fname"-"$mon".nc"
+if [ -e "$filename" ]; then
+     echo "Geometric Median saved, $filename"
+fi
+
+
+
+
