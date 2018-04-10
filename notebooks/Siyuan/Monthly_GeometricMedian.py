@@ -61,17 +61,17 @@ def querydata(latmin,latmax,lonmin,lonmax,year,mon,day):
     }
     return query
 
-latmin = -41.4
-latmax = -41.0
-lonmin = 144.65
-lonmax = 145.2
+latmin = -37.78
+latmax = -37.12
+lonmin = 144.93
+lonmax = 145.96
 year = int(sys.argv[1])
 mon = int(sys.argv[2])
 day = 15
 query = querydata(latmin,latmax,lonmin,lonmax,year,mon,day) # query data for the given region and time
 print(query)
 # get landsat data
-landsat_numbers=[8] 
+landsat_numbers=[5] 
 pq_stack = []
 stack = []
 for landsat_number in landsat_numbers:
@@ -100,10 +100,10 @@ def clearobsrate(pq_stack):
     #plt.imshow(clearobs)
     #plt.title("Rate of clear observations")
     #plt.colorbar()
-    return clearobs,np.where(goodcovInd==1)[0]
+    return clearobs,np.where(goodcovInd==1)[0],goodpix
 
 start = time.monotonic()
-clearobs,goodcovInd = clearobsrate(pq_stack)
+clearobs,goodcovInd,goodpix = clearobsrate(pq_stack)
 row,col = np.where(clearobs>0) 
 # calculate geometric median for the clear pixs
 NPIX = len(row)
@@ -114,13 +114,13 @@ MaxIter = 60
 del pq_stack
 for ni in range(0,NPIX):
     X = np.empty((NBANDS,len(goodcovInd)))
-    X[0,:] = stack.blue[goodcovInd,row[ni],col[ni]]
-    X[1,:] = stack.green[goodcovInd,row[ni],col[ni]]
-    X[2,:] = stack.red[goodcovInd,row[ni],col[ni]]
-    X[3,:] = stack.nir[goodcovInd,row[ni],col[ni]]
-    X[4,:] = stack.swir1[goodcovInd,row[ni],col[ni]]
-    X[5,:] = stack.swir2[goodcovInd,row[ni],col[ni]]
-    X[X<0] = np.nan
+    X[0,:] = stack.blue[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[1,:] = stack.green[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[2,:] = stack.red[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[3,:] = stack.nir[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[4,:] = stack.swir1[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[5,:] = stack.swir2[goodcovInd,row[ni],col[ni]]*goodpix[goodcovInd,row[ni],col[ni]]
+    X[X<=0] = np.nan
     GeoMed[:,row[ni],col[ni]] = geometric_median(X,tol,MaxIter)
 end = time.monotonic()
 elapsed = end - start
@@ -129,7 +129,7 @@ print("Finished with %.1f minutes" % (elapsed/60))
 
 #save Geometric median to netcdf
 datestr=datetime(year,mon,1).strftime("%Y%m")
-filename = "Geometric_median_Sumac_TAS_100m_"+datestr+".nc"
+filename = "Geometric_median_BlackSaturday_VIC_100m_"+datestr+".nc"
 ds = xr.Dataset({'blue':(('y','x'),GeoMed[0,:,:]),'green':(('y','x'),GeoMed[1,:,:]),'red':(('y','x'),GeoMed[2,:,:]),               'nir':(('y','x'),GeoMed[3,:,:]),'swir1':(('y','x'),GeoMed[4,:,:]),'swir2':(('y','x'),GeoMed[5,:,:])},               coords={'x':stack.x[:],'y':stack.y[:]},attrs={'geospatial_bounds_crs':'EPSG:4326','lat_min':latmin,                                                        'lat_max':latmax,'lon_min':lonmin,                                                        'lon_max':lonmax})
 ds.to_netcdf('/g/data/xc0/project/Burn_Mapping/Geometric_Median/Monthly_GM/'+filename,'w')
 
