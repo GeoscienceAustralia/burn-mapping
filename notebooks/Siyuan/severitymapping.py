@@ -18,7 +18,8 @@ def severitymapping(CDist,Time):
 
     sevindex = np.zeros(((CDist.shape[1]),(CDist.shape[2])))
     Duration = np.zeros(((CDist.shape[1]),(CDist.shape[2])))
-    startdate = np.zeros(((CDist.shape[1]),(CDist.shape[2])))
+    startdate = np.empty(((CDist.shape[1]),(CDist.shape[2])))
+    startdate.fill(np.nan)
     for x in range(0,(CDist.shape[2])):
         for y in range(0,(CDist.shape[1])):
                 
