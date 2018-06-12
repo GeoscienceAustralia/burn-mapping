@@ -19,7 +19,7 @@ def severity_mapping(data,period,method,plot=True):
     duration = np.zeros((len(data.y),len(data.x)))
     startdate = np.zeros((len(data.y),len(data.x)))
     timeind = np.where((data.time<=np.datetime64(period[1]))&(data.time>=np.datetime64(period[0])))[0]
-    print("There were {0} observations during {1} to {2}.".format(str(len(timeind)), period[0], period[1]))
+    print("There were {0} observations from {1} to {2}.".format(str(len(timeind)), period[0], period[1]))
     for x in range(0,len(data.x)):
         for y in range(0,len(data.y)):
             sevindex[y,x], startdate[y,x], duration[y,x]=severity(CDist=data.CosDist.data[timeind,y,x],CDistoutlier=data.CDistoutlier.data[y,x],Time=data.time[timeind],
@@ -38,26 +38,27 @@ def severity_mapping(data,period,method,plot=True):
     
     colors = pd.read_fwf('mycolormap.txt',header=None)
     if plot==True:
+        if len(firedataset.Severity)>0:
+            font = {'family' : 'normal','weight' : 'bold', 'size'   : 16}
 
-        font = {'family' : 'normal','weight' : 'bold', 'size'   : 16}
-
-        matplotlib.rc('font', **font)
-        colors = pd.read_fwf('mycolormap.txt',header=None)
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(10,10))
-        mycolormap = np.zeros((len(colors),3))
-        mycolormap[:,0]=colors[0]
-        mycolormap[:,1]=colors[1]
-        mycolormap[:,2]=colors[2]
-        cmap =matplotlib.colors.LinearSegmentedColormap.from_list('my_colormap',mycolormap/256)
-        plt.figure(figsize=(7,7))
-        maxsev=np.percentile(firedataset.Severity,98)
-        im=plt.imshow(sevindex,cmap=cmap,vmax=maxsev)
-        plt.colorbar(im,fraction=0.03, pad=0.05)
-        im.axes.get_xaxis().set_visible(False)
-        im.axes.get_yaxis().set_visible(False)
-        plt.title(period[0]+' to '+period[1])
-
+            matplotlib.rc('font', **font)
+            colors = pd.read_fwf('mycolormap.txt',header=None)
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10,10))
+            mycolormap = np.zeros((len(colors),3))
+            mycolormap[:,0]=colors[0]
+            mycolormap[:,1]=colors[1]
+            mycolormap[:,2]=colors[2]
+            cmap =matplotlib.colors.LinearSegmentedColormap.from_list('my_colormap',mycolormap/256)
+            plt.figure(figsize=(7,7))
+            maxsev=np.percentile(firedataset.Severity,98)
+            im=plt.imshow(sevindex,cmap=cmap,vmax=maxsev)
+            plt.colorbar(im,fraction=0.03, pad=0.05)
+            im.axes.get_xaxis().set_visible(False)
+            im.axes.get_yaxis().set_visible(False)
+            plt.title(period[0]+' to '+period[1])
+        else:
+            print("No change found from {0} to {1}.".format( period[0], period[1]))
     return firedataset,ds
 
 
