@@ -173,11 +173,11 @@ def severity(CDist,CDistoutlier,Time,NBR,NBRDist,NBRoutlier,Sign,Method=3):
     duration=0
     notnanind = np.where(~np.isnan(CDist))[0] #remove the nan values for each pixel
     cosdist = CDist[notnanind]
-    if Method==1:#only include change where cosine distance above the line
+    if Method==1: #only include change where cosine distance above the line
         outlierind = np.where((cosdist>CDistoutlier))[0] 
-    if Method==2:#cosdist above the line and NBR<0
+    if Method==2: #cosdist above the line and NBR<0
         outlierind = np.where((cosdist>CDistoutlier) & (NBR[notnanind]<0))[0] 
-    if Method==3:#both cosdist and NBR dist above the line and it is negative change
+    if Method==3: #both cosdist and NBR dist above the line and it is negative change
         outlierind = np.where((cosdist>CDistoutlier) & (NBRDist[notnanind]>NBRoutlier) & (Sign[notnanind]==1))[0] 
     
     time = Time[notnanind]
@@ -203,3 +203,33 @@ def severity(CDist,CDistoutlier,Time,NBR,NBRDist,NBRoutlier,Sign,Method=3):
             sevindex = AreaAboveD0
    
     return sevindex, startdate, duration
+
+def grow_region(ds,startdate,z_distance,fraction_outliers):  
+    """
+    Returns regions grown around identified outliers based on a specified change threshold. 
+
+    Args:
+        ds: xarray structure with variables: CosDist, NBRDist, NegtiveChange, NBRoutlier, CDistoutlier
+        startdate: grid with start date (i.e. date of first change detection) for outliers
+        z_distance: NBR and cosine distance threshold relative to outlier threshold
+        fraction_outliers: minimum fraction of outlier pixels required per region
+
+    Returns:
+        BurnExtent: map with grown fire affected regions
+    """
+    Outliers=(sevindex>0).astype(int)
+    AnnualMap=0.*all_labels.astype(float)
+    row,col = np.where(~np.isnan(startdate))
+    Start_Date=np.unique(startdate[row,col])
+    ChangeDates=Start_Date.astype('<M8[ns]')
+    for d in ChangeDates:
+        NBR_score=(ds.NegtiveChange*ds.NBRDist).sel(time=d)/ds.NBRoutlier
+        cos_score=(ds.NegtiveChange*ds.CosDist).sel(time=d)/ds.CDistoutlier
+        Potential=((NBR_score>z_distance)&(cos_score>z_distance)).astype(int)
+        all_labels = measure.label(Potential.astype(int).values,background=0)
+        NewPotential=0.*Outliers.astype(float)
+        for ri in range(1,np.max(np.unique(all_labels))): 
+            NewPotential[all_labels==ri]=np.mean(np.extract(all_labels==ri,Outliers))
+        AnnualMap=AnnualMap+(NewPotential>fraction_outliers).astype(int)
+    BurnExtent=(AnnualMap>0).astype(int)
+    return BurnExtent
