@@ -1,11 +1,11 @@
 
 """
-This module load the DEA for the given geographic region and period, and masked out the cloudy area.
-Return a xarray with 6 bands reflactance data and one pixel mask used for cloud masking
-Required inputs:
-x,y in degree
-time in string format "%Y-m-d"
-landsat_numbers: e.g 5,7,8 or multiple
+This module has functions to load the DEA for a given geographic region and period of interest, and masks out cloud pixels.
+Functions:
+    querydata(x,y,time,resolution)
+    getLandsatStack(landsat_number,query)
+    clearobsrate(pq_stack)
+    loaddea(x,y,time,resolution,landsat_numbers)
 """
 
 import xarray as xr
@@ -18,11 +18,16 @@ warnings.filterwarnings("ignore")
 
 def querydata(x,y,time,resolution):
     """
-    Define the area of interest:
-    x; Defines the spatial region in the x dimension
-    y; Defines the spatial region in the y dimension
-    time; Defines the temporal extent
-    resolution; Defines the spatial resolution
+    Define the area of interest
+
+    Args:
+        x: Defines the spatial region in the x dimension (longitude in degrees)
+        y: Defines the spatial region in the y dimension (latitude in degrees)
+        time: Defines the temporal extent (in string format "%Y-m-d")
+        resolution: Defines the spatial resolution
+        
+    Returns:
+        query: structured query parameters
     """
     query = {
         'time': time,
@@ -35,7 +40,15 @@ def querydata(x,y,time,resolution):
 
 def getLandsatStack(landsat_number,query):
     """
-    Extract the Landsat data for the selected region and sensors
+    Extracts the Landsat data for the selected region and sensors
+
+    Args:        
+        landsat_number: number of Landsat mission, e.g 5,7,8 or multiple
+        query: structured query
+        
+    Returns:
+        lspq_stack: stack of pixel quality codes
+        ls_stack: stack of band reflectances in 6 bands        
     """
     dc = datacube.Datacube(app='TreeMapping.getLandsatStack')
     product= 'ls'+str(landsat_number)+'_nbart_albers'
@@ -68,7 +81,13 @@ def getLandsatStack(landsat_number,query):
 
 def clearobsrate(pq_stack):
     """
-    Calculate the clear observation coverage at each time step
+    Calculates the clear observation coverage at each time step
+    
+    Args:
+        pq_stack: stack of pixel quality code grids
+        
+    Returns:
+        clearobs: array of percentage cloud-free coverage for each time stamp 
     """
     pixelquality = pq_stack.pixelquality
     pixelquality.values[pixelquality.values>0]=1
@@ -87,6 +106,19 @@ def clearobsrate(pq_stack):
     return clearobs,np.where(goodcovInd==1)[0],goodpix
 
 def loaddea(x,y,time,resolution,landsat_numbers):
+    """
+    Calculates the clear observation coverage at each time step
+    
+    Args:
+        x: Defines the spatial region in the x dimension (longitude in degrees)
+        y: Defines the spatial region in the y dimension (latitude in degrees)
+        time: Defines the temporal extent (in string format "%Y-m-d")
+        resolution: Defines the spatial resolution
+        landsat_number: number of Landsat mission, e.g 5,7,8 or multiple
+        
+    Returns:
+        data: stack of band reflectances in 6 bands with cloud pixels masked out  
+    """
     query = querydata(x,y,time,resolution) # query data for the given region and time
     # get landsat data    
     pq_stack = []

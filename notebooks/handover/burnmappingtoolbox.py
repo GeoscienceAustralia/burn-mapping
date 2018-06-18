@@ -1,7 +1,7 @@
 """
-This script included all the modules used in the burn-severity mapping. All the included modules are listed below:
+This module includes all functions used in the burn-severity mapping method. Functions are:
 
-geometric_median(X,tol,MaxInter): to calculate the geometric median over the given period for the given point
+geometric_median(X,tol,MaxIter): to calculate the geometric median of band reflectances over a given period
 
 spectral_angle(ref,obs): to calculate the spectral angle to the reference
 
@@ -15,15 +15,18 @@ nbr_eucdistance(ref,obs): to calculate the euclidean distance between NBR and NB
 import numpy as np
 import math
 
-def geometric_median(X,tol,MaxInter):
+def geometric_median(X,tol,MaxIter):
     """
-    This is a script to calculate the Geomatric Median 
-    The required variables are:
-    "X" is a p x N matric, wehre p = number of bands and N = the number of dates in the period of interest
-    "MaxNIter" is the maximum number of iteration
-    "tol" is tolerance
-    The procedure stop when EITHER error tolerance in solution 'tol' or the maximum number of iteration 'MaxNIter' is reached. 
-    Returns a p-dimensional vector   'geoMedian' 
+    Calculates the geometric median of band reflectances
+    The procedure stops when either the error tolerance 'tol' or the maximum number of iterations 'MaxIter' is reached. 
+
+    Args:
+        X: (p x N) matrix, where p = number of bands and N = number of dates during the period of interest
+        MaxIter: maximum number of iterations
+        tol: tolerance criterion to stop iteration   
+    
+    Returns:
+        geoMedian: p-dimensional vector with geometric median reflectances
     """
     NDATES = len(X[0])
     l = 0
@@ -32,7 +35,7 @@ def geometric_median(X,tol,MaxInter):
         geoMedian = y0
     else:
         eps = 10**2
-        while ( np.sqrt(np.sum(eps**2))> tol and l< MaxInter):
+        while ( np.sqrt(np.sum(eps**2))> tol and l< MaxIter):
 
             EucDist = np.transpose(np.transpose(X) - y0)
             EucNorm = np.sqrt(np.sum(EucDist**2,axis=0))
@@ -44,16 +47,23 @@ def geometric_median(X,tol,MaxInter):
                 eps = y1 - y0
                 y0 = y1
                 l = l+1
-        geoMedian = y0
-        
+        geoMedian = y0        
     return geoMedian
 
 
 def spectral_angle(ref,obs):
     """
-    'ref' is the reference spectrum, p-dimentional
-    'obs' is an arbitary observed spectrum, o-dimensional
-    returns the Spetral Angle (in degrees); return NAN if obs have any NAN.
+    Calculates the spectral angle between two reflectance signatures
+    
+    Args:
+        ref: reference spectrum (p-dimensional)
+        obs: arbitary observed spectrum (o-dimensional_
+    
+    Returns:
+        alpha: spectral angle (in degrees)
+    
+    Note: 
+        returns NAN if there are any NAN in ref or obs.
     """
     numer = np.sum(ref*obs)
     denom = np.sqrt(sum(ref**2)*sum(obs**2))
@@ -66,8 +76,13 @@ def spectral_angle(ref,obs):
 
 def medoid(X):
     """
-    "X" is a p x N matric, wehre p = number of bands and N = the number of dates in the period of interest
-    Returns a p-dimensional vector Medoid
+    Returns medoid of X
+    
+    Args:
+        X: p x N matrix with data, where p = number of bands and N = the number of dates in the period of interest
+    
+    Returns:
+        Med: medoid (p-dimensional vector)
     """
     NDATES = len(X[0])
     TrackSum = np.empty((NDATES));
@@ -92,11 +107,15 @@ def medoid(X):
 
 def cosdistance(ref,obs):
     """
-    This module calculates the cosine distance between observation (2-D array with multiple days) and reference (with multiple bands, e.g. 6). The calculation is point based, easily adaptable to any dimension. 
-    Required inputs:
-    ref: reference e.g. geomatric median [Nbands]
-    obs: observation e.g. monthly geomatric median or reflectance [Nbands,ndays]
-    return the cosine distance at each time step in [ndays]
+    Returns the cosine distance between observation (2-D array with multiple days) and reference (with multiple bands, e.g. 6). 
+    The calculation is point based, easily adaptable to any dimension. 
+
+    Args:
+        ref: reference e.g. geomatrix median [Nbands]
+        obs: observation e.g. monthly geomatrix median or reflectance [Nbands,ndays]
+    
+    Returns:
+        cosdist: the cosine distance at each time step in [ndays]
     """
     cosdist = np.empty((obs.shape[1],))
     cosdist.fill(np.nan)
@@ -107,11 +126,15 @@ def cosdistance(ref,obs):
 
 def nbr_eucdistance(ref,obs):
     """
-    This module calculated the euclidean distance between the NBR at each time step with the NBR calculated from the geometric medians and also the direction of change to the NBR from the geometric medians.
-    Required inputs:
-    ref: NBR calculated from geometric median, one value
-    obs: NBR time series, 1-D time series array with ndays 
-    return the euclidean distance and change direction (1: decrease; 0: increase) at each time step in [ndays]
+    Returns the euclidean distance between the NBR at each time step with the NBR calculated from the geometric medians and also the direction of change to the NBR from the geometric medians.
+    
+    Args:
+        ref: NBR calculated from geometric median, one value
+        obs: NBR time series, 1-D time series array with ndays 
+    
+    Returns:
+        NBRdist: the euclidean distance 
+        Sign: change direction (1: decrease; 0: increase) at each time step in [ndays]
     """
     NBRdist = np.empty((obs.shape[0],))
     Sign = np.zeros((obs.shape[0],))
@@ -125,21 +148,25 @@ def nbr_eucdistance(ref,obs):
 
 def severity(CDist,CDistoutlier,Time,NBR,NBRDist,NBRoutlier,Sign,Method=3):  
     """
-    This module calculated the severity and stored the duration and start date of the change.
-    Required inputs:
-    CDist: cosine distance in 1D list with ndays
-    CDistoutlier: outlier for cosine distance, 1 for each point
-    Time: dates
-    NBR: NBR time series in 1D list with ndays
-    NBRDist: Euclidean distance from NBR to NBRmed in a 1D list with ndays
-    NBRoutlier: outlier for NBRdist
-    Sign: change direction for NBR, if Sign==1, NBR decrease from the median
-    Method: 1,2,3 to choose
-        Method 1: only use cosine distance as an indicator for change
-        Method 2: use cosine distance together with NBR<0
-        Method 3: use both cosine distance, NBR euclidean distance, and NBR change direction for change detection
+    Returns the severity,duration and start date of the change.
+
+    Args:
+        CDist: cosine distance in 1D list with ndays
+        CDistoutlier: outlier for cosine distance, 1 for each point
+        Time: dates
+        NBR: NBR time series in 1D list with ndays
+        NBRDist: Euclidean distance from NBR to NBRmed in a 1D list with ndays
+        NBRoutlier: outlier for NBRdist
+        Sign: change direction for NBR, if Sign==1, NBR decrease from the median
+        Method: 1,2,3 to choose
+            1: only use cosine distance as an indicator for change
+            2: use cosine distance together with NBR<0
+            3: use both cosine distance, NBR euclidean distance, and NBR change direction for change detection
         
-    outputs include the severity, start date and duration
+    Returns:
+        sevindex: severity
+        startdate: first date change was detected 
+        duration: duration between the first and last date the change exceeded the outlier threshold
     """
     sevindex=0
     startdate=0
