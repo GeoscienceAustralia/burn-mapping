@@ -106,45 +106,57 @@ def validation_dataset_config(State,Validation_period,BurnPixel):
     workingdir = '/g/data/xc0/project/Burn_Mapping/02_Fire_Perimeters_Polygons/'
     if State =='TAS':
         shapefile_filepath = workingdir+'TAS_2017_State_Fire_History/fire_history_all_fires_20170907.shp'
-        df = geopandas.read_file(shapefile_filepath)        
-        df = df.to_crs({'init': 'epsg:3577'})
-        df = df[(df.IGN_DATE>=Validation_period[0])&(df.IGN_DATE<=Validation_period[1])]
-        x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
-        y_extent = [BurnPixel.y.min() , BurnPixel.y.max()]
-        df = df.cx[ x_extent[0]:x_extent[1] , y_extent[0]:y_extent[1]]
-        return df, df.IGN_DATE
+        df = geopandas.read_file(shapefile_filepath)[['geometry','IGN_DATE']]
+        df.columns=['geometry','Burn_Date']
+
+
     if State =='VIC':
         shapefile_filepath = workingdir+'Victoria_FIRE_HISTORY/FIRE_HISTORY.shp'
-        df = geopandas.read_file(shapefile_filepath)
-        
-        df = df.to_crs({'init': 'epsg:3577'})
-        df = df[(df.START_DATE>=Validation_period[0])&(df.START_DATE<=Validation_period[1])]
-        x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
-        y_extent = [BurnPixel.y.min() , BurnPixel.y.max()]
-        df = df.cx[ x_extent[0]:x_extent[1] , y_extent[0]:y_extent[1]]
-        return df, df.START_DATE
+        df = geopandas.read_file(shapefile_filepath)[['geometry','START_DATE']]
+        df.columns=['geometry','Burn_Date']
+
+
         
     if State =='NSW':
         shapefile_filepath = workingdir+'NSW_RFS_Outlines/NSW_Fire_History/WildFireHistory.shp'
-        df = geopandas.read_file(shapefile_filepath)
+        df = geopandas.read_file(shapefile_filepath)[['geometry','ENDDATE']]
+        df.columns=['geometry','Burn_Date']
         
-        df = df.to_crs({'init': 'epsg:3577'})
-        df = df[(df.ENDDATE>=Validation_period[0])&(df.ENDDATE<=Validation_period[1])]
-        x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
-        y_extent = [BurnPixel.y.min() , BurnPixel.y.max()]
-        df = df.cx[ x_extent[0]:x_extent[1] , y_extent[0]:y_extent[1]]
-        return df, df.ENDDATE
+    if State =='SA':
+        shapefile_filepath = workingdir+'SA/FIREMGT_FireHistory_shp/FIREMGT_FireHistory.shp'
+        df = geopandas.read_file(shapefile_filepath)[['geometry','FIREDATE']]
+        df.columns=['geometry','Burn_Date']     
     
     if State =='ACT':
         shapefile_filepath = workingdir+'FireHistory_ACT/ShapeFile/FireHistory.shp'
-        df = geopandas.read_file(shapefile_filepath)
+        df = geopandas.read_file(shapefile_filepath)[['geometry','DATE']]
+        df.columns=['geometry','Burn_Date']
+       
+    if State =='QLD':
+        workingdir = '/g/data/xc0/project/Burn_Mapping/02_Fire_Perimeters_Polygons/'
+        shapefile_filepath = workingdir+'QLD/osmfirewildfire1992to2015/OSM_FIRE_WILDFIRE_1992to2015.shp'
+        df1 = geopandas.read_file(shapefile_filepath)[['geometry','YEAR_BURN_']]
+        df1.columns = ['geometry','Burn_Date']
+        df1.Burn_Date=pd.to_datetime(df1.Burn_Date,format='%Y').astype('datetime64[ns]').astype('str')
+
+        #shapefile_filepath = workingdir+'QLD/plannedburnshistory20092017/Planned_Burns_History_2009_2017.shp'
+        #df2 = geopandas.read_file(shapefile_filepath)[['geometry','Date_Compl']] 
+        #df2.columns = ['geometry','Burn_Date']
+
+        shapefile_filepath = workingdir+'QLD/wildfirereport2011to2018/WildfireReport_2011to2018.shp'
+        df3 = geopandas.read_file(shapefile_filepath)[['geometry','DateKNown']]  
+        df3.columns = ['geometry','Burn_Date']
+
+
+        df=pd.concat([df1, df3])
         
-        df = df.to_crs({'init': 'epsg:3577'})
-        df = df[(df.DATE_>=Validation_period[0])&(df.DATE_<=Validation_period[1])]
-        x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
-        y_extent = [BurnPixel.y.min() , BurnPixel.y.max()]
-        df = df.cx[ x_extent[0]:x_extent[1] , y_extent[0]:y_extent[1]]
-        return df, df.DATE_
+    
+    df = df[(df.Burn_Date>=Validation_period[0])&(df.Burn_Date<=Validation_period[1])]
+    df = df.to_crs({'init': 'epsg:3577'})
+    x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
+    y_extent = [BurnPixel.y.min() , BurnPixel.y.max()]
+    df = df.cx[ x_extent[0]:x_extent[1] , y_extent[0]:y_extent[1]]
+    return df,df.Burn_Date
 
 #roc analysis
 def _forward_fill(Input_DataArray = None):
@@ -214,23 +226,26 @@ def CreateValidatedBurnMask(BurnPixel,State, Validation_period ):
     df,StartDate=validation_dataset_config(State,Validation_period,BurnPixel)
                  
     coords = BurnPixel.coords
+    if len(np.unique(StartDate))==0:
+        print("No validation data available")
+        return ([])
+    else:
+        for date in np.unique(StartDate):
+            shapes = [(shape,1) for  n, shape in enumerate(df[StartDate == date].geometry)]
 
-    for date in np.unique(StartDate):
-        shapes = [(shape,1) for  n, shape in enumerate(df[StartDate == date].geometry)]
-        
-        try:
-            new_da = rasterize(shapes , coords)
-            new_da = new_da.assign_coords(time = date)
-            new_da = new_da.expand_dims('time')
-            output_array = xr.concat((output_array,new_da), dim='time')
-  
-        except NameError:
-            output_array = rasterize(shapes , coords)
-            output_array = output_array.assign_coords(time = date)
-            output_array = output_array.expand_dims('time')
+            try:
+                new_da = rasterize(shapes , coords)
+                new_da = new_da.assign_coords(time = date)
+                new_da = new_da.expand_dims('time')
+                output_array = xr.concat((output_array,new_da), dim='time')
 
-    
-    return(output_array)
+            except NameError:
+                output_array = rasterize(shapes , coords)
+                output_array = output_array.assign_coords(time = date)
+                output_array = output_array.expand_dims('time')
+
+
+        return(output_array)
 
 def validate(Test_Array = None, Validated_Array = None, plot=False):
     """
@@ -292,27 +307,90 @@ def validate(Test_Array = None, Validated_Array = None, plot=False):
                'dice_coeff': dice_coeff,
                'bias': bias
               }
+    Correct = Validated_Array.where(Validated_Array==1).where(Test_Array==1)+2
+    Correct = Correct.fillna(0)
+    Omission = Validated_Array.where(Validated_Array==1).where(Test_Array==0)+1
+    Omission = Omission.fillna(0)
+    Commission = Validated_Array.where(Validated_Array==0).where(Test_Array==1)+1
+    Commission = Commission.fillna(0)
+
+    Combined = Correct + Omission + Commission
+    Combined = Combined.where(Combined.values!=0)
        
     # FOR PLOTTING ONLY
     if plot==True:
 	
-        Correct = Validated_Array.where(Validated_Array==1).where(Test_Array==1)+2
-        Correct = Correct.fillna(0)
-        Omission = Validated_Array.where(Validated_Array==1).where(Test_Array==0)+1
-        Omission = Omission.fillna(0)
-        Commission = Validated_Array.where(Validated_Array==0).where(Test_Array==1)+1
-        Commission = Commission.fillna(0)
         
-        Combined = Correct + Omission + Commission
-        Combined = Combined.where(Combined.values!=0)
 
         from matplotlib.colors import ListedColormap
 	
         fig,ax = plt.subplots()
-        cMap = ListedColormap(['white','blue', 'red','green'])
+        cMap = ListedColormap(['white','sienna', 'sandybrown','darkgreen'])
         cax=Combined.plot(ax=ax,levels=[0,1, 2, 3, 4], cmap=cMap,add_colorbar=False)
         cbar = fig.colorbar(cax,ticks=[0.5,1.5,2.5,3.5])
         cbar.ax.set_yticklabels(['correct unburned area','false burned area','missed burned area','correct burned area'])
+        cax.axes.get_xaxis().set_visible(False)
+        cax.axes.get_yaxis().set_visible(False)
+    return([FPR,TPR],Combined)
 
-    return([FPR,TPR])
+def validate_forest_grass(Test_Array = None, Validated_Array = None,Mask = None, plot=False):
+    
+    Test_forest = Test_Array*Mask.ForestMask
+    Test_grass = Test_Array*Mask.NoneForestMask
+    ForestMask = Validated_Array*Mask.ForestMask
+    NoneForestMask = Validated_Array*Mask.NoneForestMask
+    
+   
+    Tree,Combined1=validate(Test_Array = Test_forest, Validated_Array = ForestMask, plot=False)
+    
+        
+    Grass,Combined2=validate(Test_Array = Test_grass, Validated_Array = NoneForestMask, plot=False)
+    import matplotlib
+    font = {'family' : 'normal',
+            'weight' : 'normal',
+            'size'   : 16}
 
+    matplotlib.rc('font', **font)
+    if plot==True:
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import ListedColormap
+        fig,axes = plt.subplots()
+        cMap = ListedColormap(['white','darkred', 'peru','darkgreen'])
+        cax=Combined1.plot(levels=[0,1, 2, 3, 4], cmap=cMap,add_colorbar=False)
+
+        axes.patch.set_facecolor('none')
+        cMap2 = ListedColormap(['white','indianred', 'burlywood','g'])
+        Combined2.plot(ax=axes,levels=[0,1, 2, 3, 4], cmap=cMap2,add_colorbar=False,alpha=0.9)
+        cbar = fig.colorbar(cax,ticks=[0.5,1.5,2.5,3.5])
+        cbar.ax.set_yticklabels(['correct unburned area','false burned area','missed burned area','correct burned area'])
+
+        cax.axes.get_xaxis().set_visible(False)
+        cax.axes.get_yaxis().set_visible(False)
+    return Tree, Grass
+
+def outline_to_mask(line, x, y):
+    """Create mask from outline contour
+
+    Parameters
+    ----------
+    line: array-like (N, 2)
+    x, y: 1-D grid coordinates (input for meshgrid)
+
+    Returns
+    -------
+    mask : 2-D boolean array (True inside)
+
+    Examples
+    --------
+    >>> from shapely.geometry import Point
+    >>> poly = Point(0,0).buffer(1)
+    >>> x = np.linspace(-5,5,100)
+    >>> y = np.linspace(-5,5,100)
+    >>> mask = outline_to_mask(poly.boundary, x, y)
+    """
+    import matplotlib.path as mplp
+    mpath = mplp.Path(line)
+    X, Y = np.meshgrid(x, y)
+    points = np.array((X.flatten(), Y.flatten())).T
+    mask = mpath.contains_points(points).reshape(X.shape)
+    return mask
