@@ -394,3 +394,56 @@ def outline_to_mask(line, x, y):
     points = np.array((X.flatten(), Y.flatten())).T
     mask = mpath.contains_points(points).reshape(X.shape)
     return mask
+
+def hotspot_polygon(year,extent,buffersize):
+    """Create polygons for the hotspot with a buffer
+    year: given year for hotspots data
+    extent: [xmin,xmax,ymin,ymax] in crs EPSG:3577
+    buffersize: in meters
+    
+    Examples:
+    ------------
+    >>>year=2017
+    >>>extent = [1648837.5, 1675812.5, -3671837.5, -3640887.5]
+    >>>polygons = hotspot_polygon(year,extent,4000)
+    """
+    import glob
+    import pyproj
+    datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
+    gda94aa = pyproj.Proj(init='epsg:3577')#,py_list='aea')
+    gda94 = pyproj.Proj(init='epsg:4283')
+
+    if year==2005:
+        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
+        table = pd.read_csv(name)
+
+    elif year == 2010:
+        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
+        table = pd.read_csv(name)
+
+    else:
+        for i in range(0,len(glob.glob(datafile))):
+            name = glob.glob(datafile)[i]
+            startyear = int(name[-13:-9])
+            endyear = int(name[-8:-4])
+            if (year<=endyear )& (year>=startyear):
+                table = pd.read_csv(name)
+                break
+
+    start = np.datetime64(datetime.datetime(year,1,1))
+    stop =  np.datetime64(datetime.datetime(year,12,31))
+    dates=table.datetime.values.astype('datetime64')
+    lon,lat=pyproj.transform(gda94aa,gda94,extent[0:2],extent[2:4])
+    index = np.where((dates>=start)*(dates<=stop)*(table.latitude<=lat[1])*(table.latitude>=lat[0])*(table.longitude<=lon[1])*(table.longitude>=lon[0]) )[0]
+    latitude = table.latitude.values[index]
+    longitude = table.longitude.values[index]        
+    easting,northing=pyproj.transform(gda94,gda94aa,longitude,latitude)
+    
+    from shapely.ops import cascaded_union
+    from matplotlib.patches import Polygon
+    from shapely.geometry import Point
+    
+   
+    patch = [Point(easting[i],northing[i]).buffer(buffersize) for i in range(0,len(index))]
+    polygons = cascaded_union(patch)
+    return polygons
