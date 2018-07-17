@@ -1,11 +1,11 @@
 
 """
-This module has functions to load the DEA for a given geographic region and period of interest, and masks out cloud pixels.
-Functions:
-    querydata(x,y,time,resolution)
-    getLandsatStack(landsat_number,query)
-    clearobsrate(pq_stack)
-    loaddea(x,y,time,resolution,landsat_numbers)
+This module load the DEA for the given geographic region and period, and masked out the cloudy area.
+Return a xarray with 6 bands reflactance data and one pixel mask used for cloud masking
+Required inputs:
+x,y in degree
+time in string format "%Y-m-d"
+landsat_numbers: e.g 5,7,8 or multiple
 """
 
 import xarray as xr
@@ -16,39 +16,26 @@ from datacube.helpers import ga_pq_fuser
 from datacube.storage import masking
 warnings.filterwarnings("ignore")
 
-def querydata(x,y,time,resolution):
+def querydata(x,y,reftime,resolution):
     """
-    Define the area of interest
-
-    Args:
-        x: Defines the spatial region in the x dimension (longitude in degrees)
-        y: Defines the spatial region in the y dimension (latitude in degrees)
-        time: Defines the temporal extent (in string format "%Y-m-d")
-        resolution: Defines the spatial resolution
-        
-    Returns:
-        query: structured query parameters
+    Define the area of interest:
+    x; Defines the spatial region in the x dimension
+    y; Defines the spatial region in the y dimension
+    time; Defines the temporal extent
+    resolution; Defines the spatial resolution
     """
     query = {
-        'time': time,
-        'lat': y,
-        'lon': x,
-        'measurements' : ['red','green','blue','nir','swir1','swir2'],
+        'time': reftime,
+        'y': y,
+        'x': x,
+        'crs':'EPSG:3577',
         'resolution': resolution
     }
     return query
 
 def getLandsatStack(landsat_number,query):
     """
-    Extracts the Landsat data for the selected region and sensors
-
-    Args:        
-        landsat_number: number of Landsat mission, e.g 5,7,8 or multiple
-        query: structured query
-        
-    Returns:
-        lspq_stack: stack of pixel quality codes
-        ls_stack: stack of band reflectances in 6 bands        
+    Extract the Landsat data for the selected region and sensors
     """
     dc = datacube.Datacube(app='TreeMapping.getLandsatStack')
     product= 'ls'+str(landsat_number)+'_nbart_albers'
@@ -81,19 +68,13 @@ def getLandsatStack(landsat_number,query):
 
 def clearobsrate(pq_stack):
     """
-    Calculates the clear observation coverage at each time step
-    
-    Args:
-        pq_stack: stack of pixel quality code grids
-        
-    Returns:
-        clearobs: array of percentage cloud-free coverage for each time stamp 
+    Calculate the clear observation coverage at each time step
     """
     pixelquality = pq_stack.pixelquality
     pixelquality.values[pixelquality.values>0]=1
     goodpix = pq_stack.no_cloud*pixelquality*pq_stack.good_pixel # good quality data mask
     NDAYS = len(pq_stack.time)
-    clearobs = np.zeros((len(pq_stack.y),len(pq_stack.x)))
+    clearobs = np.zeros((len(pq_stack.y),len(pq_stack.x)), dtype=np.int16)
     goodcovInd = np.zeros((NDAYS))
 
     for ti in range(0,NDAYS):
@@ -105,24 +86,13 @@ def clearobsrate(pq_stack):
     
     return clearobs,np.where(goodcovInd==1)[0],goodpix
 
-def loaddea(x,y,time,resolution,landsat_numbers):
-    """
-    Calculates the clear observation coverage at each time step
-    
-    Args:
-        x: Defines the spatial region in the x dimension (longitude in degrees)
-        y: Defines the spatial region in the y dimension (latitude in degrees)
-        time: Defines the temporal extent (in string format "%Y-m-d")
-        resolution: Defines the spatial resolution
-        landsat_number: number of Landsat mission, e.g 5,7,8 or multiple
-        
-    Returns:
-        data: stack of band reflectances in 6 bands with cloud pixels masked out  
-    """
-    query = querydata(x,y,time,resolution) # query data for the given region and time
+def loaddea(x,y,reftime,resolution,landsat_numbers):
+    #import time
+    query = querydata(x,y,reftime,resolution) # query data for the given region and time
     # get landsat data    
     pq_stack = []
     stack = []
+    #start = time.monotonic()
     for landsat_number in landsat_numbers:
         lspq_stack, ls_stack = getLandsatStack(landsat_number,query)
         pq_stack.append(lspq_stack)   
@@ -131,37 +101,32 @@ def loaddea(x,y,time,resolution,landsat_numbers):
     stack = xr.concat(stack, dim='time').sortby('time')
     landmask=pq_stack.land.max(dim='time').values
     pq_stack=pq_stack.drop('land')
-    
+    #print("---{} minutes for data loading.---".format((time.monotonic()-start)/60))
     #calculate the clear observation rate at each time step and get a mask for good quality pixel
+    start = time.monotonic()
     clearobs,goodcovInd,goodpix = clearobsrate(pq_stack)
+    #print("---{} minutes for quality control.---".format((time.monotonic()-start)/60))
     
-    #filtered the cloudy pixel and save the clear reflectance for each band
-    blue = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    green = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    red = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    nir = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    swir1 = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    swir2 = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    pixmask = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-
-    tmp = np.empty((len(goodcovInd),len(stack.y),len(stack.x)))
-    tmp.fill(np.nan)
-    for i in range(0,len(goodcovInd)):
-
-        tmp[i,goodpix[goodcovInd[i],:,:]==1] = 1
-
-    blue = stack.blue[goodcovInd,:,:]*tmp
-    green = stack.green[goodcovInd,:,:]*tmp
-    red = stack.red[goodcovInd,:,:]*tmp
-    nir = stack.nir[goodcovInd,:,:]*tmp
-    swir1 = stack.swir1[goodcovInd,:,:]*tmp
-    swir2 = stack.swir2[goodcovInd,:,:]*tmp
-    time = stack.time[goodcovInd]
-    pixmask = goodpix[goodcovInd,:,:]
+    #start = time.monotonic()
     
-    data = xr.Dataset({'blue':(('time','y','x'),blue[:]),'green':(('time','y','x'),green[:]),'red':(('time','y','x'),red[:]),               'nir':(('time','y','x'),nir[:]),'swir1':(('time','y','x'),swir1[:]),'swir2':(('time','y','x'),swir2[:]),'pixmask':(('time','y','x'),pixmask[:])}, coords={'time':time[:],'y':stack.y[:],'x':stack.x[:]},attrs={'crs':'EPSG:3577'})
-    data.time.attrs=[]
-    return data
+    stack=stack.sel(time=(stack.time[goodcovInd]))
+    goodpix=goodpix.sel(time=(goodpix.time[goodcovInd]))
+    goodpix=goodpix.where(goodpix==1)
+
+
+    stack['blue'] = stack.blue*goodpix
+    stack['green'] = stack.green*goodpix
+    stack['red'] = stack.red*goodpix
+    stack['nir'] = stack.nir*goodpix
+    stack['swir1'] = stack.swir1*goodpix
+    stack['swir2'] = stack.swir2*goodpix
+
+
+    
+    #data = xr.Dataset({'blue':(('time','y','x'),blue[:]),'green':(('time','y','x'),green[:]),'red':(('time','y','x'),red[:]),               'nir':(('time','y','x'),nir[:]),'swir1':(('time','y','x'),swir1[:]),'swir2':(('time','y','x'),swir2[:]),'pixmask':(('time','y','x'),pixmask[:])}, coords={'time':time[:],'y':stack.y[:],'x':stack.x[:]},attrs={'crs':'EPSG:3577'})
+    #stack.time.attrs=[]
+    #print("---{} minutes for the rest.---".format((time.monotonic()-start)/60))
+    return stack
 
 
 
