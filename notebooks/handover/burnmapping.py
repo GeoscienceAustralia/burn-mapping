@@ -92,8 +92,8 @@ def nbrdist(data,geomedian):
     Returns:
         ds:xarray with NBR, NBRdist, Change direction, outlier value
     """
-    nir = data.nir.data
-    swir2 = data.swir2.data
+    nir = data.nir.data.reshape((len(data.time),len(data.y)*len(data.x)))
+    swir2 = data.swir2.data.reshape((len(data.time),len(data.y)*len(data.x)))
     
     NBRmed = np.zeros((len(data.y),len(data.x))) # NBR geometric median
     NBRmed = (geomedian.data[3,:,:]-geomedian.data[5,:,:])/(geomedian.data[3,:,:]+geomedian.data[5,:,:]) 
@@ -228,7 +228,7 @@ def severitymapping(data,period,method,growing=True):
         ds['NBRoutlier'] = (('points'),NBRoutlier)
     else:
         raise ValueError  
-    print(ds)
+    print(len(outlierind))
     sev = np.zeros((len(outlierind)))
     dates = np.zeros((len(outlierind)))
     days = np.zeros((len(outlierind)))
