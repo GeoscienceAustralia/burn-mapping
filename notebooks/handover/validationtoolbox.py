@@ -31,13 +31,13 @@ import warnings
 import datetime as datetime
 warnings.filterwarnings("ignore")
 
-def burnpixel_masking(data):
+def burnpixel_masking(data,varname):
     """
     This function converts the severity map into a burn pixel mask
     Required input:
     data: severity data in 2D, e.g. output from severity_mapping in the changedection.py
     """
-    Burnpixel = data.Severity
+    Burnpixel = data[varname]
     Burnpixel.data[Burnpixel.data>1]=1
     return Burnpixel
 

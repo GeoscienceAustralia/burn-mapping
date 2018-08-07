@@ -371,17 +371,13 @@ class BurnCube(dc.Datacube):
         
         goodpix = pq_stack.no_cloud * (pq_stack.pixelquality > 0) * pq_stack.good_pixel
         
-        print(pq_stack.no_cloud.shape)
-        print(pq_stack.good_pixel)
-        print(goodpix)
-        
+     
         mask = np.nanmean(goodpix.values.reshape(goodpix.shape[0], -1), axis=1) > .2
 
 
         cubes = [nbart_stack[band][mask, :, :]*goodpix[mask, :, :] for band in ['red','green','blue','nir','swir1','swir2']]
         X = np.stack(cubes, axis=0)
 
-        print(X.shape)
         
         #data = xr.Dataset(coords={'band': ['red','green','blue','nir','swir1','swir2'],
         data = xr.Dataset(coords={'band': np.arange(6),
@@ -606,58 +602,64 @@ class BurnCube(dc.Datacube):
             ds['NBRoutlier'] = (('points'),NBRoutlier)
         else:
             raise ValueError 
-        print('---')
-        print(len(outlierind))
-        sev = np.zeros((len(outlierind)))
-        dates = np.zeros((len(outlierind)))
-        days = np.zeros((len(outlierind)))
-        
-        for i in range(0,len(outlierind)):            
-            #print(i)             
-            sev[i], dates[i], days[i]=severity(data=ds.sel(points=i),method=method)
+        if len(outlierind)>0:
+            sev = np.zeros((len(outlierind)))
+            dates = np.zeros((len(outlierind)))
+            days = np.zeros((len(outlierind)))
 
-           
-        sevindex=np.zeros((len(self.dists.x)*len(self.dists.y)))
-        duration=np.zeros((len(self.dists.x)*len(self.dists.y)))
-        startdate=np.zeros((len(self.dists.x)*len(self.dists.y)))
+            for i in range(0,len(outlierind)):            
+                #print(i)             
+                sev[i], dates[i], days[i]=severity(data=ds.sel(points=i),method=method)
 
-        sevindex[outlierind]=sev
-        duration[outlierind]=days
-        startdate[outlierind]=dates
 
-        sevindex=sevindex.reshape((len(self.dists.y),len(self.dists.x)))
-        duration=duration.reshape((len(self.dists.y),len(self.dists.x)))
-        startdate=startdate.reshape((len(self.dists.y),len(self.dists.x)))
-        #startdate[startdate==0]=np.nan
-        out = xr.Dataset(coords={'y':self.dists.y[:],'x':self.dists.x[:]},attrs={'crs':'EPSG:3577'})
+            sevindex=np.zeros((len(self.dists.x)*len(self.dists.y)))
+            duration=np.zeros((len(self.dists.x)*len(self.dists.y)))
+            startdate=np.zeros((len(self.dists.x)*len(self.dists.y)))
 
-        out['StartDate']=(('y','x'),startdate)
-        out['Duration']=(('y','x'),duration.astype('uint16'))
-        burnt = np.zeros((len(data.y),len(data.x)))
-        burnt[duration>1] = 1
-        out['Severe']=(('y','x'),burnt.astype('uint16'))
-        if growing==True:
-            BurnArea = self.region_growing(out)
-            out['Medium'] = (('y','x'),BurnArea.astype('int16')) 
-        #Add hotspot as collaborated burnt area
-        extent = [np.min(self.dists.x.data),np.max(self.dists.x.data),np.min(self.dists.y.data),np.max(self.dists.y.data)]
-        year = int(period[0][0:4])
-        polygons = hotspot_polygon(year,extent,4000) # generate hotspot polygons with 4km buffer
-        #generate the mask for hotspot data for filtering or overlay
-        if polygons.is_empty:
-            print('No hotspots data.')
+            sevindex[outlierind]=sev
+            duration[outlierind]=days
+            startdate[outlierind]=dates
+
+            sevindex=sevindex.reshape((len(self.dists.y),len(self.dists.x)))
+            duration=duration.reshape((len(self.dists.y),len(self.dists.x)))
+            startdate=startdate.reshape((len(self.dists.y),len(self.dists.x)))
+            #startdate[startdate==0]=np.nan
+            out = xr.Dataset(coords={'y':self.dists.y[:],'x':self.dists.x[:]},attrs={'crs':'EPSG:3577'})
+
+            out['StartDate']=(('y','x'),startdate)
+            out['Duration']=(('y','x'),duration.astype('uint16'))
+            burnt = np.zeros((len(data.y),len(data.x)))
+            burnt[duration>1] = 1
+            out['Severity']=(('y','x'),sevindex.astype('float32'))
+            out['Severe']=(('y','x'),burnt.astype('uint16'))
+            if growing==True:
+                BurnArea = self.region_growing(out)
+                out['Medium'] = (('y','x'),BurnArea.astype('int16')) 
+            #Add hotspot as collaborated burnt area
+            extent = [np.min(self.dists.x.data),np.max(self.dists.x.data),np.min(self.dists.y.data),np.max(self.dists.y.data)]
+            year = int(period[0][0:4])
+            polygons = hotspot_polygon(year,extent,4000) # generate hotspot polygons with 4km buffer
+            #generate the mask for hotspot data for filtering or overlay
+            if polygons.is_empty:
+                print('No hotspots data.')
+            else:
+                coords = out.coords
+
+                if polygons.type=='MultiPolygon':
+                    HotspotMask=np.zeros((len(self.dists.y),len(self.dists.x)))
+                    for polygon in polygons:
+                        HotspotMask_tmp =  outline_to_mask(polygon.exterior, coords['x'], coords['y'])
+                        HotspotMask = HotspotMask_tmp + HotspotMask
+                    HotspotMask=xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
+                if polygons.type=='Polygon':
+                    HotspotMask =  outline_to_mask(polygons.exterior, coords['x'], coords['y'])
+                    HotspotMask=xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
+                out['Collaborate'] = (('y','x'),HotspotMask.astype('uint8'))
+            
         else:
-            coords = out.coords
-
-            if polygons.type=='MultiPolygon':
-                HotspotMask=xr.DataArray()
-                for polygon in polygons:
-                    HotspotMask_tmp =  outline_to_mask(polygon.exterior, coords['x'], coords['y'])
-                    HotspotMask = HotspotMask_tmp + HotspotMask
-            if polygons.type=='Polygon':
-                HotspotMask =  outline_to_mask(polygons.exterior, coords['x'], coords['y'])
-                HotspotMask=xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
-            out['Collaborate'] = (('y','x'),HotspotMask.astype('uint8'))
+            print('no burnt area detected')
+            out = np.array([]) # no detected burn
+            
         return out
 
         
