@@ -453,9 +453,10 @@ class BurnCube(dc.Datacube):
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
         year = int(period[0][0:4])
         polygons = hotspot_polygon(year, extent, 4000)  # generate hotspot polygons with 4km buffer
-
-       
-        if len(polygons)==0:
+        
+        if polygons==None:
+            print('No hotspots data.')
+        elif polygons.is_empty:
             print('No hotspots data.')
         else:
             coords = out.coords

@@ -206,8 +206,8 @@ def hotspot_polygon(year, extent, buffersize):
                 break
             if year >= 2018:                
                 print("No hotspot data")
-                polygons = []
-                return polygons
+                
+                return None
             
     
     start = np.datetime64(datetime.datetime(year, 1, 1))
