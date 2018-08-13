@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 
 def dist_geomedian(params):
     """
-    distributed version of geomedian
+    multiprocess version with shared memory of the geomedian
     """
     gmed = np.frombuffer(shared_out_arr.get_obj(), dtype=np.float32).reshape((params[2][0], params[2][2]))
     X = np.frombuffer(shared_in_arr.get_obj(), dtype=np.int16).reshape(params[2])
@@ -26,7 +26,7 @@ def dist_geomedian(params):
 
 def dist_distance(params):
     """
-    distributed version of cosine distances and nbr distances
+    multiprocess version with shared memory of the cosine distances and nbr distances
     """
     X = np.frombuffer(shared_in_arr1.get_obj(), dtype=np.int16).reshape(params[2])
     gmed = np.frombuffer(shared_in_arr2.get_obj(), dtype=np.float32).reshape((params[2][0], params[2][2]))
@@ -46,7 +46,7 @@ def dist_distance(params):
 
 def dist_severity(params):
     """
-    distributed version of cosine distances and nbr distances
+    multiprocess version with shared memory of the severity algorithm
     """
     NBR = np.frombuffer(shared_in_arr01.get_obj(), dtype=np.float32).reshape((-1, params[2]))
     NBRDist = np.frombuffer(shared_in_arr02.get_obj(), dtype=np.float32).reshape((-1, params[2]))
@@ -78,15 +78,31 @@ class BurnCube(dc.Datacube):
         
 
     def to_netcdf(self, path):
+        """Saves input data to a netCDF4 on disk
+            Args:
+                path string: path to a file on disk
+        """
         self.dataset.to_netcdf(path)
 
     def open_dataset(self, path):
+        """Loads input data from a netCDF4 on disk
+            Args:
+                path string: path to a file on disk
+        """
         self.dataset = xr.open_dataset(path)
 
     def geomed_to_netcdf(self, path):
+        """Saves geomedian data to a netCDF4 on disk
+            Args:
+                path string: path to a file on disk
+        """
         self.geomed.to_netcdf(path)
 
     def open_geomed(self, path):
+        """Loads geomedian data from a netCDF4 on disk
+            Args:
+                path string: path to a file on disk
+        """
         self.geomed = xr.open_dataset(path)
 
     def _load_pq(self, x, y, res, period, n_landsat):
@@ -136,6 +152,17 @@ class BurnCube(dc.Datacube):
         return nbart_stack
 
     def load_cube(self, x, y, res, period, n_landsat):
+        """Loads the Landsat data for the selected region and sensors
+            Note:
+                This method loads the data into the self.dataset variable.
+            Args:
+                x list float: horizontal min max range
+                y list float: vertical min max range
+                res float: pixel resolution for the input data
+                period list datetime: temporal range for input data
+                n_landsat int: number of the Landsat mission
+        """
+        
         nbart_stack = self._load_nbart(x, y, res, period, n_landsat)
         pq_stack = self._load_pq(x, y, res, period, n_landsat)
         pq_stack, nbart_stack = xr.align(pq_stack, nbart_stack, join='inner')
@@ -156,6 +183,21 @@ class BurnCube(dc.Datacube):
         self.dataset = data
 
     def geomedian(self, period, n_procs=4, epsilon=.5, max_iter=40):
+        """
+        Calculates the geometric median of band reflectances in parallel
+        The procedure stops when either the error 'epsilon' or the maximum
+        number of iterations 'max_iter' is reached.
+            Note:
+                This method saves the result of the computation into the
+                self.geomed variable: p-dimensional vector with geometric
+                median reflectances, where p is the number of bands.
+            Args:
+                period: range of dates to compute the geomedian
+                n_procs: tolerance criterion to stop iteration
+                epsilon: tolerance criterion to stop iteration
+                max_iter: maximum number of iterations
+        """
+        
         n = len(self.dataset.y) * len(self.dataset.x)
         out_arr = mp.Array(ctypes.c_float, len(self.dataset.band) * n)
         gmed = np.frombuffer(out_arr.get_obj(), dtype=np.float32).reshape((len(self.dataset.band), n))
@@ -187,6 +229,18 @@ class BurnCube(dc.Datacube):
         self.geomed = ds
 
     def distances(self, period, n_procs=4):
+        """
+        Calculates the cosine distance between observation and reference.
+        The calculation is point based, easily adaptable to any dimension.
+            Note:
+                This method saves the result of the computation into the
+                self.dists variable: p-dimensional vector with geometric
+                median reflectances, where p is the number of bands.
+            Args:
+                period: range of dates to compute the geomedian
+                n_procs: tolerance criterion to stop iteration
+        """
+        
         n = len(self.dataset.y) * len(self.dataset.x)
         _X = self.dataset['cube'].sel(time=slice(period[0], period[1]))
 
@@ -249,6 +303,9 @@ class BurnCube(dc.Datacube):
         self.dists = ds
 
     def outliers(self):
+        """
+        Calculate the outliers for distances for change detection 
+        """
         NBRoutlier = np.nanpercentile(self.dists.NBRDist, 75, axis=0) + 1.5 * \
                      (np.nanpercentile(self.dists.NBRDist, 75, axis=0) - np.nanpercentile(self.dists.NBRDist, 25,
                                                                                           axis=0))
@@ -262,9 +319,14 @@ class BurnCube(dc.Datacube):
         self.outlrs = ds
 
     def region_growing(self, severity):
-        #print(severity.StartDate.data)
+        """
+        The function includes further areas that do not qualify as outliers but do show a substantial decrease in NBR and 
+        are adjoining pixels detected as burns. These pixels are classified as 'moderate severity burns'.
+            Note: this function is build inside the 'severity' function
+                Args:
+                    severity: xarray including severity and start-date of the fire
+        """
         Start_Date = severity.StartDate.data[~np.isnan(severity.StartDate.data)].astype('<M8[ns]')
-        #print(Start_Date)
         ChangeDates = np.unique(Start_Date)
         i = 0
         sumpix = np.zeros(len(ChangeDates))
@@ -312,15 +374,12 @@ class BurnCube(dc.Datacube):
 
 
     def severitymapping(self, period, n_procs=4, method='NBR', growing=True):
-        """
-        Calculate burnt area with the given period
-        Args:
-            data: (t x Y x X) matrix, where t = number of days and Y x X is the size of the cosdist, nbrdist...
-            period: period of time with burn mapping interest,  e.g.('2015-01-01','2015-12-31')
-            method: methods for change detection
-            growing: whether to grow the region
-        Returns:
-            ds:xarray with detected burnt area, e.g. severe, medium
+        """Calculates burnt area for a given period
+            Args:
+                period: period of time with burn mapping interest,  e.g.('2015-01-01','2015-12-31')
+                n_procs: tolerance criterion to stop iteration
+                method: methods for change detection
+                growing: whether to grow the region
         """
 
         data = self.dists.sel(time=slice(period[0], period[1]))
