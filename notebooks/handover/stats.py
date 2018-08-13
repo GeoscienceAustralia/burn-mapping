@@ -79,15 +79,19 @@ def nbr_eucdistance(ref, obs):
 
 def severity(NBR, NBRDist, CDist, ChangeDir, NBRoutlier, CDistoutlier, t,method='NBRdist'):
     """
-    Returns the severity,duration and start date of the change.
+    Returns the severity,duration and start date of the change. 
     Args:
-
-        time: dates of observations
+        NBR: normalised burn ratio in tx1 dimension  
+        NBRDist: nbr distance in tx1 dimension 
+        CDist: cosine distance in tx1 dimension 
+        ChangeDir: NBR change direction in tx1 dimension 
+        NBRoutlier: outlier values for NBRdist 
+        CDistoutler: outlier values for CDist 
+        t: dates of observations
         data: xarray including the cosine distances, NBR distances, NBR, change direction and outliers value
-        method: 1,2,3 to choose
-            1: only use cosine distance as an indicator for change
-            2: use cosine distance together with NBR<0
-            3: use both cosine distance, NBR euclidean distance, and NBR change direction for change detection
+        method: two options to choose            
+            NBR: use cosine distance together with NBR<0
+            NBRdist: use both cosine distance, NBR euclidean distance, and NBR change direction for change detection
 
     Returns:
         sevindex: severity
