@@ -203,8 +203,8 @@ def hotspot_polygon(year, extent, buffersize):
             if (year <= endyear) & (year >= startyear):
                 table = pd.read_csv(name)
                 break
-            else:
-                print("No hotspot data")
+            if year >= 2018:
+                print("No hotspot data")        
                 return None
     
     start = np.datetime64(datetime.datetime(year, 1, 1))

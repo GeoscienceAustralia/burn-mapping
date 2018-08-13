@@ -262,9 +262,9 @@ class BurnCube(dc.Datacube):
         self.outlrs = ds
 
     def region_growing(self, severity):
-        print(severity.StartDate.data)
+        #print(severity.StartDate.data)
         Start_Date = severity.StartDate.data[~np.isnan(severity.StartDate.data)].astype('<M8[ns]')
-        print(Start_Date)
+        #print(Start_Date)
         ChangeDates = np.unique(Start_Date)
         i = 0
         sumpix = np.zeros(len(ChangeDates))
@@ -454,7 +454,7 @@ class BurnCube(dc.Datacube):
         year = int(period[0][0:4])
         polygons = hotspot_polygon(year, extent, 4000)  # generate hotspot polygons with 4km buffer
 
-        if polygons==None:
+        if polygons==None :
             print('No hotspots data.')
         elif polygons.is_empty:
             print('No hotspots data.')
@@ -470,7 +470,7 @@ class BurnCube(dc.Datacube):
             if polygons.type == 'Polygon':
                 HotspotMask = outline_to_mask(polygons.exterior, coords['x'], coords['y'])
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
-            out['Collaborate'] = (('y', 'x'), HotspotMask.astype('uint8'))
+            out['Corroborate'] = (('y', 'x'), HotspotMask.astype('uint8'))
 
         return out
 

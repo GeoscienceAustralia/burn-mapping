@@ -361,8 +361,14 @@ def validate_forest_grass(Test_Array = None, Validated_Array = None,Mask = None,
         axes.patch.set_facecolor('none')
         cMap2 = ListedColormap(['white','indianred', 'burlywood','g'])
         Combined2.plot(ax=axes,levels=[0,1, 2, 3, 4], cmap=cMap2,add_colorbar=False,alpha=0.9)
-        cbar = fig.colorbar(cax,ticks=[0.5,1.5,2.5,3.5])
-        cbar.ax.set_yticklabels(['correct unburned area','false burned area','missed burned area','correct burned area'])
+        
+        ds = xr.Dataset(coords={ 'y': Test_Array.y[:], 'x': Test_Array.x[:]}, attrs={'crs': 'EPSG:3577'})
+        ds['tmp'] = (( 'y', 'x'), np.random.uniform(low=0, high=7, size=(len(Test_Array.y),len(Test_Array.x))))
+        cMap3 = ListedColormap(['white','indianred','darkred',  'burlywood','peru','g','darkgreen'])
+        cax2=ds.tmp.plot(ax=axes,levels=[0,1, 2, 3, 4, 5, 6, 7], cmap=cMap3,add_colorbar=False,alpha=1)
+        cax2.set_visible(False)
+        cbar = fig.colorbar(cax2,ticks=[0.5,1.5,2.5,3.5,4.5,5.5,6.5])
+        cbar.ax.set_yticklabels(['correct unburned area','false burned grassland area','false burned forest area','missed burned grassland area','missed burned forest area','correct burned grassland area','correct burned forest area'])
 
         cax.axes.get_xaxis().set_visible(False)
         cax.axes.get_yaxis().set_visible(False)
