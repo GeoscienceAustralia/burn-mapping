@@ -57,8 +57,11 @@ def treecover_masking(year,data,prctg=60):
     gda94 = pyproj.Proj(init='epsg:4326')
     lon1,lat1=pyproj.transform(gda94aa,gda94,data.x.data[0],data.y.data[0])
     lon2,lat2=pyproj.transform(gda94aa,gda94,data.x.data[-1],data.y.data[-1])
-    filename = '/g/data/ub8/au/treecover/250m/ANUWALD.TreeCover.'+str(year)+'.250m.nc'
+    
+    filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/250m/ANUWALD.TreeCover.AllYears.250m.NCAS.nc'    
     TC = xr.open_dataset(filename)
+    yr = str(year)+'-12-31'
+    TC = TC.AllYears.sel(time=yr)
     lonmin = min([lon1,lon2])
     latmin = min([lat1,lat2])
     lonmax = max([lon1,lon2])
@@ -70,7 +73,7 @@ def treecover_masking(year,data,prctg=60):
     longitude, latitude = np.meshgrid(TC.longitude.data[col], TC.latitude.data[row])
     
     easting,northing=pyproj.transform(gda94,gda94aa,longitude.ravel(),latitude.ravel()) # change the projection
-    Treecover = TC.TreeCover.squeeze()[col,row].transpose()
+    Treecover = TC.squeeze()[col,row].transpose()
     x, y = np.meshgrid(data.x.data, data.y.data)
     from scipy.interpolate import griddata
     gridnew = griddata((easting,northing),Treecover.data.ravel(),(x,y),method='nearest',fill_value=np.nan) #resample to the given data resolution and extent

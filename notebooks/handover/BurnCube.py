@@ -6,6 +6,7 @@ import xarray as xr
 import multiprocessing as mp
 import ctypes
 from contextlib import closing
+import datetime
 import warnings
 from stats import nbr_eucdistance, geometric_median, cos_distance, severity, outline_to_mask, hotspot_polygon
 warnings.filterwarnings('ignore')
@@ -326,7 +327,7 @@ class BurnCube(dc.Datacube):
                 Args:
                     severity: xarray including severity and start-date of the fire
         """
-        Start_Date = severity.StartDate.data[~np.isnan(severity.StartDate.data)].astype('<M8[ns]')
+        Start_Date = severity.StartDate.data[~np.isnan(severity.StartDate.data)].astype('datetime64[ns]')
         ChangeDates = np.unique(Start_Date)
         i = 0
         sumpix = np.zeros(len(ChangeDates))
@@ -356,10 +357,15 @@ class BurnCube(dc.Datacube):
         fraction_seedmap = 0.25  # this much of region must already have been mapped as burnt to be included
         SeedMap = (severity.Severe.data > 0).astype(int)
         AnnualMap = 0. * all_labels.astype(float)
-        ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 60)]
+        #ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 60)]
+        Startdates = np.zeros((len(self.dists.y),len(self.dists.x)))
+        Startdates[NewPotential>0] = ChangeDates[ii]
+        tmpMap = (NewPotential>0).astype(int)
+
         for d in ChangeDates:
-            d = str(d)[:10]
-            ti = np.where(self.dists.time > np.datetime64(d))[0][0]
+         
+            di = str(d)[:10]
+            ti = np.where(self.dists.time > np.datetime64(di))[0][0]
             NBR_score = (self.dists.ChangeDir * self.dists.NBRDist)[ti, :, :] / self.outlrs.NBRoutlier
             cos_score = (self.dists.ChangeDir * self.dists.cosdist)[ti, :, :] / self.outlrs.CDistoutlier
             Potential = ((NBR_score > z_distance) & (cos_score > z_distance)).astype(int)
@@ -367,10 +373,19 @@ class BurnCube(dc.Datacube):
             NewPotential = 0. * SeedMap.astype(float)
             for ri in range(1, np.max(np.unique(all_labels))):
                 NewPotential[all_labels == ri] = np.mean(np.extract(all_labels == ri, SeedMap))
-            AnnualMap = AnnualMap + (NewPotential > fraction_seedmap).astype(int)
+            
+            AnnualMap = AnnualMap + (NewPotential > fraction_seedmap).astype(int)          
+            tmp = (AnnualMap > 0).astype(int)
+            if d<ChangeDates[ii]:
+                Startdates[(tmp-tmpMap)<0] = d
+                
+            else:
+                Startdates[(tmp-tmpMap)>0] = d
+            tmpMap=tmp
+
         BurnExtent = (AnnualMap > 0).astype(int)
 
-        return BurnExtent
+        return BurnExtent, Startdates
 
 
     def severitymapping(self, period, n_procs=4, method='NBR', growing=True):
@@ -393,7 +408,7 @@ class BurnCube(dc.Datacube):
         if method == 'NBR':
             tmp = self.dists.cosdist.where((self.dists.cosdist > self.outlrs.CDistoutlier) &
                                            (self.dists.NBR < 0)).sum(axis=0).data
-            tmp = tmp.reshape((len(self.dataset.x) * len(self.dataset.y)))
+            tmp = tmp.reshape((len(self.dists.x) * len(self.dists.y)))
             outlierind = np.where(tmp > 0)[0]
            
 
@@ -401,7 +416,7 @@ class BurnCube(dc.Datacube):
             tmp = self.dists.cosdist.where((self.dists.cosdist > self.outlrs.CDistoutlier) &
                                            (self.dists.NBRDist > self.outlrs.NBRoutlier) &
                                            (self.dists.ChangeDir == 1)).sum(axis=0).data
-            tmp = tmp.reshape((len(self.dataset.x) * len(self.dataset.y)))
+            tmp = tmp.reshape((len(self.dists.x) * len(self.dists.y)))
             outlierind = np.where(tmp > 0)[0]         
 
         else:
@@ -488,12 +503,13 @@ class BurnCube(dc.Datacube):
         duration = np.zeros((len(self.dists.y)*len(self.dists.x)))
         startdate = np.zeros((len(self.dists.y)*len(self.dists.x)))
         sevindex[outlierind] = sev
-        duration[outlierind] = days
-        startdate[outlierind] = dates.astype('datetime64[ns]')
+        duration[outlierind] = days        
+        startdate[outlierind] = dates
         sevindex = sevindex.reshape((len(self.dists.y), len(self.dists.x)))
         duration = duration.reshape((len(self.dists.y), len(self.dists.x)))
         startdate = startdate.reshape((len(self.dists.y), len(self.dists.x)))
-        
+        startdate[startdate==0] = np.nan
+        duration[duration==0] = np.nan
         del in_arr1, in_arr2, in_arr3, in_arr4, in_arr5, in_arr6,out_arr1, out_arr2, out_arr3
         del sev,days,dates,NBR_shared,NBRDist_shared,CosDist_shared,NBRoutlier_shared,ChangeDir_shared,CDistoutlier_shared
         
@@ -502,16 +518,26 @@ class BurnCube(dc.Datacube):
         out['Duration'] = (('y', 'x'), duration.astype('uint16'))
         burnt = np.zeros((len(data.y), len(data.x)))
         burnt[duration > 1] = 1
-        out['Severe'] = (('y', 'x'), burnt.astype('uint16'))
+        out['Severe'] = (('y', 'x'), burnt.astype('uint8'))
         out['Severity']=(('y','x'),sevindex.astype('float32'))
         if growing == True:
-            BurnArea = self.region_growing(out)
-            out['Medium'] = (('y', 'x'), BurnArea.astype('int16'))
-
+            BurnArea,growing_dates = self.region_growing(out)
+            out['Moderate'] = (('y', 'x'), BurnArea.astype('uint8'))
+            growing_dates[growing_dates==0] = np.nan
+            out['StartDate'] = (('y', 'x'), growing_dates)
+        
         extent = [np.min(self.dists.x.data), np.max(self.dists.x.data),
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
-        year = int(period[0][0:4])
-        polygons = hotspot_polygon(year, extent, 4000)  # generate hotspot polygons with 4km buffer
+       
+        
+        #find the startdate for the fire and extract hotspots data
+        values, counts = np.unique(startdate, return_counts=True)
+        firedate = values[counts==np.max(counts)]
+        startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
+        stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
+        fireperiod = (str(startdate)[2:12],str(stopdate)[2:12])
+        #print(fireperiod)
+        polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         if polygons==None :
             print('No hotspots data.')

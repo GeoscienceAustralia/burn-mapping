@@ -1,5 +1,5 @@
 import numpy as np
-import datetime as datetime
+import datetime 
 
 def geometric_median(x, epsilon=1, max_iter=40):
     """
@@ -172,7 +172,7 @@ def outline_to_mask(line, x, y):
     return mask
 
 
-def hotspot_polygon(year, extent, buffersize):
+def hotspot_polygon(period, extent, buffersize):
     """Create polygons for the hotspot with a buffer
     year: given year for hotspots data
     extent: [xmin,xmax,ymin,ymax] in crs EPSG:3577
@@ -190,7 +190,7 @@ def hotspot_polygon(year, extent, buffersize):
     datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
     gda94aa = pyproj.Proj(init='epsg:3577')
     gda94 = pyproj.Proj(init='epsg:4283')
-
+    year = int(str(period[0])[0:4])
     if year == 2005:
         name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
         table = pd.read_csv(name)
@@ -211,8 +211,8 @@ def hotspot_polygon(year, extent, buffersize):
                 print("No hotspot data")        
                 return None
     
-    start = np.datetime64(datetime.datetime(year, 1, 1))
-    stop = np.datetime64(datetime.datetime(year, 12, 31))
+    start = np.datetime64(period[0])
+    stop = np.datetime64(period[1])
 
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])

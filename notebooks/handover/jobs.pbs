@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -P xc0
+#PBS -q normal
+#PBS -l ncpus=4
+#PBS -l mem=32GB
+#PBS -l walltime=5:00:00
+#PBS -l software=python
+#PBS -l wd
+module use /g/data/v10/public/modules/modulefiles
+module load dea
+module load agdc-py3-prod
+
+python3 burnmapping_test.py $si
