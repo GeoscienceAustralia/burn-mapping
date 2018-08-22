@@ -515,14 +515,14 @@ class BurnCube(dc.Datacube):
         
         out = xr.Dataset(coords={'y': self.dists.y[:], 'x': self.dists.x[:]}, attrs={'crs': 'EPSG:3577'})
         out['StartDate'] = (('y', 'x'), startdate)
-        out['Duration'] = (('y', 'x'), duration.astype('uint16'))
+        out['Duration'] = (('y', 'x'), duration.astype('int16'))
         burnt = np.zeros((len(data.y), len(data.x)))
-        burnt[duration > 1] = 1
-        out['Severe'] = (('y', 'x'), burnt.astype('uint8'))
+        burnt[duration > 1] = 1       
         out['Severity']=(('y','x'),sevindex.astype('float32'))
+        out['Severe'] = (('y', 'x'), burnt.astype('int8'))
         if growing == True:
             BurnArea,growing_dates = self.region_growing(out)
-            out['Moderate'] = (('y', 'x'), BurnArea.astype('uint8'))
+            out['Moderate'] = (('y', 'x'), BurnArea.astype('int8'))
             growing_dates[growing_dates==0] = np.nan
             out['StartDate'] = (('y', 'x'), growing_dates)
         
@@ -555,7 +555,7 @@ class BurnCube(dc.Datacube):
             if polygons.type == 'Polygon':
                 HotspotMask = outline_to_mask(polygons.exterior, coords['x'], coords['y'])
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
-            out['Corroborate'] = (('y', 'x'), HotspotMask.astype('uint8'))
+            out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int8'))
 
         return out
 
