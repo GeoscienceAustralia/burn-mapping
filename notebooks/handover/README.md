@@ -45,13 +45,15 @@ Validation_example1.ipynb provides an example of using validationtoolbox for val
 mycolormap.txt is a predefined colormap used for the severity mapping 
 
 ## Output description
+Outputs include two classes for burned area, namely high-severity and moderate-severity burns. The high severity burns is calculated by the temporal integral of cosine distance for the period of time that it remains a statistically significant anomaly compared to the other spectra in the time series. The moderate-severity burns is deteced using the region-growing method. This include further areas that do not qualify as outliers but do show a substantial decrease in NBR and are adjoining pixels detected as burns.
+
 The outputs of severity and burnscar mapping are stored in one dataset and saved in netcdf format. The following variables are included in the output file:
-    StartDate: detected start-date of severe and moderate burned area (filled with nan for unburnt area)
-    Duration: duration of land cover change due to the bushfire (filled with nan for unburnt area)
-    Severity: severity of land cover change due to the bushfire (0 for unburnt area)
-    Severe: binary mask for severe burnt area (0 for unburnt area)   
-    Moderate: binary mask for moderate and severe burnt area (0 for unburnt area)  
-    Corroborate: binary mask for corroborating evidence from hotspots data with 4km buffer (0 for unburnt area) 
+    StartDate (float64): detected start-date of severe and moderate burned area (filled with nan for unburnt area)
+    Duration (int16): duration of land cover change due to the bushfire (filled with nan for unburnt area)
+    Severity (float64): severity of land cover change due to the bushfire (0 for unburnt area)
+    Severe (int8): binary mask for severe burnt area (0 for unburnt area)   
+    Moderate (int8): binary mask for moderate and severe burnt area (0 for unburnt area)  
+    Corroborate (int8): binary mask for corroborating evidence from hotspots data with 4km buffer (0 for unburnt area) 
 
 
 ## Validation data

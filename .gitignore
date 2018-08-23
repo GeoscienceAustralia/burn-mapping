@@ -1,7 +1,3 @@
-# NetCDF data files
-*.hdf
-*.nc
-
 # Temporary files left by some editors
 *~
 *.crdownload
