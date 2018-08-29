@@ -8,7 +8,16 @@ import ctypes
 from contextlib import closing
 import datetime
 import warnings
-from stats import nbr_eucdistance, geometric_median, cos_distance, severity, outline_to_mask, hotspot_polygon
+from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon
+FASTGM=False
+try:
+    from pcm import gmpcm as geometric_median
+    print("PCM geomedian loaded")
+    FASTGM = True
+except ImportError:
+    #from hdmedians import geomedian as geometric_median
+    #print("HDmedian loaded")
+    from stats import geometric_median
 warnings.filterwarnings('ignore')
 
 
@@ -22,8 +31,11 @@ def dist_geomedian(params):
     for i in range(params[0], params[1]):
         ind = np.where(X[1, :, i] > 0)[0]
         if len(ind) > 0:
+            #works for hdmedian
+            #gmed[:, i] = np.asarray(geometric_median(X[:, ind, i].astype(np.float32)))  
+            #works for stats.geometric_median
             gmed[:, i] = geometric_median(X[:, ind, i], params[3], params[4])
-
+            
 
 def dist_distance(params):
     """
@@ -183,7 +195,30 @@ class BurnCube(dc.Datacube):
 
         self.dataset = data
 
-    def geomedian(self, period, n_procs=4, epsilon=.5, max_iter=40):
+    def geomedian(self, period, **kwargs):
+        if FASTGM:
+            self.fastgeomedian(period)
+        else:
+            self.hdgeomedian(period, **kwargs)
+        
+    def fastgeomedian(self, period):
+        """
+        Calculates the geometric median of band reflectances using pcm.
+        """
+        
+        _X = self.dataset['cube'].sel(time=slice(period[0], period[1]))
+        t_dim = _X.time[:]
+        X = _X.transpose('y','x','band','time').data.astype(np.float32)
+        gmed = geometric_median(X)
+        
+        ds = xr.Dataset(coords={'time': t_dim, 'y': self.dataset.y[:], 'x': self.dataset.x[:],
+                                'band': self.dataset.band}, attrs={'crs': 'EPSG:3577'})
+        ds['geomedian'] = (('band', 'y', 'x'), gmed.transpose(2,0,1))
+        
+        del gmed, X
+        self.geomed = ds
+        
+    def hdgeomedian(self, period, n_procs=4, epsilon=.5, max_iter=40):
         """
         Calculates the geometric median of band reflectances in parallel
         The procedure stops when either the error 'epsilon' or the maximum
@@ -222,8 +257,8 @@ class BurnCube(dc.Datacube):
         p.join()
 
         ds = xr.Dataset(coords={'time': t_dim, 'y': self.dataset.y[:], 'x': self.dataset.x[:],
-                                'bands': self.dataset.band}, attrs={'crs': 'EPSG:3577'})
-        ds['geomedian'] = (('bands', 'y', 'x'), gmed[:].reshape((len(self.dataset.band), len(self.dataset.y),
+                                'band': self.dataset.band}, attrs={'crs': 'EPSG:3577'})
+        ds['geomedian'] = (('band', 'y', 'x'), gmed[:].reshape((len(self.dataset.band), len(self.dataset.y),
                                                                  len(self.dataset.x))).astype(np.float32))
 
         del gmed, in_arr, out_arr, X
@@ -291,7 +326,7 @@ class BurnCube(dc.Datacube):
         p.join()
 
         ds = xr.Dataset(coords={'time': t_dim, 'y': self.dataset.y[:], 'x': self.dataset.x[:],
-                                'bands': self.dataset.band}, attrs={'crs': 'EPSG:3577'})
+                                'band': self.dataset.band}, attrs={'crs': 'EPSG:3577'})
         ds['cosdist'] = (('time', 'y', 'x'), cos_dist[:].reshape((len(t_dim), len(self.dataset.y),
                                                                   len(self.dataset.x))).astype('float32'))
         ds['NBRDist'] = (('time', 'y', 'x'), nbr_dist[:].reshape((len(t_dim), len(self.dataset.y),

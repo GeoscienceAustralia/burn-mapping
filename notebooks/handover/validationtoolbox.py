@@ -272,7 +272,7 @@ def validate(Test_Array = None, Validated_Array = None, plot=False):
     import xarray
     assert type(Test_Array) is xarray.core.dataarray.DataArray, 'Test_Array not an xarray DataArray'
     assert type(Validated_Array) is xarray.core.dataarray.DataArray, 'Validated_Array not an xarray DataArray'
-    
+
     # Classify as Correct/Omission/Comission
     Correct = Validated_Array.where(Validated_Array==1).where(Test_Array==1)
     Correct = Correct.fillna(0)
@@ -282,14 +282,13 @@ def validate(Test_Array = None, Validated_Array = None, plot=False):
     Commission = Commission.fillna(0)
     
     Combined = Correct + Omission + Commission
-    Combined = Combined.where(Combined.values!=0)
-    
+    Combined = Combined.where(Combined!=0)
     # Calculate number of pixels in each category    
     e11 = Correct.sum(('x','y')).values                       # True Positives
     e12 = Commission.sum(('x','y')).values                    # False Positives
     e21 = Omission.sum(('x','y')).values                      # False Negatives
-    e22 = len(Combined.x)*len(Combined.y) - e11 - e12 - e21
-    
+    e22 = Validated_Array.count().values - e11 - e12 - e21    # True Positives
+
     # Checksum (all values must be positive)
     assert e11.all() >= 0, 'e11 error metrics invalid' 
     assert e12.all() >= 0, 'e12 error metrics invalid' 
@@ -343,11 +342,13 @@ def validate_forest_grass(Test_Array = None, Validated_Array = None,Mask = None,
     ForestMask = Validated_Array*Mask.ForestMask
     NoneForestMask = Validated_Array*Mask.NoneForestMask
     
-   
-    Tree,Combined1=validate(Test_Array = Test_forest, Validated_Array = ForestMask, plot=False)
-    
+    forest=Mask.ForestMask>0
+    nonforest=Mask.NoneForestMask>0
+    Tree,Combined1=validate(Test_Array = Test_forest.where(forest, drop=True), 
+                            Validated_Array = ForestMask.where(forest, drop=True), plot=False)
         
-    Grass,Combined2=validate(Test_Array = Test_grass, Validated_Array = NoneForestMask, plot=False)
+    Grass,Combined2=validate(Test_Array = Test_grass.where(nonforest, drop=True), 
+                             Validated_Array = NoneForestMask.where(nonforest, drop=True), plot=False)
     import matplotlib
     font = {'family' : 'normal',
             'weight' : 'normal',
@@ -403,56 +404,3 @@ def outline_to_mask(line, x, y):
     points = np.array((X.flatten(), Y.flatten())).T
     mask = mpath.contains_points(points).reshape(X.shape)
     return mask
-
-def hotspot_polygon(year,extent,buffersize):
-    """Create polygons for the hotspot with a buffer
-    year: given year for hotspots data
-    extent: [xmin,xmax,ymin,ymax] in crs EPSG:3577
-    buffersize: in meters
-    
-    Examples:
-    ------------
-    >>>year=2017
-    >>>extent = [1648837.5, 1675812.5, -3671837.5, -3640887.5]
-    >>>polygons = hotspot_polygon(year,extent,4000)
-    """
-    import glob
-    import pyproj
-    datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
-    gda94aa = pyproj.Proj(init='epsg:3577')#,py_list='aea')
-    gda94 = pyproj.Proj(init='epsg:4283')
-
-    if year==2005:
-        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
-        table = pd.read_csv(name)
-
-    elif year == 2010:
-        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
-        table = pd.read_csv(name)
-
-    else:
-        for i in range(0,len(glob.glob(datafile))):
-            name = glob.glob(datafile)[i]
-            startyear = int(name[-13:-9])
-            endyear = int(name[-8:-4])
-            if (year<=endyear )& (year>=startyear):
-                table = pd.read_csv(name)
-                break
-
-    start = np.datetime64(datetime.datetime(year,1,1))
-    stop =  np.datetime64(datetime.datetime(year,12,31))
-    dates=table.datetime.values.astype('datetime64')
-    lon,lat=pyproj.transform(gda94aa,gda94,extent[0:2],extent[2:4])
-    index = np.where((dates>=start)*(dates<=stop)*(table.latitude<=lat[1])*(table.latitude>=lat[0])*(table.longitude<=lon[1])*(table.longitude>=lon[0]) )[0]
-    latitude = table.latitude.values[index]
-    longitude = table.longitude.values[index]        
-    easting,northing=pyproj.transform(gda94,gda94aa,longitude,latitude)
-    
-    from shapely.ops import cascaded_union
-    from matplotlib.patches import Polygon
-    from shapely.geometry import Point
-    
-   
-    patch = [Point(easting[i],northing[i]).buffer(buffersize) for i in range(0,len(index))]
-    polygons = cascaded_union(patch)
-    return polygons

@@ -29,26 +29,25 @@ def geometric_median(x, epsilon=1, max_iter=40):
 
     return y0
 
-
 def cos_distance(ref, obs):
     """
     Returns the cosine distance between observation and reference
     The calculation is point based, easily adaptable to any dimension. 
     Args:
-        ref: reference (2-D array with multiple days) e.g., geomatrix median [Nbands]
+        ref: reference (1-D array with multiple bands) e.g., geomatrix median [Nbands]
         obs: observation (with multiple bands, e.g. 6) e.g.,  monthly geomatrix median or reflectance [Nbands,ndays]
     
     Returns:
         cosdist: the cosine distance at each time step in [ndays]
     """
-    ref = ref.astype('float32')
-    obs = obs.astype('float32')
+    ref = ref.astype(np.float32)[:, np.newaxis]
+    obs = obs.astype(np.float32)
     cosdist = np.empty((obs.shape[1],))
     cosdist.fill(np.nan)
-    index = np.where(~np.isnan(obs[0, :]))[0]
-    cosdist[index] = np.transpose(
-        [1 - np.sum(ref * obs[:, t]) / (np.sqrt(np.sum(ref ** 2)) * np.sqrt(np.sum(obs[:, t] ** 2))) for t in index])
-
+    #index = np.where(~np.isnan(obs[0, :]))[0]
+    #cosdist[index] = np.transpose(
+    #    [1 - np.sum(ref[:,0] * obs[:, t]) / (np.sqrt(np.sum(ref[:,0] ** 2)) * np.sqrt(np.sum(obs[:, t] ** 2))) for t in index])
+    cosdist = np.transpose((1-np.nansum(ref*obs,axis=0)/np.sqrt(np.sum(ref ** 2)) / np.sqrt(np.nansum(obs ** 2,axis=0))))
     return cosdist
 
 
@@ -184,32 +183,43 @@ def hotspot_polygon(period, extent, buffersize):
     >>>extent = [1648837.5, 1675812.5, -3671837.5, -3640887.5]
     >>>polygons = hotspot_polygon(year,extent,4000)
     """
+    year = int(str(period[0])[0:4])
+    if year>=2018:
+        print("No complete hotspots data after 2018")
+        return None
+    
     import glob
     import pyproj
     import pandas as pd
-    datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
+
+    datafile = 'hotspot_historic_MODIS.csv'
+    if len(glob.glob(datafile))==1:
+        table = pd.read_csv(datafile, low_memory=False)
+    else:
+        datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
+        if len(glob.glob(datafile))==0:
+            print("No hotspots data found.")
+            return None
+        
+        if year == 2005:
+            name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
+            table = pd.read_csv(name)
+            
+        elif year == 2010:
+            name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
+            table = pd.read_csv(name)
+            
+        else:
+            for i in range(0, len(glob.glob(datafile))):
+                name = glob.glob(datafile)[i]
+                startyear = int(name[-13: -9])
+                endyear = int(name[-8: -4])
+                if (year <= endyear) & (year >= startyear):
+                    table = pd.read_csv(name)
+                    break
+
     gda94aa = pyproj.Proj(init='epsg:3577')
     gda94 = pyproj.Proj(init='epsg:4283')
-    year = int(str(period[0])[0:4])
-    if year == 2005:
-        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
-        table = pd.read_csv(name)
-
-    elif year == 2010:
-        name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
-        table = pd.read_csv(name)
-
-    else:
-        for i in range(0, len(glob.glob(datafile))):
-            name = glob.glob(datafile)[i]
-            startyear = int(name[-13: -9])
-            endyear = int(name[-8: -4])
-            if (year <= endyear) & (year >= startyear):
-                table = pd.read_csv(name)
-                break
-            if year >= 2018:
-                print("No hotspot data")        
-                return None
     
     start = np.datetime64(period[0])
     stop = np.datetime64(period[1])
