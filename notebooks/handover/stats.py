@@ -241,3 +241,62 @@ def hotspot_polygon(period, extent, buffersize):
 
     return polygons
 
+
+def nanpercentile(inarr, q):
+    """
+    faster nanpercentile than np.nanpercentile for axis 0 of a 3D array.
+    modified from https://krstn.eu/np.nanpercentile()-there-has-to-be-a-faster-way/
+    """
+    arr=inarr.copy()
+    # valid (non NaN) observations along the first axis
+    valid_obs = np.isfinite(arr).sum(axis=0)
+    # replace NaN with maximum
+    max_val = np.nanmax(arr)
+    arr[np.isnan(arr)] = max_val
+    # sort - former NaNs will move to the end
+    arr.sort(axis=0)
+    
+    # loop over requested quantiles
+    if type(q) is list:
+        qs=q
+    else:
+        qs=[q]
+    quant_arrs = np.empty(shape=(len(qs), arr.shape[1], arr.shape[2]))
+    quant_arrs.fill(np.nan)
+
+    for i in range(len(qs)):
+        quant = qs[i]
+        # desired position as well as floor and ceiling of it
+        k_arr = (valid_obs - 1) * (quant / 100.0)
+        f_arr = np.floor(k_arr).astype(np.int32)
+        c_arr = np.ceil(k_arr).astype(np.int32)
+        fc_equal_k_mask = f_arr == c_arr
+
+        # linear interpolation (like numpy percentile) takes the fractional part of desired position
+        floor_val = _zvalue_from_index(arr=arr, ind=f_arr) * (c_arr - k_arr)
+        ceil_val = _zvalue_from_index(arr=arr, ind=c_arr) * (k_arr - f_arr)
+
+        quant_arr = floor_val + ceil_val
+        quant_arr[fc_equal_k_mask] = _zvalue_from_index(arr=arr, ind=k_arr.astype(np.int32))[fc_equal_k_mask]  # if floor == ceiling take floor value
+
+        quant_arrs[i]=quant_arr
+    
+    if quant_arrs.shape[0]==1: 
+        return np.squeeze(quant_arrs,axis=0)
+    else:
+        return quant_arrs
+
+def _zvalue_from_index(arr, ind):
+    """
+    private helper function to work around the limitation of np.choose() by employing np.take()
+    arr has to be a 3D array
+    ind has to be a 2D array containing values for z-indicies to take from arr
+    modified from https://krstn.eu/np.nanpercentile()-there-has-to-be-a-faster-way/
+    with order of nR and nC fixed.
+    """
+    # get number of columns and rows
+    _,nR,nC = arr.shape
+    
+    # get linear indices and extract elements with np.take()
+    idx = nR*nC*ind + nC*np.arange(nR)[:,np.newaxis] + np.arange(nC)
+    return np.take(arr, idx)

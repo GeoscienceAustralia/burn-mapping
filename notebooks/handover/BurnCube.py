@@ -8,15 +8,13 @@ import ctypes
 from contextlib import closing
 import datetime
 import warnings
-from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon
+from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon, nanpercentile
 FASTGM=False
 try:
     from pcm import gmpcm as geometric_median
     print("PCM geomedian loaded")
     FASTGM = True
 except ImportError:
-    #from hdmedians import geomedian as geometric_median
-    #print("HDmedian loaded")
     from stats import geometric_median
 warnings.filterwarnings('ignore')
 
@@ -31,9 +29,6 @@ def dist_geomedian(params):
     for i in range(params[0], params[1]):
         ind = np.where(X[1, :, i] > 0)[0]
         if len(ind) > 0:
-            #works for hdmedian
-            #gmed[:, i] = np.asarray(geometric_median(X[:, ind, i].astype(np.float32)))  
-            #works for stats.geometric_median
             gmed[:, i] = geometric_median(X[:, ind, i], params[3], params[4])
             
 
@@ -342,13 +337,11 @@ class BurnCube(dc.Datacube):
         """
         Calculate the outliers for distances for change detection 
         """
-        NBRoutlier = np.nanpercentile(self.dists.NBRDist, 75, axis=0) + 1.5 * \
-                     (np.nanpercentile(self.dists.NBRDist, 75, axis=0) - np.nanpercentile(self.dists.NBRDist, 25,
-                                                                                          axis=0))
-        CDistoutlier = np.nanpercentile(self.dists.cosdist, 75, axis=0) + 1.5 * \
-                       (np.nanpercentile(self.dists.cosdist, 75, axis=0) - np.nanpercentile(self.dists.cosdist, 25,
-                                                                                            axis=0))
-
+        NBRps = nanpercentile(self.dists.NBRDist.data, [25,75])
+        NBRoutlier = NBRps[1] + 1.5 * (NBRps[1]-NBRps[0])
+        CDistps=nanpercentile(self.dists.cosdist.data, [25,75])
+        CDistoutlier = CDistps[1] +1.5 * (CDistps[1]-CDistps[0])
+        
         ds = xr.Dataset(coords={'y': self.dataset.y[:], 'x': self.dataset.x[:]}, attrs={'crs': 'EPSG:3577'})
         ds['CDistoutlier'] = (('y', 'x'), CDistoutlier.astype('float32'))
         ds['NBRoutlier'] = (('y', 'x'), NBRoutlier.astype('float32'))
