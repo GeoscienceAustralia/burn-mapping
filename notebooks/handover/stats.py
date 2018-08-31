@@ -255,7 +255,7 @@ def nanpercentile(inarr, q):
     arr[np.isnan(arr)] = max_val
     # sort - former NaNs will move to the end
     arr.sort(axis=0)
-    
+
     # loop over requested quantiles
     if type(q) is list:
         qs=q
@@ -273,11 +273,11 @@ def nanpercentile(inarr, q):
         fc_equal_k_mask = f_arr == c_arr
 
         # linear interpolation (like numpy percentile) takes the fractional part of desired position
-        floor_val = _zvalue_from_index(arr=arr, ind=f_arr) * (c_arr - k_arr)
-        ceil_val = _zvalue_from_index(arr=arr, ind=c_arr) * (k_arr - f_arr)
+        floor_val = _zvalue_from_index(arr, f_arr) * (c_arr - k_arr)
+        ceil_val = _zvalue_from_index(arr, c_arr) * (k_arr - f_arr)
 
         quant_arr = floor_val + ceil_val
-        quant_arr[fc_equal_k_mask] = _zvalue_from_index(arr=arr, ind=k_arr.astype(np.int32))[fc_equal_k_mask]  # if floor == ceiling take floor value
+        quant_arr[fc_equal_k_mask] = _zvalue_from_index(arr, f_arr)[fc_equal_k_mask]
 
         quant_arrs[i]=quant_arr
     
