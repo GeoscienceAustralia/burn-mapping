@@ -359,37 +359,24 @@ class BurnCube(dc.Datacube):
         ChangeDates = np.unique(Start_Date)
         i = 0
         sumpix = np.zeros(len(ChangeDates))
+        # calculate the number of burnt pixels in each date
         for d in ChangeDates:
             Nd = np.sum(Start_Date == d)
             sumpix[i] = Nd
             i = i + 1
-
-        ii = np.where(sumpix == np.max(sumpix))[0][0]
+            
         z_distance = 2 / 3  # times outlier distance (eq. 3 stdev)
-        d = str(ChangeDates[ii])[:10]
-        ti = np.where(self.dists.time > np.datetime64(d))[0][0]
-        NBR_score = (self.dists.ChangeDir * self.dists.NBRDist)[ti, :, :] / self.outlrs.NBRoutlier
-        cos_score = (self.dists.ChangeDir * self.dists.cosdist)[ti, :, :] / self.outlrs.CDistoutlier
-        Potential = ((NBR_score > z_distance) & (cos_score > z_distance)).astype(int)
-        SeedMap = (severity.Severe > 0).astype(int)
-        SuperImp = Potential * SeedMap + Potential
-
-        from skimage import measure
-        all_labels = measure.label(Potential.astype(int).values, background=0)
-        # see http://www.scipy-lectures.org/packages/scikit-image/index.html#binary-segmentation-foreground-background
-        NewPotential = 0. * all_labels.astype(float)  # replaces previous map "potential" with labelled regions
-        for ri in range(1, np.max(np.unique(all_labels))):  # ri=0 is the background, ignore that
-            NewPotential[all_labels == ri] = np.mean(np.extract(all_labels == ri, SeedMap))
-
-        # plot
+       
+        from skimage import measure       
+        # see http://www.scipy-lectures.org/packages/scikit-image/index.html#binary-segmentation-foreground-background      
         fraction_seedmap = 0.25  # this much of region must already have been mapped as burnt to be included
-        SeedMap = (severity.Severe.data > 0).astype(int)
-        AnnualMap = 0. * all_labels.astype(float)
-        #ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 60)]
+        SeedMap = (severity.Severe.data > 0).astype(int) #use 'Severe' burns as seed map to grow
+        ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 50)] # only grow the region with burnt pixel more than the median 
         Startdates = np.zeros((len(self.dists.y),len(self.dists.x)))
-        Startdates[NewPotential>0] = ChangeDates[ii]
-        tmpMap = (NewPotential>0).astype(int)
-
+        Startdates[~np.isnan(severity.StartDate.data)] = Start_Date 
+        tmpMap = SeedMap 
+        AnnualMap = SeedMap
+        # grow the region based on StartDate
         for d in ChangeDates:
          
             di = str(d)[:10]
@@ -397,22 +384,22 @@ class BurnCube(dc.Datacube):
             NBR_score = (self.dists.ChangeDir * self.dists.NBRDist)[ti, :, :] / self.outlrs.NBRoutlier
             cos_score = (self.dists.ChangeDir * self.dists.cosdist)[ti, :, :] / self.outlrs.CDistoutlier
             Potential = ((NBR_score > z_distance) & (cos_score > z_distance)).astype(int)
-            all_labels = measure.label(Potential.astype(int).values, background=0)
+            #Use the following line if using NBR is preferred
+            #Potential = ((self.dists.NBR[ti, :, :] > 0) & (cos_score > z_distance)).astype(int) 
+            
+            all_labels = measure.label(Potential.astype(int).values, background=0) # labelled all the conneted component 
             NewPotential = 0. * SeedMap.astype(float)
             for ri in range(1, np.max(np.unique(all_labels))):
                 NewPotential[all_labels == ri] = np.mean(np.extract(all_labels == ri, SeedMap))
             
             AnnualMap = AnnualMap + (NewPotential > fraction_seedmap).astype(int)          
             tmp = (AnnualMap > 0).astype(int)
-            if d<ChangeDates[ii]:
-                Startdates[(tmp-tmpMap)<0] = d
-                
-            else:
-                Startdates[(tmp-tmpMap)>0] = d
+            Startdates[(tmp-tmpMap)>0] = d # assign the same date to the growth region
             tmpMap=tmp
 
         BurnExtent = (AnnualMap > 0).astype(int)
-
+        Startdates[BurnExtent==0]=0
+        
         return BurnExtent, Startdates
 
 
