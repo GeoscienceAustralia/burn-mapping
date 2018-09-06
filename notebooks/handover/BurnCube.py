@@ -131,10 +131,19 @@ class BurnCube(dc.Datacube):
 
         pq_stack = xr.concat(pq_stack, dim='time').sortby('time')
 
-        pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
-        pq_stack['no_cloud'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
-                                                 cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
-                                                 cloud_shadow_fmask='no_cloud_shadow')
+        # Land/sea mask isn't used at the moment. Possible alternatives are WOFS and ITEM.
+        #pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
+        # masking cloud, saturation and invalid data (contiguous)
+        pq_stack['good_pixel'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
+                                                   cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
+                                                   cloud_shadow_fmask='no_cloud_shadow',
+                                                   blue_saturated=False,
+                                                   green_saturated=False,
+                                                   red_saturated=False,
+                                                   nir_saturated=False,
+                                                   swir1_saturated=False,
+                                                   swir2_saturated=False,
+                                                   contiguous=True)
 
         return pq_stack
 
@@ -174,21 +183,10 @@ class BurnCube(dc.Datacube):
         nbart_stack = self._load_nbart(x, y, res, period, n_landsat)
         pq_stack = self._load_pq(x, y, res, period, n_landsat)
         pq_stack, nbart_stack = xr.align(pq_stack, nbart_stack, join='inner')
-        pq_stack['good_pixel'] = pq_stack.no_cloud.where(nbart_stack.red > 0, False, drop=False)
-        goodpix = pq_stack.no_cloud * (pq_stack.pixelquality > 0) * pq_stack.good_pixel
-        mask = np.nanmean(goodpix.values.reshape(goodpix.shape[0], -1), axis=1) > .2
-        cubes = [nbart_stack[band][mask, :, :] * goodpix[mask, :, :] for band in self.band_names]
-        X = np.stack(cubes, axis=0)
+        mask = np.nanmean(pq_stack.good_pixel.values.reshape(pq_stack.good_pixel.shape[0], -1), axis=1) > .2
+        X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
 
-        data = xr.Dataset(coords={'band': self.band_names,
-                                  'time': nbart_stack.time[mask],
-                                  'y': nbart_stack.y[:],
-                                  'x': nbart_stack.x[:]},
-                          attrs={'crs': 'EPSG:3577'})
-        data["cube"] = (('band', 'time', 'y', 'x'), X)
-        data.time.attrs = []
-
-        self.dataset = data
+        self.dataset = X.to_array(dim='band').to_dataset(dim='cube') 
 
     def geomedian(self, period, **kwargs):
         if FASTGM:
@@ -204,6 +202,7 @@ class BurnCube(dc.Datacube):
         _X = self.dataset['cube'].sel(time=slice(period[0], period[1]))
         t_dim = _X.time[:]
         X = _X.transpose('y','x','band','time').data.astype(np.float32)
+        X[X==0] = np.nan
         gmed = geometric_median(X)
         
         ds = xr.Dataset(coords={'time': t_dim, 'y': self.dataset.y[:], 'x': self.dataset.x[:],
@@ -398,7 +397,7 @@ class BurnCube(dc.Datacube):
             tmpMap=tmp
 
         BurnExtent = (AnnualMap > 0).astype(int)
-        Startdates[BurnExtent==0]=0
+        #Startdates[BurnExtent==0]=0
         
         return BurnExtent, Startdates
 
@@ -554,6 +553,9 @@ class BurnCube(dc.Datacube):
         #print(fireperiod)
         polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
 
+        #default mask
+        HotspotMask=np.zeros((len(self.dists.y),len(self.dists.x)))
+
         if polygons==None :
             print('No hotspots data.')
         elif polygons.is_empty:
@@ -562,7 +564,6 @@ class BurnCube(dc.Datacube):
             coords = out.coords
 
             if polygons.type == 'MultiPolygon':
-                HotspotMask=np.zeros((len(self.dists.y),len(self.dists.x)))
                 for polygon in polygons:
                     HotspotMask_tmp = outline_to_mask(polygon.exterior, coords['x'], coords['y'])
                     HotspotMask = HotspotMask_tmp + HotspotMask
@@ -570,7 +571,8 @@ class BurnCube(dc.Datacube):
             if polygons.type == 'Polygon':
                 HotspotMask = outline_to_mask(polygons.exterior, coords['x'], coords['y'])
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
-            out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int8'))
+ 
+        out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int8'))
 
         return out
 
