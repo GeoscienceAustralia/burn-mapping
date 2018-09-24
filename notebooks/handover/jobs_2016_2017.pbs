@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -P xc0
+#PBS -q normal
+#PBS -l ncpus=4
+#PBS -l mem=128GB
+#PBS -l walltime=48:00:00
+#PBS -l software=python
+#PBS -l wd
+
+module use /g/data/u46/users/ia1511/public/modules/modulefiles/
+module use /g/data/v10/public/modules/modulefiles
+module load dea
+module load pcm
+module load parallel
+
+cat $TILELIST | parallel -j 2 -u python burnmapping_2016_2017.py 
