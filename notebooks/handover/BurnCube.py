@@ -534,6 +534,11 @@ class BurnCube(dc.Datacube):
         burnt[duration > 1] = 1       
         out['Severity']=(('y','x'),sevindex.astype('float32'))
         out['Severe'] = (('y', 'x'), burnt.astype('int8'))
+        
+        if burnt.sum() == 0:
+            out['Corroborate'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int8'))
+            return out
+
         if growing == True:
             BurnArea,growing_dates = self.region_growing(out)
             out['Moderate'] = (('y', 'x'), BurnArea.astype('int8'))
@@ -543,7 +548,6 @@ class BurnCube(dc.Datacube):
         extent = [np.min(self.dists.x.data), np.max(self.dists.x.data),
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
        
-        
         #find the startdate for the fire and extract hotspots data
         values, counts = np.unique(startdate, return_counts=True)
         firedate = values[counts==np.max(counts)]
