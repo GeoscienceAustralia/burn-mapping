@@ -223,7 +223,10 @@ def hotspot_polygon(period, extent, buffersize):
     
     start = np.datetime64(period[0])
     stop = np.datetime64(period[1])
-
+    extent[0]=extent[0]-10000
+    extent[1]=extent[1]+10000
+    extent[2]=extent[2]-10000
+    extent[3]=extent[3]+10000
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])
     index = np.where((dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
