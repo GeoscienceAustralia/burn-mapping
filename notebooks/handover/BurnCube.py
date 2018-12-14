@@ -533,7 +533,7 @@ class BurnCube(dc.Datacube):
         burnt = np.zeros((len(data.y), len(data.x)))
         burnt[duration > 1] = 1       
         out['Severity']=(('y','x'),sevindex.astype('float32'))
-        out['Severe'] = (('y', 'x'), burnt.astype('int8'))
+        out['Severe'] = (('y', 'x'), burnt.astype('int16'))
         
         if burnt.sum() == 0:
             out['Corroborate'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int8'))
@@ -541,7 +541,7 @@ class BurnCube(dc.Datacube):
 
         if growing == True:
             BurnArea,growing_dates = self.region_growing(out)
-            out['Moderate'] = (('y', 'x'), BurnArea.astype('int8'))
+            out['Moderate'] = (('y', 'x'), BurnArea.astype('int16'))
             growing_dates[growing_dates==0] = np.nan
             out['StartDate'] = (('y', 'x'), growing_dates)
         
@@ -576,7 +576,7 @@ class BurnCube(dc.Datacube):
                 HotspotMask = outline_to_mask(polygons.exterior, coords['x'], coords['y'])
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
  
-        out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int8'))
-
+        out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int16'))
+        
         return out
 
