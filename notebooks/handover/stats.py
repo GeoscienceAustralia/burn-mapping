@@ -1,6 +1,6 @@
 import numpy as np
 import datetime 
-
+import pandas as pd
 def geometric_median(x, epsilon=1, max_iter=40):
     """
     Calculates the geometric median of band reflectances
@@ -303,3 +303,90 @@ def _zvalue_from_index(arr, ind):
     # get linear indices and extract elements with np.take()
     idx = nR*nC*ind + nC*np.arange(nR)[:,np.newaxis] + np.arange(nC)
     return np.take(arr, idx)
+def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
+    """
+    This function cleans up the potential cloud contaminated results with hotspots data and start date
+    variables:
+        sev: outputs from BurnCube
+        hotspots_filtering: whether filtering the results with hotspots data
+        date_filtering: whether filtering the results with only five major changes with startdate info
+    outputs:
+        sev: with one extra layer 'Cleaned'
+    """
+    if ('Moderate' in sev.keys()):
+        Burnpixel = burnpixel_masking(sev,'Moderate') # mask the burnt area with "Medium" burnt area
+        if hotspots_filtering==True:
+            from skimage import measure
+            all_labels = measure.label(Burnpixel.data,background=0)
+
+            if ('Corroborate' in sev.keys())*(sev.Corroborate.data.sum()>0):
+                HSpixel = burnpixel_masking(sev,'Corroborate')
+                tmp = all_labels*HSpixel.data.astype('int32')
+                overlaplabels = np.unique(tmp)
+                labels = overlaplabels[overlaplabels>0]
+                filtered_burnscar = Burnpixel.copy()
+                filtered_burnscar.data = np.zeros((Burnpixel.data.shape))
+                for i in labels:
+                    seg = np.zeros((Burnpixel.data.shape))
+                    seg[all_labels==i] = 1
+                    if np.sum(seg*HSpixel.data)>0:
+                        filtered_burnscar.data[seg==1] = 1
+                Burnpixel = filtered_burnscar   
+                segpic = Burnpixel.copy()
+                segpic.data = all_labels
+    
+            else: #remove unconneted or dotted noisy pixel
+                filtered_burnscar = Burnpixel.copy()
+                filtered_burnscar.data = np.zeros((Burnpixel.data.shape))
+                filtered_burnscar.fill(np.nan)
+                values, counts = np.unique(all_labels[all_labels>0], return_counts=True)
+                sortcounts=np.array(sorted(counts,reverse=True))
+                labelcounts = sortcounts[sortcounts>(np.percentile(sortcounts,95))]
+                for i in  labelcounts:
+
+                    filtered_burnscar.data[all_labels==values[counts==i]] = 1
+                Burnpixel.data = filtered_burnscar.data
+                
+            Cleaned = np.zeros((Burnpixel.data.shape))
+            Cleandate = filtered_burnscar*sev.StartDate
+            mask=np.where(~np.isnan(Cleandate.data))
+            Cleandate=Cleandate.astype('datetime64[ns]')
+            Cleaned[mask[0],mask[1]] = pd.DatetimeIndex(Cleandate.data[mask[0],mask[1]]).month
+            sev['Cleaned'] = (('y', 'x'), Cleaned.astype('int16'))
+  
+        if date_filtering==True:
+            hotspotsmask=Burnpixel.data.copy().astype('float32')
+            hotspotsmask[hotspotsmask==0] = np.nan
+            values, counts = np.unique(sev.StartDate*hotspotsmask, return_counts=True)
+            sortcounts=np.array(sorted(counts,reverse=True))
+            datemask = np.zeros((sev.StartDate.data.shape))            
+            HPmaskedDate = sev.StartDate*hotspotsmask.copy()
+            if len(sortcounts)<=2:
+                fireevents = sortcounts[0:1]
+            else:
+                fireevents = sortcounts[0:5]
+
+            for fire in fireevents:
+                print('Change detected at: ',values[counts==fire].astype('datetime64[ns]')[0])
+                firedate=values[counts==fire]
+
+                for fire in firedate:
+                    start = (fire.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
+                    end = (fire.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')   
+
+                    row,col=np.where((HPmaskedDate.data.astype('datetime64[ns]')>=start)&(HPmaskedDate.data.astype('datetime64[ns]')<=end)) 
+
+                    datemask[row,col] = 1
+                    
+            Burnpixel.data = Burnpixel.data*datemask
+            filtered_burnscar = Burnpixel.data.astype('float32').copy()
+            filtered_burnscar[filtered_burnscar==0] = np.nan
+            Cleaned = np.zeros((Burnpixel.data.shape))
+            Cleandate = filtered_burnscar*sev.StartDate.data
+            mask=np.where(~np.isnan(Cleandate))
+            Cleandate=Cleandate.astype('datetime64[ns]')
+            Cleaned[mask[0],mask[1]] = pd.DatetimeIndex(Cleandate[mask[0],mask[1]]).month
+            sev['Cleaned'] = (('y', 'x'), Cleaned.astype('int16'))
+
+                      
+    return sev  
