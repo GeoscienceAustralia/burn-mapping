@@ -367,7 +367,7 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
                 fireevents = sortcounts[0:5]
 
             for fire in fireevents:
-                print('Change detected at: ',values[counts==fire].astype('datetime64[ns]')[0])
+                #print('Change detected at: ',values[counts==fire].astype('datetime64[ns]')[0])
                 firedate=values[counts==fire]
 
                 for fire in firedate:
