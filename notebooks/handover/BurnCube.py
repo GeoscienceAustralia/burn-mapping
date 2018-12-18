@@ -19,6 +19,77 @@ except ImportError:
 warnings.filterwarnings('ignore')
 
 
+def _create_geospatial_attributes(dataset):
+    import pyproj
+    y_max, y_min, x_max, x_min = np.max(dataset.y),np.min(dataset.y),np.max(dataset.x),np.min(dataset.x)
+    # convert to projected centre coordinates
+    wgs84 = pyproj.Proj(init='epsg:4326')
+    gda94 = pyproj.Proj(init='epsg:3577')
+    [lon_max,lon_min],[lat_max, lat_min] = pyproj.transform(gda94,wgs84,[x_max,x_min],[y_max,y_min])
+    #print([lon_max,lon_min],[lat_max, lat_min])
+                             
+    p1 = geometry.Point(lon_min,lat_min)
+    p2 = geometry.Point(lon_max,lat_min)
+    p3 = geometry.Point(lon_max,lat_max)
+    p4 = geometry.Point(lon_min,lat_max)
+
+    pointList = [p1, p2, p3, p4, p1]
+    poly = geometry.Polygon([[p.x, p.y] for p in pointList])
+    return lat_max, lat_min, lon_max, lon_min, poly
+
+def _create_variable_attributes(dataset):
+    dataset['y'].attrs={'units':'metre', 'long_name':'y coordinate of projection','standard_name': 'projection_y_coordinate'}
+    dataset['x'].attrs={'units':'metre', 'long_name':'x coordinate of projection','standard_name': 'projection_x_coordinate'}
+    dataset['StartDate'].attrs={'long_name':'Start Date, unix time-stamp','standard_name':'StartDate','axis':'T'}
+    dataset['Duration'].attrs={'units':'days', 'long_name':'Duration','standard_name':'Duration'}
+    dataset['Severity'].attrs={'units':'temporal integral of cosine distance for the duration of detected severe burned', 'long_name':'Severity','standard_name':'Severity'}
+    dataset['Severe'].attrs={'units':'1', 'long_name':'Severe burned area','standard_name':'Severe'}
+    dataset['Moderate'].attrs={'units':'1', 'long_name':'Moderate burned area','standard_name':'Moderate'}
+    dataset['Corroborate'].attrs={'units':'1', 'long_name':'Corrorborate evidence','standard_name':'Corroborate'}
+    dataset['Cleaned'].attrs={'units':'month', 'long_name':'Cleaned','standard_name':'Cleaned'}
+    return dataset
+
+def create_attributes(dataset,product_name,version, method, res=25):
+    dataset = _create_variable_attributes(dataset)
+    lat_max, lat_min, lon_max, lon_min, poly = _create_geospatial_attributes(dataset)
+    product_definition = {
+    'name': product_name,
+    'description': 'Description for ' + product_name,
+    'mapping_Method': method, # NBR or NBRdist
+    'data_source':'Landsat 5/8',
+    'resolution':str(res)+' m',    
+    'cdm_data_type': 'Grid',
+    'cmi_id': 'BAM_25_1.0',
+    'Conventions': 'CF-1.6, ACDD-1.3',
+    'geospatial_bounds': str(poly),
+    'geospatial_bounds_crs':'EPSG:4326',
+    'geospatial_lat_max': lat_max,
+    'geospatial_lat_min': lat_min,
+    'geospatial_lat_units': 'degree_north',
+    'geospatial_lon_max': lon_max,
+    'geospatial_lon_min': lon_min,
+    'geospatial_lon_units': 'degree_east',
+    'date_created':  datetime.datetime.today().isoformat(),
+    'history': "NetCDF-CF file created by datacube version '1.6rc2+108.g096a26d5' at 20180914",
+    'institution': "Commonwealth of Australia (Geoscience Australia)",
+    'keywords': "AU/GA,NASA/GSFC/SED/ESD/LANDSAT,ETM+,TM,OLI,EARTH SCIENCE, BURNED AREA",
+    'keywords_vocabulary': "GCMD",
+    "license": "CC BY Attribution 4.0 International License",
+    "product_version": version,
+    "publisher_email": "earth.observation@ga.gov.au",
+    "publisher_url": "http://www.ga.gov.au",
+    "references": "Renzullo et al (2019)",
+    "source": "Burned Area Map Algorithm v1.0",
+    'summary': "Burned area is mapped from Landsat surface reflectance time series. It implements a change detection algorithm developed jointly by ANU and GA. The layers available are: StartDate, detected start-date of severe and moderate burned area; Duration, duration of land cover change due to the bushfire; Severity, severity of land cover change due to the bushfire; Severe, binary mask for severe burnt area; Moderate, binary mask for moderate and severe burnt area; Corroborate, binary mask for corroborating evidence from hotspots data with 4km buffer; Cleaned, month of first detection, filtered by spatial and temporal coincidence with corroborate layer",
+    "title":"Burned Area Map Annual 1.0",
+    "crs_wkt":'PROJCS["GDA94 / Australian Albers",GEOGCS["GDA94",DATUM["D_GDA_1994",SPHEROID["GRS_1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Albers"],PARAMETER["standard_parallel_1",-18],PARAMETER["standard_parallel_2",-36],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",132],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["Meter",1]]',
+               
+    }
+    for key, value in product_definition.items():
+        dataset.attrs[key] = value
+    
+    return dataset
+
 def dist_geomedian(params):
     """
     multiprocess version with shared memory of the geomedian
@@ -536,8 +607,10 @@ class BurnCube(dc.Datacube):
         out['Severe'] = (('y', 'x'), burnt.astype('int16'))
         
         if burnt.sum() == 0:
-            out['Corroborate'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int8'))
-            return out
+            out['Corroborate'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int16'))
+            out['Moderate'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int16'))
+            out['Cleaned'] = (('y', 'x'), np.zeros((len(self.dists.y),len(self.dists.x))).astype('int16'))
+            return create_attributes(out,'Burned Area Map','v1.0', method)
 
         if growing == True:
             BurnArea,growing_dates = self.region_growing(out)
@@ -577,6 +650,7 @@ class BurnCube(dc.Datacube):
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
  
         out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int16'))
-        
-        return out
+        out = post_filtering(out,hotspots_filtering=True,date_filtering=True)
+        return create_attributes(out,'Burned Area Map','v1.0', method)
+
 
