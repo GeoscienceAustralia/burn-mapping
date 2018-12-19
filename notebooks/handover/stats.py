@@ -1,6 +1,7 @@
 import numpy as np
 import datetime 
 import pandas as pd
+from validationtoolbox import burnpixel_masking
 def geometric_median(x, epsilon=1, max_iter=40):
     """
     Calculates the geometric median of band reflectances
