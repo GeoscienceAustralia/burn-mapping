@@ -9,6 +9,7 @@ from contextlib import closing
 import datetime
 import warnings
 from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon, nanpercentile, post_filtering
+from shapely import geometry
 FASTGM=False
 try:
     from pcm import gmpcm as geometric_median
