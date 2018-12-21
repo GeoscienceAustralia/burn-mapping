@@ -41,7 +41,7 @@ def _create_geospatial_attributes(dataset):
 def _create_variable_attributes(dataset):
     dataset['y'].attrs={'units':'metre', 'long_name':'y coordinate of projection','standard_name': 'projection_y_coordinate'}
     dataset['x'].attrs={'units':'metre', 'long_name':'x coordinate of projection','standard_name': 'projection_x_coordinate'}
-    dataset['StartDate'].attrs={'long_name':'Start Date, unix time-stamp','standard_name':'StartDate','axis':'T'}
+    dataset['StartDate'].attrs={'long_name':'StartDate','standard_name':'StartDate','axis':'T'}
     dataset['Duration'].attrs={'units':'days', 'long_name':'Duration','standard_name':'Duration'}
     dataset['Severity'].attrs={'units':'temporal integral of cosine distance for the duration of detected severe burned', 'long_name':'Severity','standard_name':'Severity'}
     dataset['Severe'].attrs={'units':'1', 'long_name':'Severe burned area','standard_name':'Severe'}
@@ -623,12 +623,13 @@ class BurnCube(dc.Datacube):
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
        
         #find the startdate for the fire and extract hotspots data
-        values, counts = np.unique(startdate, return_counts=True)
-        firedate = values[counts==np.max(counts)]
-        startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
-        stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
-        fireperiod = (str(startdate)[2:12],str(stopdate)[2:12])
+        #values, counts = np.unique(startdate, return_counts=True)
+        #firedate = values[counts==np.max(counts)]
+        #startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
+        #stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
+        #fireperiod = (str(startdate)[2:12],str(stopdate)[2:12])
         #print(fireperiod)
+        fireperiod = period
         polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         #default mask
