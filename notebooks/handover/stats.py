@@ -325,28 +325,27 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
                 tmp = all_labels*HSpixel.data.astype('int32')
                 overlaplabels = np.unique(tmp)
                 labels = overlaplabels[overlaplabels>0]
-                filtered_burnscar = Burnpixel.copy()
-                filtered_burnscar.data = np.zeros((Burnpixel.data.shape))
+
+                filtered_burnscar = np.zeros((Burnpixel.data.shape))
                 for i in labels:
                     seg = np.zeros((Burnpixel.data.shape))
                     seg[all_labels==i] = 1
                     if np.sum(seg*HSpixel.data)>0:
-                        filtered_burnscar.data[seg==1] = 1
-                Burnpixel = filtered_burnscar   
-                segpic = Burnpixel.copy()
-                segpic.data = all_labels
+                        filtered_burnscar[seg==1] = 1
+                Burnpixel.data = filtered_burnscar.astype('int16')   
+                #segpic = Burnpixel.copy()
+                #segpic.data = all_labels
     
             else: #remove unconneted or dotted noisy pixel
-                filtered_burnscar = Burnpixel.copy()
-                filtered_burnscar.data = np.zeros((Burnpixel.data.shape))
-                filtered_burnscar.fill(np.nan)
+                filtered_burnscar = np.zeros((Burnpixel.data.shape))
+
                 values, counts = np.unique(all_labels[all_labels>0], return_counts=True)
                 sortcounts=np.array(sorted(counts,reverse=True))
                 labelcounts = sortcounts[sortcounts>(np.percentile(sortcounts,95))]
                 for i in  labelcounts:
 
-                    filtered_burnscar.data[all_labels==values[counts==i]] = 1
-                Burnpixel.data = filtered_burnscar.data
+                    filtered_burnscar[all_labels==values[counts==i]] = 1
+                Burnpixel.data = filtered_burnscar.astype('int16')
                 
             Cleaned = np.zeros((Burnpixel.data.shape))
             Cleandate = filtered_burnscar*sev.StartDate
