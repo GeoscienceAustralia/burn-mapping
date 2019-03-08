@@ -185,7 +185,7 @@ def hotspot_polygon(period, extent, buffersize):
     >>>polygons = hotspot_polygon(year,extent,4000)
     """
     year = int(str(period[0])[0:4])
-    if year>=2018:
+    if year>=2019:
         print("No complete hotspots data after 2018")
         return None
     
@@ -224,10 +224,10 @@ def hotspot_polygon(period, extent, buffersize):
     
     start = np.datetime64(period[0])
     stop = np.datetime64(period[1])
-    extent[0]=extent[0]-10000
-    extent[1]=extent[1]+10000
-    extent[2]=extent[2]-10000
-    extent[3]=extent[3]+10000
+    extent[0]=extent[0]-5000
+    extent[1]=extent[1]+5000
+    extent[2]=extent[2]-5000
+    extent[3]=extent[3]+5000
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])
     index = np.where((dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
@@ -316,6 +316,7 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
     """
     if ('Moderate' in sev.keys()):
         Burnpixel = burnpixel_masking(sev,'Moderate') # mask the burnt area with "Medium" burnt area
+        filtered_burnscar = np.zeros((Burnpixel.data.shape)).astype('f4')
         if hotspots_filtering==True:
             from skimage import measure
             all_labels = measure.label(Burnpixel.data,background=0)
@@ -323,31 +324,38 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
             if ('Corroborate' in sev.keys())*(sev.Corroborate.data.sum()>0):
                 HSpixel = burnpixel_masking(sev,'Corroborate')
                 tmp = all_labels*HSpixel.data.astype('int32')
-                overlaplabels = np.unique(tmp)
-                labels = overlaplabels[overlaplabels>0]
-
-                filtered_burnscar = np.zeros((Burnpixel.data.shape))
-                for i in labels:
-                    seg = np.zeros((Burnpixel.data.shape))
-                    seg[all_labels==i] = 1
-                    if np.sum(seg*HSpixel.data)>0:
-                        filtered_burnscar[seg==1] = 1
-                Burnpixel.data = filtered_burnscar.astype('int16')   
-                #segpic = Burnpixel.copy()
-                #segpic.data = all_labels
+                overlappix = (-HSpixel.data+Burnpixel.data*2).reshape(-1)
+                #print(overlappix.shape)
+                #print(overlappix[overlappix==2])
+                #print(len(overlappix[overlappix==2]),'outside hotspots data',len(labels))
+                if len(overlappix[overlappix==2])>0:
+                    overlaplabels = np.unique(tmp)
+                    labels = overlaplabels[overlaplabels>0]
+                    #filtered_burnscar = np.zeros((Burnpixel.data.shape))
+                    for i in labels:
+                        seg = np.zeros((Burnpixel.data.shape))
+                        seg[all_labels==i] = 1
+                        if np.sum(seg*HSpixel.data)>0:
+                            filtered_burnscar[seg==1] = 1
+                    Burnpixel.data = filtered_burnscar.copy()
+                    Burnpixel.data = Burnpixel.data.astype('int16') 
+                else:
+                    filtered_burnscar[:] = Burnpixel.data.copy()     
     
             else: #remove unconneted or dotted noisy pixel
-                filtered_burnscar = np.zeros((Burnpixel.data.shape))
-
+                #filtered_burnscar = np.zeros((Burnpixel.data.shape))
                 values, counts = np.unique(all_labels[all_labels>0], return_counts=True)
                 sortcounts=np.array(sorted(counts,reverse=True))
                 labelcounts = sortcounts[sortcounts>(np.percentile(sortcounts,95))]
+                print('no hotspots data ',len(labelcounts))
                 for i in  labelcounts:
 
                     filtered_burnscar[all_labels==values[counts==i]] = 1
-                Burnpixel.data = filtered_burnscar.astype('int16')
-                
+                Burnpixel.data = filtered_burnscar.copy()
+                Burnpixel.data = Burnpixel.data.astype('int16')
+ 
             Cleaned = np.zeros((Burnpixel.data.shape))
+            filtered_burnscar[filtered_burnscar==0] = np.nan
             Cleandate = filtered_burnscar*sev.StartDate
             mask=np.where(~np.isnan(Cleandate.data))
             Cleandate=Cleandate.astype('datetime64[ns]')
@@ -357,10 +365,12 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
         if date_filtering==True:
             hotspotsmask=Burnpixel.data.copy().astype('float32')
             hotspotsmask[hotspotsmask==0] = np.nan
-            values, counts = np.unique(sev.StartDate*hotspotsmask, return_counts=True)
+            firedates = (sev.StartDate.data*hotspotsmask).reshape(-1)
+            values, counts = np.unique(firedates[~np.isnan(firedates)], return_counts=True)
             sortcounts=np.array(sorted(counts,reverse=True))
             datemask = np.zeros((sev.StartDate.data.shape))            
             HPmaskedDate = sev.StartDate*hotspotsmask.copy()
+            #print(len(sortcounts))
             if len(sortcounts)<=2:
                 fireevents = sortcounts[0:1]
             else:
@@ -370,16 +380,17 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
                 #print('Change detected at: ',values[counts==fire].astype('datetime64[ns]')[0])
                 firedate=values[counts==fire]
 
-                for fire in firedate:
-                    start = (fire.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
-                    end = (fire.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')   
+                for firei in firedate:
+                    start = (firei.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
+                    end = (firei.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')   
 
                     row,col=np.where((HPmaskedDate.data.astype('datetime64[ns]')>=start)&(HPmaskedDate.data.astype('datetime64[ns]')<=end)) 
 
                     datemask[row,col] = 1
                     
-            Burnpixel.data = Burnpixel.data*datemask
+            #Burnpixel.data = Burnpixel.data*datemask
             filtered_burnscar = Burnpixel.data.astype('float32').copy()
+            filtered_burnscar = filtered_burnscar*datemask
             filtered_burnscar[filtered_burnscar==0] = np.nan
             Cleaned = np.zeros((Burnpixel.data.shape))
             Cleandate = filtered_burnscar*sev.StartDate.data

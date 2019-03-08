@@ -10,6 +10,8 @@ import datetime
 import warnings
 from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon, nanpercentile, post_filtering
 from shapely import geometry
+
+
 FASTGM=False
 try:
     from pcm import gmpcm as geometric_median
@@ -38,17 +40,19 @@ def _create_geospatial_attributes(dataset):
     poly = geometry.Polygon([[p.x, p.y] for p in pointList])
     return lat_max, lat_min, lon_max, lon_min, poly
 
+
 def _create_variable_attributes(dataset):
     dataset['y'].attrs={'units':'metre', 'long_name':'y coordinate of projection','standard_name': 'projection_y_coordinate'}
     dataset['x'].attrs={'units':'metre', 'long_name':'x coordinate of projection','standard_name': 'projection_x_coordinate'}
-    dataset['StartDate'].attrs={'long_name':'StartDate','standard_name':'StartDate','axis':'T'}
-    dataset['Duration'].attrs={'units':'days', 'long_name':'Duration','standard_name':'Duration'}
-    dataset['Severity'].attrs={'units':'temporal integral of cosine distance for the duration of detected severe burned', 'long_name':'Severity','standard_name':'Severity'}
-    dataset['Severe'].attrs={'units':'1', 'long_name':'Severe burned area','standard_name':'Severe'}
-    dataset['Moderate'].attrs={'units':'1', 'long_name':'Moderate burned area','standard_name':'Moderate'}
-    dataset['Corroborate'].attrs={'units':'1', 'long_name':'Corrorborate evidence','standard_name':'Corroborate'}
-    dataset['Cleaned'].attrs={'units':'month', 'long_name':'Cleaned','standard_name':'Cleaned'}
+    dataset['StartDate'].attrs={'long_name':'StartDate','standard_name':'StartDate','axis':'T','coverage_content_type':'model results'}
+    dataset['Duration'].attrs={'units':'number of days', 'long_name':'Duration','standard_name':'Duration','coverage_content_type':'model results'}
+    dataset['Severity'].attrs={'units':'temporal integral of cosine distance for the duration of detected severe burned', 'long_name':'Severity','standard_name':'Severity','coverage_content_type':'model results'}
+    dataset['Severe'].attrs={'units':'1', 'long_name':'Severe burned area','standard_name':'Severe','coverage_content_type':'model results'}
+    dataset['Moderate'].attrs={'units':'1', 'long_name':'Moderate burned area','standard_name':'Moderate','coverage_content_type':'model results'}
+    dataset['Corroborate'].attrs={'units':'1', 'long_name':'Corrorborate evidence','standard_name':'Corroborate','coverage_content_type':'model results'}
+    dataset['Cleaned'].attrs={'units':'month', 'long_name':'Cleaned','standard_name':'Cleaned','coverage_content_type':'model results'}
     return dataset
+
 
 def create_attributes(dataset,product_name,version, method, res=25):
     dataset = _create_variable_attributes(dataset)
@@ -206,16 +210,27 @@ class BurnCube(dc.Datacube):
         # Land/sea mask isn't used at the moment. Possible alternatives are WOFS and ITEM.
         #pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         # masking cloud, saturation and invalid data (contiguous)
-        pq_stack['good_pixel'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
-                                                   cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
-                                                   cloud_shadow_fmask='no_cloud_shadow',
-                                                   blue_saturated=False,
-                                                   green_saturated=False,
-                                                   red_saturated=False,
-                                                   nir_saturated=False,
-                                                   swir1_saturated=False,
-                                                   swir2_saturated=False,
-                                                   contiguous=True)
+#         pq_stack['good_pixel'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
+#                                                    cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
+#                                                    cloud_shadow_fmask='no_cloud_shadow',
+#                                                    blue_saturated=False,
+#                                                    green_saturated=False,
+#                                                    red_saturated=False,
+#                                                    nir_saturated=False,
+#                                                    swir1_saturated=False,
+#                                                    swir2_saturated=False,
+#                                                    contiguous=True)
+        pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
+        pq_stack['no_cloud'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
+                                                 cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
+                                                 cloud_shadow_fmask='no_cloud_shadow',blue_saturated=False,
+                                                 green_saturated=False,
+                                                 red_saturated=False,
+                                                 nir_saturated=False,
+                                                 swir1_saturated=False,
+                                                 swir2_saturated=False,
+                                                 contiguous=True)
+
 
         return pq_stack
 
@@ -255,11 +270,27 @@ class BurnCube(dc.Datacube):
         nbart_stack = self._load_nbart(x, y, res, period, n_landsat)
         pq_stack = self._load_pq(x, y, res, period, n_landsat)
         pq_stack, nbart_stack = xr.align(pq_stack, nbart_stack, join='inner')
-        mask = np.nanmean(pq_stack.good_pixel.values.reshape(pq_stack.good_pixel.shape[0], -1), axis=1) > .2
-        X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
+        #mask = np.nanmean(pq_stack.good_pixel.values.reshape(pq_stack.good_pixel.shape[0], -1), axis=1) > .2
+        #X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
 
-        self.dataset = X.to_array(dim='band').to_dataset(dim='cube') 
+        #self.dataset = X.to_array(dim='band').to_dataset(dim='cube') 
+        pq_stack['good_pixel'] = pq_stack.no_cloud.where(nbart_stack.red > 0, False, drop=False)
+        pq_stack['no_bright_pixel'] = pq_stack.no_cloud.where(nbart_stack.blue <900, False, drop=False)
+        goodpix = pq_stack.no_cloud * (pq_stack.pixelquality > 0) * pq_stack.good_pixel *pq_stack.no_bright_pixel
+        mask = np.nanmean(goodpix.values.reshape(goodpix.shape[0], -1), axis=1) > .2
+        cubes = [nbart_stack[band][mask, :, :] * goodpix[mask, :, :] for band in self.band_names]
+        X = np.stack(cubes, axis=0)
 
+        data = xr.Dataset(coords={'band': self.band_names,
+                                  'time': nbart_stack.time[mask],
+                                  'y': nbart_stack.y[:],
+                                  'x': nbart_stack.x[:]})
+        data["cube"] = (('band', 'time', 'y', 'x'), X)
+        data.time.attrs = []
+
+        self.dataset = data
+
+        
     def geomedian(self, period, **kwargs):
         if FASTGM:
             self.fastgeomedian(period)
@@ -306,7 +337,12 @@ class BurnCube(dc.Datacube):
         gmed.fill(np.nan)
 
         _X = self.dataset['cube'].sel(time=slice(period[0], period[1]))
-        t_dim = _X.time[:]
+        t_dim =_X.time[:] 
+        
+        if len(t_dim)<6:
+            print("no enough data for the calculation of geomedian")
+            return
+
         in_arr = mp.Array(ctypes.c_short, len(self.dataset.band) * len(_X.time) * n)
         X = np.frombuffer(in_arr.get_obj(), dtype=np.int16).reshape((len(self.dataset.band), len(_X.time), n))
         X[:] = _X.data.reshape((len(self.dataset.band), len(_X.time), -1))
@@ -347,6 +383,11 @@ class BurnCube(dc.Datacube):
         _X = self.dataset['cube'].sel(time=slice(period[0], period[1]))
 
         t_dim = _X.time.data
+        if len(t_dim)<1:
+            print("---%d observations" %(len(t_dim)))
+            self.dists = None
+            print("no enough data for the calculation of distances")
+            return
         nir = _X[3, :, :, :].data.astype('float32')
         swir2 = _X[5, :, :, :].data.astype('float32')
         nir[nir <= 0] = np.nan
@@ -363,7 +404,7 @@ class BurnCube(dc.Datacube):
         nbr_dist.fill(np.nan)
         direction = np.frombuffer(out_arr3.get_obj(), dtype=np.int16).reshape((len(t_dim), n))
         direction.fill(0)
-
+        
         in_arr1 = mp.Array(ctypes.c_short, len(self.dataset.band) * len(_X.time) * n)
         X = np.frombuffer(in_arr1.get_obj(), dtype=np.int16).reshape((len(self.dataset.band), len(_X.time), n))
         X[:] = _X.data.reshape(len(self.dataset.band), len(_X.time), -1)
@@ -387,6 +428,8 @@ class BurnCube(dc.Datacube):
 
         with closing(mp.Pool(initializer=init, initargs=(in_arr1, in_arr2, out_arr1, out_arr2, out_arr3,))) as p:
             chunk = n // n_procs
+            if n==0 or chunk==0:
+                return
             p.map_async(dist_distance, [(i, min(n, i + chunk), X.shape) for i in range(0, n, chunk)])
 
         p.join()
@@ -408,6 +451,10 @@ class BurnCube(dc.Datacube):
         """
         Calculate the outliers for distances for change detection 
         """
+        #print(self.dists)
+        if self.dists is None:
+            print("no distances for the outlier calculations")
+            return
         NBRps = nanpercentile(self.dists.NBRDist.data, [25,75])
         NBRoutlier = NBRps[1] + 1.5 * (NBRps[1]-NBRps[0])
         CDistps=nanpercentile(self.dists.cosdist.data, [25,75])
@@ -482,14 +529,16 @@ class BurnCube(dc.Datacube):
                 method: methods for change detection
                 growing: whether to grow the region
         """
-
-        data = self.dists.sel(time=slice(period[0], period[1]))
-        CDist = self.dists.cosdist.data.reshape((len(data.time), -1))
-        CDistoutlier = self.outlrs.CDistoutlier.data.reshape((len(data.x) * len(data.y)))
-        NBRDist = self.dists.NBRDist.data.reshape((len(data.time), -1))
-        NBR = self.dists.NBR.data.reshape((len(data.time), -1))
-        NBRoutlier = self.outlrs.NBRoutlier.data.reshape((len(data.x) * len(data.y)))
-        ChangeDir = self.dists.ChangeDir.data.reshape((len(data.time), -1))
+        if self.dists is None:
+            print("No data available for severity mapping")
+            return None
+        #data = self.datasets.sel(time=slice(period[0], period[1]))
+        CDist = self.dists.cosdist.data.reshape((len(self.dists.time), -1))
+        CDistoutlier = self.outlrs.CDistoutlier.data.reshape((len(self.dists.x) * len(self.dists.y)))
+        NBRDist = self.dists.NBRDist.data.reshape((len(self.dists.time), -1))
+        NBR = self.dists.NBR.data.reshape((len(self.dists.time), -1))
+        NBRoutlier = self.outlrs.NBRoutlier.data.reshape((len(self.dists.x) * len(self.dists.y)))
+        ChangeDir = self.dists.ChangeDir.data.reshape((len(self.dists.time), -1))
 
         if method == 'NBR':
             tmp = self.dists.cosdist.where((self.dists.cosdist > self.outlrs.CDistoutlier) &
@@ -512,20 +561,20 @@ class BurnCube(dc.Datacube):
             print('no burnt area detected')
             return None
         #input shared arrays
-        in_arr1 = mp.Array(ctypes.c_float, len(data.time[:])*len(outlierind))
-        NBR_shared = np.frombuffer(in_arr1.get_obj(), dtype=np.float32).reshape((len(data.time[:]), len(outlierind)))
+        in_arr1 = mp.Array(ctypes.c_float, len(self.dists.time[:])*len(outlierind))
+        NBR_shared = np.frombuffer(in_arr1.get_obj(), dtype=np.float32).reshape((len(self.dists.time[:]), len(outlierind)))
         NBR_shared[:] = NBR[:, outlierind]
 
-        in_arr2 = mp.Array(ctypes.c_float, len(data.time[:])*len(outlierind))
-        NBRDist_shared = np.frombuffer(in_arr2.get_obj(), dtype=np.float32).reshape((len(data.time[:]), len(outlierind)))
+        in_arr2 = mp.Array(ctypes.c_float, len(self.dists.time[:])*len(outlierind))
+        NBRDist_shared = np.frombuffer(in_arr2.get_obj(), dtype=np.float32).reshape((len(self.dists.time[:]), len(outlierind)))
         NBRDist_shared[:] = NBRDist[:, outlierind]
 
-        in_arr3 = mp.Array(ctypes.c_float, len(data.time[:])*len(outlierind))
-        CosDist_shared = np.frombuffer(in_arr3.get_obj(), dtype=np.float32).reshape((len(data.time[:]), len(outlierind)))
+        in_arr3 = mp.Array(ctypes.c_float, len(self.dists.time[:])*len(outlierind))
+        CosDist_shared = np.frombuffer(in_arr3.get_obj(), dtype=np.float32).reshape((len(self.dists.time[:]), len(outlierind)))
         CosDist_shared[:] = CDist[:, outlierind]
 
-        in_arr4 = mp.Array(ctypes.c_short, len(data.time[:])*len(outlierind))
-        ChangeDir_shared = np.frombuffer(in_arr4.get_obj(), dtype=np.int16).reshape((len(data.time[:]), len(outlierind)))
+        in_arr4 = mp.Array(ctypes.c_short, len(self.dists.time[:])*len(outlierind))
+        ChangeDir_shared = np.frombuffer(in_arr4.get_obj(), dtype=np.int16).reshape((len(self.dists.time[:]), len(outlierind)))
         ChangeDir_shared[:] = ChangeDir[:, outlierind]
 
         in_arr5 = mp.Array(ctypes.c_float, len(outlierind))
@@ -536,9 +585,9 @@ class BurnCube(dc.Datacube):
         CDistoutlier_shared = np.frombuffer(in_arr6.get_obj(), dtype=np.float32)
         CDistoutlier_shared[:] = CDistoutlier[outlierind]
 
-        in_arr7 = mp.Array(ctypes.c_double, len(data.time[:]))
+        in_arr7 = mp.Array(ctypes.c_double, len(self.dists.time[:]))
         t = np.frombuffer(in_arr7.get_obj(), dtype=np.float64)
-        t[:] = data.time.data.astype('float64')
+        t[:] = self.dists.time.data.astype('float64')
        
         #output shared arrays
         out_arr1 = mp.Array(ctypes.c_double, len(outlierind))
@@ -586,8 +635,8 @@ class BurnCube(dc.Datacube):
         p.join()
     
         sevindex = np.zeros((len(self.dists.y)*len(self.dists.x)))
-        duration = np.zeros((len(self.dists.y)*len(self.dists.x)))
-        startdate = np.zeros((len(self.dists.y)*len(self.dists.x)))
+        duration = np.zeros((len(self.dists.y)*len(self.dists.x)))*np.nan
+        startdate = np.zeros((len(self.dists.y)*len(self.dists.x)))*np.nan
         sevindex[outlierind] = sev
         duration[outlierind] = days        
         startdate[outlierind] = dates
@@ -599,10 +648,10 @@ class BurnCube(dc.Datacube):
         del in_arr1, in_arr2, in_arr3, in_arr4, in_arr5, in_arr6,out_arr1, out_arr2, out_arr3
         del sev,days,dates,NBR_shared,NBRDist_shared,CosDist_shared,NBRoutlier_shared,ChangeDir_shared,CDistoutlier_shared
         
-        out = xr.Dataset(coords={'y': self.dists.y[:], 'x': self.dists.x[:]}, attrs={'crs': 'EPSG:3577'})
+        out = xr.Dataset(coords={'y': self.dists.y[:], 'x': self.dists.x[:]})
         out['StartDate'] = (('y', 'x'), startdate)
         out['Duration'] = (('y', 'x'), duration.astype('int16'))
-        burnt = np.zeros((len(data.y), len(data.x)))
+        burnt = np.zeros((len(self.dists.y), len(self.dists.x)))
         burnt[duration > 1] = 1       
         out['Severity']=(('y','x'),sevindex.astype('float32'))
         out['Severe'] = (('y', 'x'), burnt.astype('int16'))
@@ -623,13 +672,13 @@ class BurnCube(dc.Datacube):
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
        
         #find the startdate for the fire and extract hotspots data
-        #values, counts = np.unique(startdate, return_counts=True)
-        #firedate = values[counts==np.max(counts)]
-        #startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
-        #stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
+        values, counts = np.unique(startdate, return_counts=True)
+        firedate = values[counts==np.max(counts)]
+        startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
+        stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
         #fireperiod = (str(startdate)[2:12],str(stopdate)[2:12])
-        #print(fireperiod)
         fireperiod = period
+        #print(fireperiod)
         polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         #default mask
