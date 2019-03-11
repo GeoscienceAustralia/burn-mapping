@@ -210,16 +210,7 @@ class BurnCube(dc.Datacube):
         # Land/sea mask isn't used at the moment. Possible alternatives are WOFS and ITEM.
         #pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         # masking cloud, saturation and invalid data (contiguous)
-#         pq_stack['good_pixel'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
-#                                                    cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
-#                                                    cloud_shadow_fmask='no_cloud_shadow',
-#                                                    blue_saturated=False,
-#                                                    green_saturated=False,
-#                                                    red_saturated=False,
-#                                                    nir_saturated=False,
-#                                                    swir1_saturated=False,
-#                                                    swir2_saturated=False,
-#                                                    contiguous=True)
+
         pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         pq_stack['no_cloud'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
                                                  cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
@@ -630,6 +621,9 @@ class BurnCube(dc.Datacube):
         with closing(mp.Pool(initializer=init, initargs=(in_arr1, in_arr2, in_arr3, in_arr4, in_arr5, in_arr6,in_arr7,
                                                          out_arr1, out_arr2, out_arr3,))) as p:
             chunk = len(outlierind) // n_procs
+            if len(outlierind)==0 or chunk==0:
+                print("no burnt pixel")
+                return
             p.map_async(dist_severity, [(i, min(len(outlierind), i + chunk), len(outlierind),method) for i in range(0, len(outlierind), chunk)])
         
         p.join()
