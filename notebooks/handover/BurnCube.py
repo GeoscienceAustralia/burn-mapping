@@ -210,7 +210,6 @@ class BurnCube(dc.Datacube):
         # Land/sea mask isn't used at the moment. Possible alternatives are WOFS and ITEM.
         #pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         # masking cloud, saturation and invalid data (contiguous)
-
         pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         pq_stack['no_cloud'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
                                                  cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
@@ -419,7 +418,9 @@ class BurnCube(dc.Datacube):
 
         with closing(mp.Pool(initializer=init, initargs=(in_arr1, in_arr2, out_arr1, out_arr2, out_arr3,))) as p:
             chunk = n // n_procs
-            if n==0 or chunk==0:
+            print(chunk,n)
+            if (n==0) or  (chunk==0):
+                print("no point")
                 return
             p.map_async(dist_distance, [(i, min(n, i + chunk), X.shape) for i in range(0, n, chunk)])
 
@@ -622,7 +623,6 @@ class BurnCube(dc.Datacube):
                                                          out_arr1, out_arr2, out_arr3,))) as p:
             chunk = len(outlierind) // n_procs
             if len(outlierind)==0 or chunk==0:
-                print("no burnt pixel")
                 return
             p.map_async(dist_severity, [(i, min(len(outlierind), i + chunk), len(outlierind),method) for i in range(0, len(outlierind), chunk)])
         
