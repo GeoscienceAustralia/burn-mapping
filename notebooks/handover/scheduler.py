@@ -4,6 +4,10 @@ import datetime
 import geopandas as gpd
 import subprocess
 
+"""
+This script submit the bash script jobs.pbs to raijin for each unprocessed 100km tile.
+The number of cpus for each tile can be changed.
+"""
 
 def submit_job_to_raijin(tilenumber,mapyear,method,outdir,jobfile):
     logfile = '/g/data/xc0/user/tian/burn-mapping/logs/{}_{}'.format(

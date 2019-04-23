@@ -8,8 +8,16 @@ import argparse
 import numpy as np
 from BurnCube import create_attributes
 
+"""
+This script checks the existence of each 100km tiles and run the mapping with 4 50km tiles.
+The BurnCube functions are multiprocessing but the main function and merging part is not.
+To save some KSUs, the merging of tiles can be run seperately using check_unmerged_tiles.py
+"""
 
 def create_empty_dataset(bc,filename):
+    """
+    create tiles without enough observations as empty dataset but with all layers and metadata, for the convenience in contiental merging. 
+    """
     out = xr.Dataset(coords={'y': bc.dataset.y[:], 'x': bc.dataset.x[:]})
     out['StartDate'] = (('y', 'x'), np.zeros((len(bc.dataset.y),len(bc.dataset.x)))*np.nan)
     out['Duration'] = (('y', 'x'), np.zeros((len(bc.dataset.y),len(bc.dataset.x))).astype('int16'))    
@@ -146,12 +154,15 @@ def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subset=True):
                 print(filename,'processed!')
             else:
                 burn_mapping(tilex[i-1],tiley[i-1],mapyear,method,n_proces,filename)
-        merge_tiles(filelist,mapyear,method, x0, y0,outdir)
+
+        ###############################################
+        #The merging_tiles function can be removed here
+        ##############################################
+        merge_tiles(filelist,mapyear,method, x0, y0,outdir) 
     else:
         burn_mapping(x,y,mapyear,method,n_procs,filename)
 
 if __name__ == '__main__':
-    #outputdir = '/g/data/xc0/project/Burn_Mapping/continental_100km/'+method+'/' # change here for the correct path
     parser = argparse.ArgumentParser(description="""set up the tile and year information for burn scar mapping for Australia""")
     parser.add_argument('-t', '--tileindex', type=int, required=True, help="index from the shp file")
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
