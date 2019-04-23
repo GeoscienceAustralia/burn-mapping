@@ -7,7 +7,7 @@ import argparse
 def merge_subtiles(ti,subdir,mapyear,method,outdir):
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     x0,y0 = shpfile.label[ti].split(',')
-    filelist = glob.glob('%s/%s/BurnMapping_%d_%s_%s_*.nc' %(subdir,method,mapyear,x0,y0))
+    filelist = sorted(glob.glob('%s/%s/BurnMapping_%d_%s_%s_*.nc' %(subdir,method,mapyear,x0,y0)))
     if len(filelist)==4:
         print("Merge the following files: %s" %filelist)
         datasets = [xr.open_dataset(file) for file in filelist]
