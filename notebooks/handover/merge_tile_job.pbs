@@ -1,16 +1,15 @@
 #!/bin/bash
 #PBS -P xc0
 #PBS -q express
-#PBS -l ncpus=1
+#PBS -l ncpus=16
 #PBS -l mem=128GB
-#PBS -l walltime=02:00:00
+#PBS -l walltime=01:00:00
 #PBS -l software=python
 #PBS -l wd
-
 module use /g/data/v10/public/modules/modulefiles
-module load dea
+#module load dea
 module load agdc-py3-prod
-
 cd /g/data/xc0/user/tian/burn-mapping/
 
-./conc_exec -f mergejobs.txt -c 1 
+./conc_exec -f mergejobs_16_32.txt -c 16
+
