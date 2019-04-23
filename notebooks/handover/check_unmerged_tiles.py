@@ -41,10 +41,9 @@ if __name__ == '__main__':
         f = open("mergejobs.txt" ,'w')       
         for ind in indices[i:j]:
             
-            f.write("python3  merge_tiles.py -t %d -y %d -m %s -i %s -o %s \n" %(ind,mapyear,method,subdir,outdir))
+            f.write("python3 merge_tiles.py -t %d -y %d -m %s -i %s -o %s \n" %(ind,mapyear,method,subdir,outdir))
         f.close()
-        
-        
+                
         f = open("%s/merge_tile_job.pbs" %pbsdir,'r+')
         newpbs = f.readlines()
         ncpus = j-i
