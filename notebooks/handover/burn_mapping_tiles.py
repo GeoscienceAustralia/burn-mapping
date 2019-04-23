@@ -14,7 +14,7 @@ The BurnCube functions are multiprocessing but the main function and merging par
 To save some KSUs, the merging of tiles can be run seperately using check_unmerged_tiles.py
 """
 
-def create_empty_dataset(bc,filename):
+def create_empty_dataset(bc,filename,method):
     """
     create tiles without enough observations as empty dataset but with all layers and metadata, for the convenience in contiental merging. 
     """
@@ -93,7 +93,7 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
             print(filename,' saved.')
     else:
         print("no enough data for the period")
-        create_empty_dataset(bc,filename)
+        create_empty_dataset(bc,filename,method)
         return
 
 
