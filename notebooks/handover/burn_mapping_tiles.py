@@ -29,7 +29,7 @@ def create_empty_dataset(bc,filename,method):
     comp = dict(zlib=True, complevel=5) #compression
     encoding = {var: comp for var in out.data_vars}
     ds = create_attributes(out,'Burned Area Map','v1.0', method)
-    ds.to_netcdf(fname,encoding=encoding)
+    ds.to_netcdf(filename,encoding=encoding)
 
 
 
