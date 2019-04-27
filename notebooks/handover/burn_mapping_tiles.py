@@ -145,6 +145,7 @@ def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subset=True):
         filelist = []
         tilex = [x1,x1,x2,x2]
         tiley = [y1,y2,y1,y2]
+        #change the directory here for the subtiles
         subdir = '/g/data/xc0/project/Burn_Mapping/continental/'+method+'/'
         for i in range(1,5):
             filename = subdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'_tile%d' %i+'_'+method+'.nc'
@@ -158,6 +159,7 @@ def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subset=True):
         ###############################################
         #The merging_tiles function can be removed here
         ##############################################
+        filelist = glob.glob(subdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'_tile*')
         merge_tiles(filelist,mapyear,method, x0, y0,outdir) 
     else:
         burn_mapping(x,y,mapyear,method,n_procs,filename)
