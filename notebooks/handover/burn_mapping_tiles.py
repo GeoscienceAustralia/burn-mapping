@@ -35,8 +35,8 @@ def create_empty_dataset(bc,filename,method):
 
 def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
     #config the data period and mapping period
-    if mapyear>=2013:
-        period = ('2013-01-01',str(mapyear-1)+'-01-01')# period used for the calculation of geometric median
+    if mapyear>=2014:
+        period = ('2013-01-01',str(mapyear-1)+'-12-31')# period used for the calculation of geometric median
         sensor = 8
         datatime = ('2013-01-01',str(mapyear)+'-12-31')
     else:
