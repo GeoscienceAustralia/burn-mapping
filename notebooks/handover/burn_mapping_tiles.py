@@ -124,7 +124,7 @@ def merge_tiles(filelist,mapyear,method, x0, y0,outdir):
         mergeds['Severe'] = (('y','x'), mergeds.Severe.data.astype('int16'))
         mergeds['Corroborate'] = (('y','x'), mergeds.Corroborate.data.astype('int16'))
         mergeds['Moderate'] = (('y','x'), mergeds.Moderate.data.astype('int16'))
-        mergeds['Cleaned'] = (('y','x'), mergeds.Moderate.data.astype('int16'))                       
+        mergeds['Cleaned'] = (('y','x'), mergeds.Cleaned.data.astype('int16'))                       
         comp = dict(zlib=True, complevel=5)
         encoding = {var: comp for var in mergeds.data_vars}                       
         ds = create_attributes(mergeds,'Burned Area Map','v1.0', method)
