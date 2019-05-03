@@ -695,7 +695,7 @@ class BurnCube(dc.Datacube):
                 HotspotMask = xr.DataArray(HotspotMask, coords=coords, dims=('y', 'x'))
  
         out['Corroborate'] = (('y', 'x'), HotspotMask.astype('int16'))
-        out = post_filtering(out,hotspots_filtering=True,date_filtering=True)
+        out = post_filtering(out,hotspots_filtering=True,date_filtering=False)
         return create_attributes(out,'Burned Area Map','v1.0', method)
 
 
