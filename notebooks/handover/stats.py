@@ -1,7 +1,7 @@
 import numpy as np
 import datetime 
 import pandas as pd
-from validationtoolbox import burnpixel_masking
+#from validationtoolbox import burnpixel_masking
 def geometric_median(x, epsilon=1, max_iter=40):
     """
     Calculates the geometric median of band reflectances
@@ -304,6 +304,7 @@ def _zvalue_from_index(arr, ind):
     # get linear indices and extract elements with np.take()
     idx = nR*nC*ind + nC*np.arange(nR)[:,np.newaxis] + np.arange(nC)
     return np.take(arr, idx)
+
 def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
     """
     This function cleans up the potential cloud contaminated results with hotspots data and start date
@@ -315,14 +316,14 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
         sev: with one extra layer 'Cleaned'
     """
     if ('Moderate' in sev.keys()):
-        Burnpixel = burnpixel_masking(sev,'Moderate') # mask the burnt area with "Medium" burnt area
+        Burnpixel = sev.Moderate #burnpixel_masking(sev,'Moderate') # mask the burnt area with "Medium" burnt area
         filtered_burnscar = np.zeros((Burnpixel.data.shape)).astype('f4')
         if hotspots_filtering==True:
             from skimage import measure
             all_labels = measure.label(Burnpixel.data,background=0)
 
             if ('Corroborate' in sev.keys())*(sev.Corroborate.data.sum()>0):
-                HSpixel = burnpixel_masking(sev,'Corroborate')
+                HSpixel = sev.Corroborate #burnpixel_masking(sev,'Corroborate')
                 tmp = all_labels*HSpixel.data.astype('int32')
                 overlappix = (-HSpixel.data+Burnpixel.data*2).reshape(-1)
                 #print(overlappix.shape)
@@ -337,22 +338,23 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
                         seg[all_labels==i] = 1
                         if np.sum(seg*HSpixel.data)>0:
                             filtered_burnscar[seg==1] = 1
-                    Burnpixel.data = filtered_burnscar.copy()
-                    Burnpixel.data = Burnpixel.data.astype('int16') 
+                    #Burnpixel.data = filtered_burnscar.copy()
+                    #Burnpixel.data = Burnpixel.data.astype('int16') 
                 else:
                     filtered_burnscar[:] = Burnpixel.data.copy()     
     
-            else: #remove unconneted or dotted noisy pixel
-                #filtered_burnscar = np.zeros((Burnpixel.data.shape))
-                values, counts = np.unique(all_labels[all_labels>0], return_counts=True)
-                sortcounts=np.array(sorted(counts,reverse=True))
-                labelcounts = sortcounts[sortcounts>(np.percentile(sortcounts,95))]
-                print('no hotspots data ',len(labelcounts))
-                for i in  labelcounts:
+            else:
+                filtered_burnscar = np.zeros((Burnpixel.data.shape))
+                #remove unconneted or dotted noisy pixel
+                #values, counts = np.unique(all_labels[all_labels>0], return_counts=True)
+                #sortcounts=np.array(sorted(counts,reverse=True))
+                #labelcounts = sortcounts[sortcounts>(np.percentile(sortcounts,95))]
+                #print('no hotspots data ',len(labelcounts))
+                #for i in  labelcounts:
 
-                    filtered_burnscar[all_labels==values[counts==i]] = 1
-                Burnpixel.data = filtered_burnscar.copy()
-                Burnpixel.data = Burnpixel.data.astype('int16')
+                 #   filtered_burnscar[all_labels==values[counts==i]] = 1
+                #Burnpixel.data = filtered_burnscar.copy()
+                #Burnpixel.data = Burnpixel.data.astype('int16')
  
             Cleaned = np.zeros((Burnpixel.data.shape))
             filtered_burnscar[filtered_burnscar==0] = np.nan

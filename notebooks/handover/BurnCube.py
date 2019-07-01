@@ -210,7 +210,6 @@ class BurnCube(dc.Datacube):
         # Land/sea mask isn't used at the moment. Possible alternatives are WOFS and ITEM.
         #pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         # masking cloud, saturation and invalid data (contiguous)
-        pq_stack['land'] = masking.make_mask(pq_stack.pixelquality, land_sea='land')
         pq_stack['no_cloud'] = masking.make_mask(pq_stack.pixelquality, cloud_acca='no_cloud',
                                                  cloud_fmask='no_cloud', cloud_shadow_acca='no_cloud_shadow',
                                                  cloud_shadow_fmask='no_cloud_shadow',blue_saturated=False,
@@ -220,7 +219,7 @@ class BurnCube(dc.Datacube):
                                                  swir1_saturated=False,
                                                  swir2_saturated=False,
                                                  contiguous=True)
-
+        pq_stack['valid'] = masking.make_mask(pq_stack.pixelquality, contiguous=True)
 
         return pq_stack
 
@@ -260,24 +259,23 @@ class BurnCube(dc.Datacube):
         nbart_stack = self._load_nbart(x, y, res, period, n_landsat)
         pq_stack = self._load_pq(x, y, res, period, n_landsat)
         pq_stack, nbart_stack = xr.align(pq_stack, nbart_stack, join='inner')
-        #mask = np.nanmean(pq_stack.good_pixel.values.reshape(pq_stack.good_pixel.shape[0], -1), axis=1) > .2
-        #X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
+ 
+        pq_stack['good_pixel'] = pq_stack.no_cloud.where(nbart_stack.red > 0, False, drop=False).where(nbart_stack.blue <900, False, drop=False)
+        valid = pq_stack.valid.groupby('time').mean().values
+        mask = pq_stack.good_pixel.groupby('time').mean().values/valid > .2
+        X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
+        data = X[self.band_names].to_array(dim='band').to_dataset(dim='cube')
 
-        #self.dataset = X.to_array(dim='band').to_dataset(dim='cube') 
-        pq_stack['good_pixel'] = pq_stack.no_cloud.where(nbart_stack.red > 0, False, drop=False)
-        pq_stack['no_bright_pixel'] = pq_stack.no_cloud.where(nbart_stack.blue <900, False, drop=False)
-        goodpix = pq_stack.no_cloud * (pq_stack.pixelquality > 0) * pq_stack.good_pixel *pq_stack.no_bright_pixel
-        mask = np.nanmean(goodpix.values.reshape(goodpix.shape[0], -1), axis=1) > .2
-        cubes = [nbart_stack[band][mask, :, :] * goodpix[mask, :, :] for band in self.band_names]
-        X = np.stack(cubes, axis=0)
+        #cubes = [nbart_stack[band][mask, :, :] * goodpix[mask, :, :] for band in self.band_names]
+        #X = np.stack(cubes, axis=0)
 
-        data = xr.Dataset(coords={'band': self.band_names,
-                                  'time': nbart_stack.time[mask],
-                                  'y': nbart_stack.y[:],
-                                  'x': nbart_stack.x[:]})
-        data["cube"] = (('band', 'time', 'y', 'x'), X)
+        #data = xr.Dataset(coords={'band': self.band_names,
+        #                          'time': nbart_stack.time[mask],
+        #                          'y': nbart_stack.y[:],
+        #                          'x': nbart_stack.x[:]})
+        #data["cube"] = (('band', 'time', 'y', 'x'), X)
+        
         data.time.attrs = []
-
         self.dataset = data
 
         
@@ -467,28 +465,29 @@ class BurnCube(dc.Datacube):
         """
         Start_Date = severity.StartDate.data[~np.isnan(severity.StartDate.data)].astype('datetime64[ns]')
         ChangeDates = np.unique(Start_Date)
-        i = 0
-        sumpix = np.zeros(len(ChangeDates))
+        #i = 0
+        #sumpix = np.zeros(len(ChangeDates))
         # calculate the number of burnt pixels in each date
-        for d in ChangeDates:
-            Nd = np.sum(Start_Date == d)
-            sumpix[i] = Nd
-            i = i + 1
+        #for d in ChangeDates:
+        #    Nd = np.sum(Start_Date == d)
+        #    sumpix[i] = Nd
+        #    i = i + 1
             
         z_distance = 2 / 3  # times outlier distance (eq. 3 stdev)
        
-        from skimage import measure       
+        from skimage import measure
+        from scipy import ndimage
         # see http://www.scipy-lectures.org/packages/scikit-image/index.html#binary-segmentation-foreground-background      
         fraction_seedmap = 0.25  # this much of region must already have been mapped as burnt to be included
         SeedMap = (severity.Severe.data > 0).astype(int) #use 'Severe' burns as seed map to grow
-        ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 50)] # only grow the region with burnt pixel more than the median 
+        #ChangeDates = ChangeDates[sumpix > np.percentile(sumpix, 50)] # only grow the region with burnt pixel more than the median 
         Startdates = np.zeros((len(self.dists.y),len(self.dists.x)))
         Startdates[~np.isnan(severity.StartDate.data)] = Start_Date 
         tmpMap = SeedMap 
         AnnualMap = SeedMap
         # grow the region based on StartDate
         for d in ChangeDates:
-         
+
             di = str(d)[:10]
             ti = np.where(self.dists.time > np.datetime64(di))[0][0]
             NBR_score = (self.dists.ChangeDir * self.dists.NBRDist)[ti, :, :] / self.outlrs.NBRoutlier
@@ -498,16 +497,15 @@ class BurnCube(dc.Datacube):
             #Potential = ((self.dists.NBR[ti, :, :] > 0) & (cos_score > z_distance)).astype(int) 
             
             all_labels = measure.label(Potential.astype(int).values, background=0) # labelled all the conneted component 
-            NewPotential = 0. * SeedMap.astype(float)
-            for ri in range(1, np.max(np.unique(all_labels))):
-                NewPotential[all_labels == ri] = np.mean(np.extract(all_labels == ri, SeedMap))
-            
-            AnnualMap = AnnualMap + (NewPotential > fraction_seedmap).astype(int)          
-            tmp = (AnnualMap > 0).astype(int)
-            Startdates[(tmp-tmpMap)>0] = d # assign the same date to the growth region
-            tmpMap=tmp
+            NewPotential = ndimage.mean(SeedMap, labels = all_labels, index = all_labels)
+            NewPotential[all_labels==0] = 0
 
-        BurnExtent = (AnnualMap > 0).astype(int)
+            AnnualMap = AnnualMap + (NewPotential > fraction_seedmap).astype(int)          
+            AnnualMap = (AnnualMap > 0).astype(int)
+            Startdates[(AnnualMap-tmpMap)>0] = d # assign the same date to the growth region
+            tmpMap=AnnualMap
+
+        BurnExtent = AnnualMap
         #Startdates[BurnExtent==0]=0
         
         return BurnExtent, Startdates
@@ -661,7 +659,7 @@ class BurnCube(dc.Datacube):
             out['Moderate'] = (('y', 'x'), BurnArea.astype('int16'))
             growing_dates[growing_dates==0] = np.nan
             out['StartDate'] = (('y', 'x'), growing_dates)
-        
+
         extent = [np.min(self.dists.x.data), np.max(self.dists.x.data),
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
        
