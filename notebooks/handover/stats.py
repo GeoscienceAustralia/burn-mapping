@@ -1,6 +1,7 @@
 import numpy as np
 import datetime 
 import pandas as pd
+import os
 #from validationtoolbox import burnpixel_masking
 def geometric_median(x, epsilon=1, max_iter=40):
     """
@@ -193,44 +194,47 @@ def hotspot_polygon(period, extent, buffersize):
     import pyproj
     import pandas as pd
 
-    datafile = 'hotspot_historic_MODIS.csv'
-    if len(glob.glob(datafile))==1:
-        table = pd.read_csv(datafile, low_memory=False)
-    else:
-        datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
-        if len(glob.glob(datafile))==0:
-            print("No hotspots data found.")
-            return None
+#     datafile = 'hotspot_historic_MODIS.csv'
+#     if len(glob.glob(datafile))==1:
+#         table = pd.read_csv(datafile, low_memory=False)
+#     else:
+#         datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
+#         if len(glob.glob(datafile))==0:
+#             print("No hotspots data found.")
+#             return None
         
-        if year == 2005:
-            name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
-            table = pd.read_csv(name)
+#         if year == 2005:
+#             name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
+#             table = pd.read_csv(name)
             
-        elif year == 2010:
-            name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
-            table = pd.read_csv(name)
+#         elif year == 2010:
+#             name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
+#             table = pd.read_csv(name)
             
-        else:
-            for i in range(0, len(glob.glob(datafile))):
-                name = glob.glob(datafile)[i]
-                startyear = int(name[-13: -9])
-                endyear = int(name[-8: -4])
-                if (year <= endyear) & (year >= startyear):
-                    table = pd.read_csv(name)
-                    break
-
+#         else:
+#             for i in range(0, len(glob.glob(datafile))):
+#                 name = glob.glob(datafile)[i]
+#                 startyear = int(name[-13: -9])
+#                 endyear = int(name[-8: -4])
+#                 if (year <= endyear) & (year >= startyear):
+#                     table = pd.read_csv(name)
+#                     break
+    hotspotfile = '/g/data1a/xc0/project/Burn_Mapping/HotSpot_historic/hotspot_historic.csv'
+    if os.path.isfile(hotspotfile):
+        table = pd.read_csv(hotspotfile)
+        
     gda94aa = pyproj.Proj(init='epsg:3577')
     gda94 = pyproj.Proj(init='epsg:4283')
     
     start = np.datetime64(period[0])
     stop = np.datetime64(period[1])
-    extent[0]=extent[0]-5000
-    extent[1]=extent[1]+5000
-    extent[2]=extent[2]-5000
-    extent[3]=extent[3]+5000
+    extent[0]=extent[0]-8000
+    extent[1]=extent[1]+8000
+    extent[2]=extent[2]-8000
+    extent[3]=extent[3]+8000
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])
-    index = np.where((dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
+    index = np.where((table.sensor=='MODIS')*(dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
                      (table.latitude >= lat[0]) * (table.longitude <= lon[1]) *
                      (table.longitude >= lon[0]))[0]
     latitude = table.latitude.values[index]

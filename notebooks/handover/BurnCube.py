@@ -10,7 +10,7 @@ import datetime
 import warnings
 from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hotspot_polygon, nanpercentile, post_filtering
 from shapely import geometry
-
+import os
 
 FASTGM=False
 try:
@@ -266,15 +266,6 @@ class BurnCube(dc.Datacube):
         X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
         data = X[self.band_names].to_array(dim='band').to_dataset(dim='cube')
 
-        #cubes = [nbart_stack[band][mask, :, :] * goodpix[mask, :, :] for band in self.band_names]
-        #X = np.stack(cubes, axis=0)
-
-        #data = xr.Dataset(coords={'band': self.band_names,
-        #                          'time': nbart_stack.time[mask],
-        #                          'y': nbart_stack.y[:],
-        #                          'x': nbart_stack.x[:]})
-        #data["cube"] = (('band', 'time', 'y', 'x'), X)
-        
         data.time.attrs = []
         self.dataset = data
 
@@ -666,11 +657,11 @@ class BurnCube(dc.Datacube):
         #find the startdate for the fire and extract hotspots data
         values, counts = np.unique(startdate, return_counts=True)
         firedate = values[counts==np.max(counts)]
-        startdate = (firedate.astype('datetime64[ns]')-np.datetime64(1, 'M')).astype('datetime64[ns]')
-        stopdate = (firedate.astype('datetime64[ns]')-np.datetime64(-1, 'M')).astype('datetime64[ns]')
-        #fireperiod = (str(startdate)[2:12],str(stopdate)[2:12])
-        fireperiod = period
-        #print(fireperiod)
+        startdate = (np.datetime64(period[0])-np.datetime64(2, 'M')).astype('datetime64[ns]')
+        stopdate = period[1]
+        fireperiod = (str(startdate),stopdate)
+        #fireperiod = period
+        print(fireperiod)
         polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         #default mask
