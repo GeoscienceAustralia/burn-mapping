@@ -62,15 +62,11 @@ The validation dataset is currently located under /g/data/xc0/project/Burn_mappi
 ## Run it on raijin
 The 'burnmapping_test.py' provides the example of running the BurnCube for a 25km tile with the centre lat,lon coordinates. The compuation tile is recorded for each step.
 
+The 'scheduler.py' runs 100km tiles using 'burn_mapping_tiles.py' with the give tile index
+
 The 'jobs.pbs' provides a simple example of scheduling the job for one tile in raijin
 
-The 'testsites_run.sh' provides a simple example of submitting muliple jobs to raijin that mapping the burnscar for the sites in sites.txt
 
 ## Continental run on raijin
-The 'burnmapping_2016_2017.py' provides the example of running the BurnCube for whole of Australia for 2016/17 season. Each 100 by 100 km tile is split into two for processing and then combined before saving to disk.
-
-The 'jobs_2016_2017.pbs' provides an example of scheduling the job for a list of tiles. It runs two tiles in parallel. 
-
-The 'run_2016_2017.sh' provides an example of submitting muliple jobs for pre-defined batches of tiles.
 
 The 'assign_tiles_tojob.py' provides an example of grouping Albers tiles into batches for processing.
