@@ -194,31 +194,6 @@ def hotspot_polygon(period, extent, buffersize):
     import pyproj
     import pandas as pd
 
-#     datafile = 'hotspot_historic_MODIS.csv'
-#     if len(glob.glob(datafile))==1:
-#         table = pd.read_csv(datafile, low_memory=False)
-#     else:
-#         datafile = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_*.csv'
-#         if len(glob.glob(datafile))==0:
-#             print("No hotspots data found.")
-#             return None
-        
-#         if year == 2005:
-#             name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2005-2010.csv'
-#             table = pd.read_csv(name)
-            
-#         elif year == 2010:
-#             name = '/g/data/xc0/original/GA_SentinelHotspots/hotspot_historic_2010-2015.csv'
-#             table = pd.read_csv(name)
-            
-#         else:
-#             for i in range(0, len(glob.glob(datafile))):
-#                 name = glob.glob(datafile)[i]
-#                 startyear = int(name[-13: -9])
-#                 endyear = int(name[-8: -4])
-#                 if (year <= endyear) & (year >= startyear):
-#                     table = pd.read_csv(name)
-#                     break
     hotspotfile = '/g/data1a/xc0/project/Burn_Mapping/HotSpot_historic/hotspot_historic.csv'
     if os.path.isfile(hotspotfile):
         table = pd.read_csv(hotspotfile)
@@ -232,12 +207,18 @@ def hotspot_polygon(period, extent, buffersize):
     extent[1]=extent[1]+10000
     extent[2]=extent[2]-10000
     extent[3]=extent[3]+10000
-    print(start,stop)
+    #print(start,stop)
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])
     index = np.where((table.sensor=='MODIS')*(dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
                      (table.latitude >= lat[0]) * (table.longitude <= lon[1]) *
                      (table.longitude >= lon[0]))[0]
+    #index2 = np.where((table.sensor=='VIIRS')*(dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *
+    #                 (table.latitude >= lat[0]) * (table.longitude <= lon[1]) *
+    #                 (table.longitude >= lon[0]))[0]
+    #print(index1,index2)
+    #index = np.intersect1d(index1,index2)
+
     latitude = table.latitude.values[index]
     longitude = table.longitude.values[index]
     easting, northing = pyproj.transform(gda94, gda94aa, longitude, latitude)
@@ -331,9 +312,6 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
                 HSpixel = sev.Corroborate #burnpixel_masking(sev,'Corroborate')
                 tmp = all_labels*HSpixel.data.astype('int32')
                 overlappix = (-HSpixel.data+Burnpixel.data*2).reshape(-1)
-                #print(overlappix.shape)
-                #print(overlappix[overlappix==2])
-                #print(len(overlappix[overlappix==2]),'outside hotspots data',len(labels))
                 if len(overlappix[overlappix==2])>0:
                     overlaplabels = np.unique(tmp)
                     labels = overlaplabels[overlaplabels>0]

@@ -32,12 +32,8 @@ if __name__ == '__main__':
     mapyear = 2017
     method = 'NBRdist'
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
-    #outputdir = '/g/data/xc0/project/Burn_Mapping/continental_100km/%s/%d/' %(method,mapyear)
-    #outputdir = '/g/data/xc0/project/Burn_Mapping/continental_100km_TEST/%s/%d/' %(method,mapyear)
-    outputdir = '/g/data/xc0/project/Burn_Mapping/'
-    subdir = '/g/data/xc0/project/Burn_Mapping/test/'
+    outputdir = '/g/data/xc0/project/Burn_Mapping/test2/'
+    subdir = '/g/data/xc0/project/Burn_Mapping/test2/subtiles/'
     jobfile = '/g/data/xc0/user/tian/github/burn-mapping/notebooks/handover/jobs.pbs'
-    #subdir = '/g/data/xc0/project/Burn_Mapping/continental/'
-    #subdir = '/g/data/xc0/project/Burn_Mapping/continental_test/%s/' %method
     run_unprocessed_tiles(shpfile,outputdir,subdir,mapyear,method,jobfile,t0=int(sys.argv[1]),t1=int(sys.argv[2])) #t0,t1 the index number of starting tile and finishing tile
 

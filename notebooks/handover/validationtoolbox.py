@@ -58,10 +58,12 @@ def treecover_masking(year,data,prctg=60):
     lon1,lat1=pyproj.transform(gda94aa,gda94,data.x.data[0],data.y.data[0])
     lon2,lat2=pyproj.transform(gda94aa,gda94,data.x.data[-1],data.y.data[-1])
     
-    filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/250m/ANUWALD.TreeCover.AllYears.250m.NCAS.nc'    
+    filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/250m/ANUWALD.TreeCover.%s.250m.NCAS.nc' %str(year)
+
+    
     TC = xr.open_dataset(filename)
     yr = str(year)+'-12-31'
-    TC = TC.AllYears.sel(time=yr)
+    TC = TC.TreeCover.sel(time=yr)
     lonmin = min([lon1,lon2])
     latmin = min([lat1,lat2])
     lonmax = max([lon1,lon2])
