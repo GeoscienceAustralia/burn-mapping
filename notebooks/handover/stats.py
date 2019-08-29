@@ -226,12 +226,13 @@ def hotspot_polygon(period, extent, buffersize):
     gda94aa = pyproj.Proj(init='epsg:3577')
     gda94 = pyproj.Proj(init='epsg:4283')
     
-    start = np.datetime64(period[0])
+    start = (np.datetime64(period[0]).astype('datetime64[ns]')-np.datetime64(2,'M')).astype('datetime64[ns]')
     stop = np.datetime64(period[1])
-    extent[0]=extent[0]-8000
-    extent[1]=extent[1]+8000
-    extent[2]=extent[2]-8000
-    extent[3]=extent[3]+8000
+    extent[0]=extent[0]-10000
+    extent[1]=extent[1]+10000
+    extent[2]=extent[2]-10000
+    extent[3]=extent[3]+10000
+    print(start,stop)
     dates = table.datetime.values.astype('datetime64')
     lon, lat = pyproj.transform(gda94aa, gda94, extent[0:2], extent[2:4])
     index = np.where((table.sensor=='MODIS')*(dates >= start) * (dates <= stop) * (table.latitude <= lat[1]) *

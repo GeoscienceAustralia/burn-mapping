@@ -657,12 +657,8 @@ class BurnCube(dc.Datacube):
         #find the startdate for the fire and extract hotspots data
         values, counts = np.unique(startdate, return_counts=True)
         firedate = values[counts==np.max(counts)]
-        startdate = (np.datetime64(period[0])-np.datetime64(2, 'M')).astype('datetime64[ns]')
-        stopdate = period[1]
-        fireperiod = (str(startdate),stopdate)
-        #fireperiod = period
-        print(fireperiod)
-        polygons = hotspot_polygon(fireperiod, extent, 4000)  # generate hotspot polygons with 4km buffer
+        print(period)
+        polygons = hotspot_polygon(period, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         #default mask
         HotspotMask=np.zeros((len(self.dists.y),len(self.dists.x)))

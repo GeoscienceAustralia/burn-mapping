@@ -1,8 +1,8 @@
 #!/bin/bash
 #PBS -P xc0
-#PBS -q express
+#PBS -q normalbw
 #PBS -l ncpus=8
-#PBS -l mem=128GB
+#PBS -l mem=64GB
 #PBS -l walltime=5:00:00
 #PBS -l software=python
 #PBS -l wd
