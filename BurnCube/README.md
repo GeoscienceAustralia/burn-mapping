@@ -48,13 +48,13 @@ mycolormap.txt is a predefined colormap used for the severity mapping
 Outputs include two classes for burned area, namely high-severity and moderate-severity burns. The high severity burns is calculated by the temporal integral of cosine distance for the period of time that it remains a statistically significant anomaly compared to the other spectra in the time series. The moderate-severity burns is deteced using the region-growing method. This include further areas that do not qualify as outliers but do show a substantial decrease in NBR and are adjoining pixels detected as burns.
 
 The outputs of severity and burnscar mapping are stored in one dataset and saved in netcdf format. The following variables are included in the output file:
-    StartDate (float64): detected start-date of severe and moderate burned area (filled with nan for unburnt area)
-    Duration (int16): duration of land cover change due to the bushfire (filled with nan for unburnt area)
-    Severity (float64): severity of land cover change due to the bushfire (0 for unburnt area)
-    Severe (int8): binary mask for severe burnt area (0 for unburnt area)   
-    Moderate (int8): binary mask for moderate and severe burnt area (0 for unburnt area)  
-    Corroborate (int8): binary mask for corroborating evidence from hotspots data with 4km buffer (0 for unburnt area) 
-
+    * StartDate (float64): detected start-date of severely and moderately burned area (nan for unburnt area)
+    * Duration (int16): duration of land cover change for severely burned area (0 for unburnt area)
+    * Severity (float32): severity (integrated outlier) of land cover change for severely burned area  (0 for unburnt area)
+    * Severe (int16): binary mask for severely burned area (0 for unburnt area)   
+    * Moderate (int16): binary mask for severely and moderately burned area (0 for unburnt area)  
+    * Corroborate (int16): binary mask for corroborating evidence from hotspots data with 4km buffer (0 for unburnt area) 
+    * Cleaned (int16): month of StartDate for severely and moderately burned area that's spatially connected and consistent with hotspots data (0 for unburnt area)
 
 ## Validation data
 The validation dataset is currently located under /g/data/xc0/project/Burn_mapping/02_Fire_Perimeters_Polygons/
