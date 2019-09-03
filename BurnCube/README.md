@@ -42,7 +42,6 @@ Burn_Mapping_BurnCube_Example1_(DEA).ipynb  provides an example of using the bur
 
 Validation_example1.ipynb provides an example of using validationtoolbox for validating burn mapping with fire perimeters polygons
 
-mycolormap.txt is a predefined colormap used for the severity mapping 
 
 ## Output description
 Outputs include two classes for burned area, namely high-severity and moderate-severity burns. The severity of a burned area is calculated by the temporal integral of cosine distance for the period of time that it remains a statistically significant anomaly compared to the other spectra in the time series. The moderate-severity burns is deteced using the region-growing method. This include further areas that do not qualify as outliers but do show a substantial decrease in NBR and are adjoining pixels detected as severe burns.
@@ -61,13 +60,19 @@ The outputs of severity and burnscar mapping are stored in one dataset and saved
 The validation dataset is currently located under /g/data/xc0/project/Burn_mapping/02_Fire_Perimeters_Polygons/
 
 ## Run it on raijin
-The 'burnmapping_test.py' provides the example of running the BurnCube for a 25km tile with the centre lat,lon coordinates. The compuation tile is recorded for each step.
-
-The 'scheduler.py' runs 100km tiles using 'burn_mapping_tiles.py' with the give tile index
-
-The 'jobs.pbs' provides a simple example of scheduling the job for one tile in raijin
+The 'burnmapping_test.py' provides the example of running the BurnCube for a 25km tile with the centre lat,lon coordinates for a list of selected sites in sites.txt. 
 
 
-## Continental run on raijin
+The 'jobs.pbs' provides a simple example of scheduling a job for one tile in raijin calling the 'burn_mapping_tiles.py'.
+    To submit a single job for one tile, sepecify the tileid, mapping year, method, directories as follow:
+    e.g. qsub -v ti=450,year=2017,method='NBR',dir='/test/',subdir='/test/subtiles/' jobs.pbs
 
-The 'assign_tiles_tojob.py' provides an example of grouping Albers tiles into batches for processing.
+
+The 'scheduler.py' set up the runs for multiple 100km tiles by submitting multiple 'jobs.pbs' with the given tile indices.Please note that it will check the existence of subtiles and merged tiles before submitting the jobs to raijin. This script will submit one job per tile to raijin. 
+
+    To process muliple tiles:
+    1. specify the mapping year, mapping method, change the directories for the 25km subtiles and merged 100km tiles in 'scheduler.py'. 
+    2. pass the index number to scheduler and submit the jobs to raijin: 
+    e.g. python scheduler.py 400,500
+
+

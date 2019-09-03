@@ -13,8 +13,8 @@ sites = pd.read_csv('sites.txt')
 testsite = int(float(sys.argv[1]))
 easting,northing = pyproj.transform(wgs84,gda94,sites.centre_longitude[testsite],sites.centre_latitude[testsite])
 
-lon = (sites.centre_longitude[testsite]-0.125,sites.centre_longitude[testsite]+0.125) # min to max
-lat = (sites.centre_latitude[testsite]-0.125,sites.centre_latitude[testsite]+0.125)
+#lon = (sites.centre_longitude[testsite]-0.125,sites.centre_longitude[testsite]+0.125) # min to max
+#lat = (sites.centre_latitude[testsite]-0.125,sites.centre_latitude[testsite]+0.125)
 x = (easting-12500,easting+12500) #25km tile with centre coordinates
 y = (northing-12500,northing+12500)
 ########################################################
