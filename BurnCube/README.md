@@ -65,6 +65,7 @@ The 'burnmapping_test.py' provides the example of running the BurnCube for a 25k
 
 The 'jobs.pbs' provides a simple example of scheduling a job for one tile in raijin calling the 'burn_mapping_tiles.py'.
     To submit a single job for one tile, you need to specify the tile index (ti), mapping year (year), method for mapping, NBR or NBRdist (method), directory for merged 100km tiles (dir) and directory for subtiles (subdir) as follow:
+    
     e.g. qsub -v ti=450,year=2017,method='NBR',dir='/test/',subdir='/test/subtiles/' jobs.pbs
 
 
