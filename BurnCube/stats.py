@@ -194,10 +194,13 @@ def hotspot_polygon(period, extent, buffersize):
     import pyproj
     import pandas as pd
 
-    hotspotfile = '/g/data1a/xc0/project/Burn_Mapping/HotSpot_historic/hotspot_historic.csv'
+    hotspotfile = 'hotspot_historic.csv'
     if os.path.isfile(hotspotfile):
         table = pd.read_csv(hotspotfile)
-        
+    else:
+        print("No hotspots file is found")
+        return None
+    
     gda94aa = pyproj.Proj(init='epsg:3577')
     gda94 = pyproj.Proj(init='epsg:4283')
     

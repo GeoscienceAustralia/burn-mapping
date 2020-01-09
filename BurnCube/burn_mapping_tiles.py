@@ -28,15 +28,16 @@ def create_empty_dataset(bc,filename,method):
 def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
     #config the data period and mapping period
     if mapyear>=2013:
-        period = ('2013-01-01',str(mapyear-1)+'-01-01')# period used for the calculation of geometric median
+        period = ('2013-01-01',str(mapyear-1)+'-12-31')# period used for the calculation of geometric median
         sensor = 8
-        datatime = ('2013-01-01',str(mapyear)+'-12-31')
+        datatime = ('2013-01-01',str(mapyear+1)+'-03-01')# extend the period by 2 months
     else:
         period = (str(mapyear-4)+'-01-01',str(mapyear-1)+'-12-31')
         sensor = 5
-        datatime = (str(mapyear-4)+'-01-01',str(mapyear)+'-12-31')
+        datatime = (str(mapyear-4)+'-01-01',str(mapyear+1)+'-03-01')
 
-    mappingperiod =(str(mapyear)+'-01-01',str(mapyear)+'-12-31') # period of interest for change/severity mapping
+    mappingperiod = (str(mapyear)+'-01-01',str(mapyear)+'-12-31') # period of interest for change/severity mapping
+    bufferperiod = (str(mapyear)+'-01-01',str(mapyear+1)+'-03-01') # buffered by 2 months
     #record the computation time for each step
     print(x,y,mappingperiod)
     #step1: load data and filtering
@@ -68,16 +69,24 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
         print("---{} minutes for outliers calculation.---".format((time.monotonic()-start_time)/60))
         #step5: calculate the distances to the reference
         start_time = time.monotonic()
-        bc.distances(mappingperiod,n_procs=n_procs)
+        bc.distances(bufferperiod,n_procs=n_procs)
         #step6: burn mapping for the given period
         start_time = time.monotonic()
-        out = bc.severitymapping(mappingperiod, n_procs,method=method,growing=True)
+        out = bc.severitymapping(bufferperiod, n_procs,method=method,growing=True)
         print("---{} minutes for burn scar mapping.---".format((time.monotonic()-start_time)/60))
         if out is None:
             print("No data available for mapping")
             create_empty_dataset(bc,filename)
             return
         else:
+            #only keep within mapping period
+            keep = out.StartDate.astype(np.datetime64)<(np.datetime64(mappingperiod[1])+np.timedelta64(1,'D'))
+            keep = keep & out.StartDate.astype(np.datetime64)>=(np.datetime64(mappingperiod[0]))
+            for var in out.data_vars:
+                if out[var].dtype=='float64':
+                    out[var] = out[var].where(keep, np.nan)
+                else:
+                    out[var] = out[var].where(keep, 0)               
             #save the output
             comp = dict(zlib=True, complevel=5) #compression
             encoding = {var: comp for var in out.data_vars}
