@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -P u46
+#PBS -q normal
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l software=python
+#PBS -l wd
+#PBS -l storage=gdata/u46+gdata/rs0+gdata/v10
+
+module use /g/data/v10/public/modules/modulefiles
+module load dea
+module use /g/data/u46/users/ia1511/public/modules/modulefiles/
+module load pcm
+
+
+IFS="_"
+for t in $ti 
+do
+    python burn_mapping_tiles.py -t $t -y $year -m $method -np $PBS_NCPUS -d $dir -sd $subdir
+done

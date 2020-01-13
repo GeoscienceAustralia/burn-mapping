@@ -44,7 +44,6 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
     start_time = time.monotonic()
     x = (x[0],x[1])
     y = (y[0],y[1])
-    print(x,y)
     try:
         bc.load_cube(x, y, res, datatime, [sensor])
         print("---{} minutes for loading data.---".format((time.monotonic()-start_time)/60))
@@ -72,7 +71,7 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
         bc.distances(bufferperiod,n_procs=n_procs)
         #step6: burn mapping for the given period
         start_time = time.monotonic()
-        out = bc.severitymapping(bufferperiod, n_procs,method=method,growing=True)
+        out = bc.severitymapping(bufferperiod, n_procs,method=method,growing=True, hotspots_period=mappingperiod)
         print("---{} minutes for burn scar mapping.---".format((time.monotonic()-start_time)/60))
         if out is None:
             print("No data available for mapping")
@@ -81,8 +80,9 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
         else:
             #only keep within mapping period
             keep = out.StartDate.astype(np.datetime64)<(np.datetime64(mappingperiod[1])+np.timedelta64(1,'D'))
-            keep = keep & out.StartDate.astype(np.datetime64)>=(np.datetime64(mappingperiod[0]))
+            #keep = keep & (out.StartDate.astype(np.datetime64)>=(np.datetime64(mappingperiod[0])))
             for var in out.data_vars:
+                if var == 'Corroborate': continue
                 if out[var].dtype=='float64':
                     out[var] = out[var].where(keep, np.nan)
                 else:

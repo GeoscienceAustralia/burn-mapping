@@ -502,7 +502,7 @@ class BurnCube(dc.Datacube):
         return BurnExtent, Startdates
 
 
-    def severitymapping(self, period, n_procs=4, method='NBR', growing=True):
+    def severitymapping(self, period, n_procs=4, method='NBR', growing=True, hotspots_period=None):
         """Calculates burnt area for a given period
             Args:
                 period: period of time with burn mapping interest,  e.g.('2015-01-01','2015-12-31')
@@ -655,10 +655,11 @@ class BurnCube(dc.Datacube):
                   np.min(self.dists.y.data), np.max(self.dists.y.data)]
        
         #find the startdate for the fire and extract hotspots data
-        values, counts = np.unique(startdate, return_counts=True)
-        firedate = values[counts==np.max(counts)]
-        print(period)
-        polygons = hotspot_polygon(period, extent, 4000)  # generate hotspot polygons with 4km buffer
+        ##values, counts = np.unique(startdate, return_counts=True)
+        ##firedate = values[counts==np.max(counts)]
+        if hotspots_period is None:
+            hotspots_period = period
+        polygons = hotspot_polygon(hotspots_period, extent, 4000)  # generate hotspot polygons with 4km buffer
 
         #default mask
         HotspotMask=np.zeros((len(self.dists.y),len(self.dists.x)))
