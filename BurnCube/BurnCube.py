@@ -261,10 +261,10 @@ class BurnCube(dc.Datacube):
         pq_stack, nbart_stack = xr.align(pq_stack, nbart_stack, join='inner')
  
         pq_stack['good_pixel'] = pq_stack.no_cloud.where(nbart_stack.red > 0, False, drop=False).where(nbart_stack.blue <900, False, drop=False)
-        valid = pq_stack.valid.groupby('time').mean().values
-        mask = pq_stack.good_pixel.groupby('time').mean().values/valid > .2
+        valid = pq_stack.valid.mean(['x','y']).values
+        mask = pq_stack.good_pixel.mean(['x','y']).values/valid > .2
         X = nbart_stack.sel(time=mask).where(pq_stack.good_pixel.sel(time=mask), 0, drop=False) # keep data as integer
-        data = X[self.band_names].to_array(dim='band').to_dataset(dim='cube')
+        data = X[self.band_names].to_array(dim='band').to_dataset(name='cube')
 
         data.time.attrs = []
         self.dataset = data
