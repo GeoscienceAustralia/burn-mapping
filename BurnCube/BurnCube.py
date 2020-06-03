@@ -13,12 +13,17 @@ from shapely import geometry
 import os
 
 FASTGM=False
-try:
-    from pcm import gmpcm as geometric_median
-    print("PCM geomedian loaded")
-    FASTGM = True
-except ImportError:
-    from stats import geometric_median
+try: 
+    from hdstats import nangeomedian_pcm as geometric_median 
+    print("hdstats geomedian loaded") 
+except ImportError: 
+    try:
+        from pcm import gmpcm as geometric_median     
+        FASTGM = True 
+        print('PCM geomedian loaded') 
+    except ImportError: 
+        from stats import geometric_median 
+        print('stats geomedian loaded') 
 warnings.filterwarnings('ignore')
 
 
