@@ -205,7 +205,7 @@ def hotspot_polygon(period, extent, buffersize):
         #os.system('wget http://files.sentinel.ga.gov.au/historic/all-data-csv.zip')
         os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
         os.system('unzip all-data-csv.zip')
-        table = pd.read_csv(hotspotfile)s
+        table = pd.read_csv(hotspotfile)
         # return None
     
     gda94aa = pyproj.Proj(init='epsg:3577')
