@@ -10,6 +10,8 @@ from BurnCube import create_attributes
 
 
 def create_empty_dataset(bc,filename,method):
+    """make a dataset
+     takes the BurnCube, file and method """
     out = xr.Dataset(coords={'y': bc.dataset.y[:], 'x': bc.dataset.x[:]})
     out['StartDate'] = (('y', 'x'), np.zeros((len(bc.dataset.y),len(bc.dataset.x)))*np.nan)
     out['Duration'] = (('y', 'x'), np.zeros((len(bc.dataset.y),len(bc.dataset.x))).astype('int16'))    
@@ -24,8 +26,16 @@ def create_empty_dataset(bc,filename,method):
     ds.to_netcdf(filename,encoding=encoding)
 
 
-
 def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
+    """ do the burn mapping on an area or tile 
+    Inputs:
+        x,y      : float - coordinates
+        mapyear  : int - year that you want to map
+        method   : str - NBR or NBRdist
+        n_procs  : int - number of processors to use
+        filename : str - name of the file
+        res      : tuple - resolution 
+    """
     #config the data period and mapping period
     if mapyear>=2013:
         period = ('2013-01-01',str(mapyear-1)+'-12-31')# period used for the calculation of geometric median
