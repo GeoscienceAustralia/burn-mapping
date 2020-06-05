@@ -12,10 +12,12 @@ from stats import nbr_eucdistance, cos_distance, severity, outline_to_mask, hots
 from shapely import geometry
 import os
 
+# import the way that the geomedian will be calculated
 FASTGM=False
 try: 
     from hdstats import nangeomedian_pcm as geometric_median 
-    print("hdstats geomedian loaded") 
+    print("hdstats geomedian loaded")
+    FASTGM = True 
 except ImportError: 
     try:
         from pcm import gmpcm as geometric_median     
@@ -28,25 +30,32 @@ warnings.filterwarnings('ignore')
 
 
 def _create_geospatial_attributes(dataset):
+    """Creates geospatial attributes for the dataset
+    Input: dataset
+    Returns: lat_max, lat_min, lon_max, lon_min, poly
+    which are the corners of the polygon and the polygon to use
+    """
     import pyproj
     y_max, y_min, x_max, x_min = np.max(dataset.y),np.min(dataset.y),np.max(dataset.x),np.min(dataset.x)
     # convert to projected centre coordinates
     wgs84 = pyproj.Proj(init='epsg:4326')
     gda94 = pyproj.Proj(init='epsg:3577')
     [lon_max,lon_min],[lat_max, lat_min] = pyproj.transform(gda94,wgs84,[x_max,x_min],[y_max,y_min])
-    #print([lon_max,lon_min],[lat_max, lat_min])
-                             
+    
+    # get the corners fot the polygon                         
     p1 = geometry.Point(lon_min,lat_min)
     p2 = geometry.Point(lon_max,lat_min)
     p3 = geometry.Point(lon_max,lat_max)
     p4 = geometry.Point(lon_min,lat_max)
-
+    
+    # make the polygon
     pointList = [p1, p2, p3, p4, p1]
     poly = geometry.Polygon([[p.x, p.y] for p in pointList])
     return lat_max, lat_min, lon_max, lon_min, poly
 
 
 def _create_variable_attributes(dataset):
+    """puts variable attributes into the dataset"""
     dataset['y'].attrs={'units':'metre', 'long_name':'y coordinate of projection','standard_name': 'projection_y_coordinate'}
     dataset['x'].attrs={'units':'metre', 'long_name':'x coordinate of projection','standard_name': 'projection_x_coordinate'}
     dataset['StartDate'].attrs={'long_name':'StartDate','standard_name':'StartDate','axis':'T','coverage_content_type':'model results'}
@@ -60,6 +69,7 @@ def _create_variable_attributes(dataset):
 
 
 def create_attributes(dataset,product_name,version, method, res=25):
+    """creates attributes for the dataset so that it will have information when output"""
     dataset = _create_variable_attributes(dataset)
     lat_max, lat_min, lon_max, lon_min, poly = _create_geospatial_attributes(dataset)
     product_definition = {
@@ -148,8 +158,8 @@ def dist_severity(params):
     sev = np.frombuffer(shared_out_arr01.get_obj(), dtype=np.float64)
     dates = np.frombuffer(shared_out_arr02.get_obj(), dtype=np.float64)
     days = np.frombuffer(shared_out_arr03.get_obj(), dtype=np.float64)
-    for i in range(params[0], params[1]):
-        
+    
+    for i in range(params[0], params[1]):    
         sev[i], dates[i], days[i] = severity(NBR[:, i], NBRDist[:, i], CDist[:, i], ChangeDir[:, i],
                                              NBRoutlier[i], CDistoutlier[i],t, method=params[3])
        
