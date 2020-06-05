@@ -16,7 +16,8 @@ import os
 FASTGM=False
 try: 
     from hdstats import nangeomedian_pcm as geometric_median 
-    print("hdstats geomedian loaded") 
+    print("hdstats geomedian loaded")
+    FASTGM = True 
 except ImportError: 
     try:
         from pcm import gmpcm as geometric_median     
