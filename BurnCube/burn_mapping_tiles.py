@@ -182,11 +182,16 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dir', type=str, required=True, help="directory to save the output")
     parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles")
     args = parser.parse_args()
+    # check for the output directory and make it if not there
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
+    # check for the output sub directory and make it if not there
     if not os.path.exists(args.subdir):
         os.makedirs(args.subdir)
-
+    # check for the hotspot_historic file and get it if not there
+    if not os.path.isfile('hotspot_historic.csv'):
+        os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
+        os.system('unzip all-data-csv.zip')
+    
     check_existence(tilenumber=args.tileindex,mapyear=args.year,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
-
 
