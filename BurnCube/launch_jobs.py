@@ -108,7 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
     parser.add_argument('-y', '--mapyear', type=int, required=True, help="Year to map [YYYY].")
     parser.add_argument('-d', '--outputdir', type=str, required=True, help="directory to save the output")
-    parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles")
+    parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles outputdir/subdir")
     parser.add_argument('-j', '--jobfile', type=str, required=True, help="jobfile to use as the template")
     args = parser.parse_args()
     # need to make sure that the Albers grid is accessible
