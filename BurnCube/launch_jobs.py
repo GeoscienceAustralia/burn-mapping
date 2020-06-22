@@ -79,9 +79,11 @@ def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbe
     ntile_per_job : int (set to 24)
     """
     toprocess = []
-    for tilenumber in tilenumbers:    
+    for tilenumber in tilelabels:
+    #for tilenumber in tilenumbers:    
         # locate the correct tile to use, and make a filename for it
-        x0,y0 = shpfile.label[tilenumber].split(',')
+        #x0,y0 = shpfile.label[tilenumber].split(',')
+        x0,y0 = tilelabels[tilenumber].split(',')
         filename = outdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'.nc'
         # if the file already exists, skip it, but if not, add it to the list to be 
         # processed
@@ -115,7 +117,8 @@ if __name__ == '__main__':
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     inputshape = gpd.read_file(args.inputshape)
     # find which tiles to use based on where the 2 shapefiles intersect
-    tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
+    #tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
+    tilelabels = gpd.sjoin(shpfile,inputshape,op='intersects').label.values
     # run the code to submit the jobs
     run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.method,args.jobfile,tilenumbers,ntile_per_job=24)
     
