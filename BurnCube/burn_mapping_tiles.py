@@ -110,15 +110,16 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
 
 # check the existence of tile 
 def check_existence(tilenumber,mapyear,method,n_proces,outdir,subdir):
-    shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
-    x0,y0 = shpfile.label[tilenumber].split(',')
+    #shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
+    x0,y0 = tilenumber.split(',')
+    #x0,y0 = shpfile.label[tilenumber].split(',')
     filename = outdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'.nc'
     #print(subdir)
     if os.path.isfile(filename):
         print(filename,'processed!')
         return
     else:
-        subset_process(shpfile,tilenumber,mapyear,method,n_proces,outdir, subdir,subset=True)
+        subset_process(tilenumber,mapyear,method,n_proces,outdir, subdir,subset=True)
         
 # merge tiles
 def merge_tiles(filelist,mapyear,method, x0, y0,outdir):
@@ -144,11 +145,23 @@ def merge_tiles(filelist,mapyear,method, x0, y0,outdir):
     else:
         print("tile process incomplete or no available data for this area %s %s" %(x0,y0))
 
-def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subdir,subset=True):
+def get_tile_bounds(tile):
+    # get the bounds of the tile using the tile label
+    x, y = tile.split(',')
+    minx = int(x) * 100000
+    miny = int(y) * 100000
+    maxx = minx + 100000
+    maxy = miny + 100000
+    return {'minx':minx,  'miny':miny, 'maxx':maxx, 'maxy':maxy}
+
+def subset_process(tilenumber,mapyear,method,n_proces,outdir,subdir,subset=True):
     # process each 100km tile with 4 subtiles at 50km
-    x0,y0 = shpfile.label[index].split(',')
-    x = (shpfile.loc[index]['X_MIN'], shpfile.loc[index]['X_MAX'])
-    y = (shpfile.loc[index]['Y_MIN'], shpfile.loc[index]['Y_MAX'])
+    #x0,y0 = shpfile.label[index].split(',')
+    x0,y0 = tilenumber.split(',')
+    #x = (shpfile.loc[index]['X_MIN'], shpfile.loc[index]['X_MAX'])
+    #y = (shpfile.loc[index]['Y_MIN'], shpfile.loc[index]['Y_MAX'])
+    x = (int(x0)*100000, int(x0)*100000+100000)
+    y = (int(y0)*100000, int(y0)*100000+100000)
     if subset == True:
         xm, ym = (x[0]+x[1])/2, (y[0]+y[1])/2
         x1, x2 = (x[0], xm), (xm, x[1])
@@ -175,7 +188,8 @@ if __name__ == '__main__':
     #outputdir = '/g/data/xc0/project/Burn_Mapping/continental_100km/'+method+'/' # change here for the correct path
     subdir = '/g/data/xc0/project/Burn_Mapping/continental/'
     parser = argparse.ArgumentParser(description="""set up the tile and year information for burn scar mapping for Australia""")
-    parser.add_argument('-t', '--tileindex', type=int, required=True, help="index from the shp file")
+    #parser.add_argument('-t', '--tileindex', type=int, required=True, help="index from the shp file")
+    parser.add_argument('-t', '--tilelabel', type=str, required=True, help="label from the shp file")
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
     parser.add_argument('-y', '--year', type=int, required=True, help="Year to map [YYYY].")
     parser.add_argument('-np', '--ncpus', type=int, required=True, help="number of cpus to process each tile")
@@ -193,5 +207,5 @@ if __name__ == '__main__':
         os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
         os.system('unzip all-data-csv.zip')
     
-    check_existence(tilenumber=args.tileindex,mapyear=args.year,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
+    check_existence(tilenumber=args.tilelabel,mapyear=args.year,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
 
