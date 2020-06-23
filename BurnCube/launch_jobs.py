@@ -79,7 +79,7 @@ def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbe
     ntile_per_job : int (set to 24)
     """
     toprocess = []
-    for tilenumber in tilelabels:
+    for tilenumber in range(len(tilelabels)):
     #for tilenumber in tilenumbers:    
         # locate the correct tile to use, and make a filename for it
         #x0,y0 = shpfile.label[tilenumber].split(',')
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     #tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
     tilelabels = gpd.sjoin(shpfile,inputshape,op='intersects').label.values
     # run the code to submit the jobs
-    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.method,args.jobfile,tilenumbers,ntile_per_job=24)
+    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.method,args.jobfile,tilelabels,ntile_per_job=24)
     
 
       
