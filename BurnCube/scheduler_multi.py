@@ -4,7 +4,7 @@ import datetime
 import geopandas as gpd
 import subprocess
 import sys
-
+import argparse
 
 def submit_job_to_raijin(tilenumbers,mapyear,method,outdir,subdir,jobfile):
     """
@@ -22,7 +22,8 @@ def submit_job_to_raijin(tilenumbers,mapyear,method,outdir,subdir,jobfile):
     """
     # set the wall_time
     walltime = 120*len(tilenumbers)
-    # do the qsub step to submit into the gadi queue    qsub_call = "qsub -l walltime=%d:00 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s %s" %(walltime, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
+    # do the qsub step to submit into the gadi queue    
+    qsub_call = "qsub -l walltime=%d:00 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s %s" %(walltime, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
     try:
         subprocess.call(qsub_call, shell=True)
     except:
@@ -67,18 +68,20 @@ def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbe
         submit_job_to_raijin(tilenumbers,mapyear,method,outdir,subdir,jobfile)
 
 if __name__ == '__main__':
-    # the year you want to map, and method (NBR or NBRdist) you want to use
-    mapyear = 2015
-    method = 'NBRdist'
+    # parse in the arguments
+    parser = argparse.ArgumentParser(description="""inputs you need to launch the job script for the burn scar mapping""")
+    parser.add_argument('-i', '--inputshape', type=str, required=True, help="input shp file")
+    #todo is to add an input so that a shape file can be made.
+    parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
+    parser.add_argument('-y', '--mapyear', type=int, required=True, help="Year to map [YYYY].")
+    parser.add_argument('-d', '--outputdir', type=str, required=True, help="directory to save the output")
+    parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles outputdir/subdir")
+    parser.add_argument('-j', '--jobfile', type=str, required=True, help="jobfile to use as the template")
+    args = parser.parse_args()
     # input area to map, and the Albers shape file
-    inputshape = gpd.read_file('kakadu.shp')
+    inputshape = gpd.read_file(args.inputshape)
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     # get the tiles from the intersect of the two
     tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
-    # the following directories need to be changed before processing
-    outputdir = 'output/'
-    subdir = 'output/subtiles/'
-    jobfile = 'jobs_multi.pbs'
-    # run the code and submit the jobs
-    run_unprocessed_tiles(shpfile,outputdir,subdir,mapyear,method,jobfile,tilenumbers,ntile_per_job=24)
+    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.method,args.jobfile,tilenumbers,ntile_per_job=24)
     
