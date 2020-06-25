@@ -154,7 +154,7 @@ def get_tile_bounds(tile):
     maxy = miny + 100000
     return {'minx':minx,  'miny':miny, 'maxx':maxx, 'maxy':maxy}
 
-def subset_process(shpfile,tilenumber,mapyear,method,n_proces,outdir,subdir,subset=True):
+def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subdir,subset=True):
     # process each 100km tile with 4 subtiles at 50km
     x0,y0 = shpfile.label[index].split(',')
     #x0,y0 = tilenumber.split(',')
