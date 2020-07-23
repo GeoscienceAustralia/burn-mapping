@@ -26,28 +26,42 @@ def create_empty_dataset(bc,filename,method):
     ds.to_netcdf(filename,encoding=encoding)
 
 
-def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
+def burn_mapping(x,y,mapyear,finyear,method,n_procs,filename,res=(-25,25)):
     """ do the burn mapping on an area or tile 
     Inputs:
         x,y      : float - coordinates
         mapyear  : int - year that you want to map
+        finyear  : bool - set to True if you want to map July/mapyear to June/mapyear+1
         method   : str - NBR or NBRdist
         n_procs  : int - number of processors to use
         filename : str - name of the file
         res      : tuple - resolution 
     """
     #config the data period and mapping period
-    if mapyear>=2013:
-        period = ('2013-01-01',str(mapyear-1)+'-12-31')# period used for the calculation of geometric median
-        sensor = 8
-        datatime = ('2013-01-01',str(mapyear+1)+'-03-01')# extend the period by 2 months
-    else:
-        period = (str(mapyear-4)+'-01-01',str(mapyear-1)+'-12-31')
-        sensor = 5
-        datatime = (str(mapyear-4)+'-01-01',str(mapyear+1)+'-03-01')
+    if finyear:
+        if mapyear>=2013:
+            period = ('2013-07-01',str(mapyear-1)+'-06-30')# period used for the calculation of geometric median
+            sensor = 8
+            datatime = ('2013-07-01',str(mapyear+1)+'-09-01')# extend the period by 2 months
+        else:
+            period = (str(mapyear-4)+'-07-01',str(mapyear-1)+'-06-30')
+            sensor = 5
+            datatime = (str(mapyear-4)+'-07-01',str(mapyear+1)+'-09-01')
 
-    mappingperiod = (str(mapyear)+'-01-01',str(mapyear)+'-12-31') # period of interest for change/severity mapping
-    bufferperiod = (str(mapyear)+'-01-01',str(mapyear+1)+'-03-01') # buffered by 2 months
+        mappingperiod = (str(mapyear)+'-07-01',str(mapyear+1)+'-06-30') # period of interest for change/severity mapping
+        bufferperiod = (str(mapyear)+'-07-01',str(mapyear+1)+'-09-01') # buffered by 2 months
+    else:
+        if mapyear>=2013:
+            period = ('2013-01-01',str(mapyear-1)+'-12-31')# period used for the calculation of geometric median
+            sensor = 8
+            datatime = ('2013-01-01',str(mapyear+1)+'-03-01')# extend the period by 2 months
+        else:
+            period = (str(mapyear-4)+'-01-01',str(mapyear-1)+'-12-31')
+            sensor = 5
+            datatime = (str(mapyear-4)+'-01-01',str(mapyear+1)+'-03-01')
+
+        mappingperiod = (str(mapyear)+'-01-01',str(mapyear)+'-12-31') # period of interest for change/severity mapping
+        bufferperiod = (str(mapyear)+'-01-01',str(mapyear+1)+'-03-01') # buffered by 2 months
     #record the computation time for each step
     print(x,y,mappingperiod)
     #step1: load data and filtering
@@ -109,7 +123,7 @@ def burn_mapping(x,y,mapyear,method,n_procs,filename,res=(-25,25)):
 
 
 # check the existence of tile 
-def check_existence(tilenumber,mapyear,method,n_proces,outdir,subdir):
+def check_existence(tilenumber,mapyear,finyear,method,n_proces,outdir,subdir):
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     #x0,y0 = tilenumber.split(',')
     x0,y0 = shpfile.label[tilenumber].split(',')
@@ -119,7 +133,7 @@ def check_existence(tilenumber,mapyear,method,n_proces,outdir,subdir):
         print(filename,'processed!')
         return
     else:
-        subset_process(shpfile,tilenumber,mapyear,method,n_proces,outdir, subdir,subset=True)
+        subset_process(shpfile,tilenumber,mapyear,finyear,method,n_proces,outdir, subdir,subset=True)
         
 # merge tiles
 def merge_tiles(filelist,mapyear,method, x0, y0,outdir):
@@ -154,7 +168,7 @@ def get_tile_bounds(tile):
     maxy = miny + 100000
     return {'minx':minx,  'miny':miny, 'maxx':maxx, 'maxy':maxy}
 
-def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subdir,subset=True):
+def subset_process(shpfile,index,mapyear,finyear,method,n_proces,outdir,subdir,subset=True):
     # process each 100km tile with 4 subtiles at 50km
     x0,y0 = shpfile.label[index].split(',')
     #x0,y0 = tilenumber.split(',')
@@ -177,12 +191,12 @@ def subset_process(shpfile,index,mapyear,method,n_proces,outdir,subdir,subset=Tr
                 filelist.append(filename)
                 print(filename,'processed!')
             else:
-                burn_mapping(tilex[i-1],tiley[i-1],mapyear,method,n_proces,filename)
+                burn_mapping(tilex[i-1],tiley[i-1],mapyear,finyear,method,n_proces,filename)
         filelist = glob.glob(subdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'_tile*')
         merge_tiles(filelist,mapyear,method, x0, y0,outdir)
     else:
         filename = outdir+'BurnMapping_'+str(mapyear)+'_'+x0+'_'+y0+'.nc'
-        burn_mapping(x,y,mapyear,method,n_procs,filename)
+        burn_mapping(x,y,mapyear,finyear,method,n_procs,filename)
 
 if __name__ == '__main__':
     #outputdir = '/g/data/xc0/project/Burn_Mapping/continental_100km/'+method+'/' # change here for the correct path
@@ -195,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('-np', '--ncpus', type=int, required=True, help="number of cpus to process each tile")
     parser.add_argument('-d', '--dir', type=str, required=True, help="directory to save the output")
     parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles")
+    parser.add_argument('-fy', '--finyear', type=bool, required=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
     args = parser.parse_args()
     # check for the output directory and make it if not there
     if not os.path.exists(args.dir):
@@ -206,6 +221,9 @@ if __name__ == '__main__':
     if not os.path.isfile('hotspot_historic.csv'):
         os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
         os.system('unzip all-data-csv.zip')
-    
-    check_existence(tilenumber=args.tileindex,mapyear=args.year,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
+    if args.finyear:
+        finyear=args.finyear
+    else:
+        finyear=False    
+    check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
 
