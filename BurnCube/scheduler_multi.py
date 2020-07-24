@@ -6,30 +6,36 @@ import subprocess
 import sys
 import argparse
 
-def submit_job_to_raijin(tilenumbers,mapyear,method,outdir,subdir,jobfile):
+def submit_job_to_raijin(tilenumbers,mapyear,finyear,method,outdir,subdir,jobfile,project,queue):
     """
     Submits the job to gadi
     
     Parameters:
     tilenumbers : array (the labels of the tiles that you want to run)
     mapyear     : int (the year to map)
+    finyear     : boolean (set to true if you want to map july/mapyear to june/mapyear+1)
     method      : str ('NBR' or 'NBRdist')
     outdir      : str (name of the directory to put the output in, inside the working 
                         directory, should exist already)
     subdir      : str (name of the subdirectory (inside outdir) to put the subtiles in,
                       should also exist already)
     jobfile     : str (the job script to use as a template for submission)
+    project     : str (your project on gadi)
+    queue       : str (the queue you want the job submitted to)
     """
     # set the wall_time
     walltime = 120*len(tilenumbers)
     # do the qsub step to submit into the gadi queue    
-    qsub_call = "qsub -l walltime=%d:00 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s %s" %(walltime, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
+    if finyear:
+        qsub_call = "qsub -P %s -q %s -l walltime=%d:00 -l storage=gdata/%s+gdata/rs0+gdata/v10 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s,finyear=True %s" %(project,queue,walltime,project, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
+    else:
+        qsub_call = "qsub -P %s -q %s -l walltime=%d:00 -l storage=gdata/%s+gdata/rs0+gdata/v10 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s %s" %(project,queue,walltime,project, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
     try:
         subprocess.call(qsub_call, shell=True)
     except:
         print("qsub error for the statement: %s" %qsub_call)
         
-def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbers,ntile_per_job=24):
+def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,finyear,method,jobfile,tilenumbers,project,queue,ntile_per_job=24):
     """
     Checks which tiles haven't been run yet to submit them into the queue and run them
     
@@ -40,10 +46,13 @@ def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbe
     subdir        : str (name of the subdirectory (inside outdir) to put the subtiles in,
                         should also exist already)
     mapyear       : int (the year to map)
+    finyear       : boolean (set to true if you want to map july/mapyear to june/mapyear+1)
     method        : str ('NBR' or 'NBRdist')
     jobfile       : str (the job script to use as a template for submission)
     tilenumbers   : array (the labels of the tiles that you want to run)
     ntile_per_job : int (set to 24)
+    project     : str (your project on gadi)
+    queue       : str (the queue you want the job submitted to)
     """
     toprocess = []
     for tilenumber in tilenumbers:
@@ -65,7 +74,7 @@ def run_unprocessed_tiles(shpfile,outdir,subdir,mapyear,method,jobfile,tilenumbe
     tilenumber_list = [toprocess[i::n_jobs] for i in range(n_jobs)] 
     # submit a job for each of these
     for tilenumbers in tilenumber_list:
-        submit_job_to_raijin(tilenumbers,mapyear,method,outdir,subdir,jobfile)
+        submit_job_to_raijin(tilenumbers,mapyear,finyear,method,outdir,subdir,jobfile,project,queue)
 
 if __name__ == '__main__':
     # parse in the arguments
@@ -74,14 +83,25 @@ if __name__ == '__main__':
     #todo is to add an input so that a shape file can be made.
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
     parser.add_argument('-y', '--mapyear', type=int, required=True, help="Year to map [YYYY].")
+    parser.add_argument('-fy', '--finyear', type=bool, required=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
     parser.add_argument('-d', '--outputdir', type=str, required=True, help="directory to save the output")
     parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles outputdir/subdir")
     parser.add_argument('-j', '--jobfile', type=str, required=True, help="jobfile to use as the template")
+    parser.add_argument('-p', '--project', type=str, required=True, help="project to run on/charge to")
+    parser.add_argument('-q', '--queue', type=str, required=False, help="queue to submit the job to, normal or express")
     args = parser.parse_args()
+    if args.queue:
+        queue= args.queue
+    else:
+        queue = 'normal'
+    if args.finyear:
+        finyear=args.finyear
+    else:
+        finyear=False
     # input area to map, and the Albers shape file
     inputshape = gpd.read_file(args.inputshape)
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     # get the tiles from the intersect of the two
     tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
-    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.method,args.jobfile,tilenumbers,ntile_per_job=24)
+    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,finyear,args.method,args.jobfile,tilenumbers,args.project,queue,ntile_per_job=24)
     
