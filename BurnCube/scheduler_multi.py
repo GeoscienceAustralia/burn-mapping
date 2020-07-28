@@ -27,6 +27,7 @@ def submit_job_to_raijin(tilenumbers,mapyear,finyear,method,outdir,subdir,jobfil
     walltime = 120*len(tilenumbers)
     # do the qsub step to submit into the gadi queue    
     qsub_call = "qsub -P %s -q %s -l walltime=%d:00 -l storage=gdata/%s+gdata/rs0+gdata/v10 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s,finyear=True %s" %(project,queue,walltime,project, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,jobfile)
+    print('The qsub call is:', qsub_call)
     try:
         subprocess.call(qsub_call, shell=True)
     except:
