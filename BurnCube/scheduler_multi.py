@@ -88,14 +88,6 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', type=str, required=True, help="project to run on/charge to")
     parser.add_argument('-q', '--queue', type=str, default='normal', help="queue to submit the job to, normal or express")
     args = parser.parse_args()
-    if args.queue:
-        queue= args.queue
-    else:
-        queue = 'normal'
-    if args.finyear:
-        finyear=args.finyear
-    else:
-        finyear=False
     # input area to map, and the Albers shape file
     inputshape = gpd.read_file(args.inputshape)
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
