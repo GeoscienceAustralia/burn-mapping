@@ -221,5 +221,5 @@ if __name__ == '__main__':
     if not os.path.isfile('hotspot_historic.csv'):
         os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
         os.system('unzip all-data-csv.zip')   
-    check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
+    check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=args.finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
 

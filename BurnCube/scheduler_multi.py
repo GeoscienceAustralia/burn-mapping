@@ -93,5 +93,5 @@ if __name__ == '__main__':
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     # get the tiles from the intersect of the two
     tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
-    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,finyear,args.method,args.jobfile,tilenumbers,args.project,queue,ntile_per_job=24)
+    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.finyear,args.method,args.jobfile,tilenumbers,args.project,args.queue,ntile_per_job=24)
     
