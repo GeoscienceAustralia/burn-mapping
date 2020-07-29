@@ -207,9 +207,9 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
     parser.add_argument('-y', '--year', type=int, required=True, help="Year to map [YYYY].")
     parser.add_argument('-np', '--ncpus', type=int, required=True, help="number of cpus to process each tile")
-    parser.add_argument('-d', '--dir', type=str, required=True, help="directory to save the output")
-    parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles")
-    parser.add_argument('-fy', '--finyear', type=bool, required=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
+    parser.add_argument('-d', '--dir', type=str, required=True, help="directory to save the output (no underscores!)")
+    parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles (no underscores!)")
+    parser.add_argument('-fy', '--finyear', type=bool, default=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
     args = parser.parse_args()
     # check for the output directory and make it if not there
     if not os.path.exists(args.dir):
