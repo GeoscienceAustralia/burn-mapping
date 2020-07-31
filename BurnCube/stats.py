@@ -200,11 +200,11 @@ def hotspot_polygon(period, extent, buffersize):
         table = pd.read_csv(hotspotfile)
     else:
         print("No hotspots file is found")
-        print("Downloading one from DEA historic hotspots data")
+        #print("Downloading one from DEA historic hotspots data")
         # use wget to download it and then unzip to unzip it
-        os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
-        os.system('unzip all-data-csv.zip')
-        table = pd.read_csv(hotspotfile)
+        #os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
+        #os.system('unzip all-data-csv.zip')
+        #table = pd.read_csv(hotspotfile)
         # return None
     
     gda94aa = pyproj.Proj(init='epsg:3577')

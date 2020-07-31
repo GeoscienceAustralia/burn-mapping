@@ -218,8 +218,8 @@ if __name__ == '__main__':
     if not os.path.exists(args.subdir):
         os.makedirs(args.subdir)
     # check for the hotspot_historic file and get it if not there
-    if not os.path.isfile('hotspot_historic.csv'):
-        os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
-        os.system('unzip all-data-csv.zip')   
+    #if not os.path.isfile('hotspot_historic.csv'):
+    #    os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
+    #    os.system('unzip all-data-csv.zip')   
     check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=args.finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
 
