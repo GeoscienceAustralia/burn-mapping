@@ -1,18 +1,11 @@
 #!/bin/bash
-#PBS -P xc0
-#PBS -q normalbw
 #PBS -l ncpus=8
 #PBS -l mem=64GB
-#PBS -l walltime=5:00:00
 #PBS -l software=python
 #PBS -l wd
 
 module use /g/data/v10/public/modules/modulefiles
-module load dea
-#module load agdc-py3-prod
+module load dea/20191127
 
-cd /g/data1a/xc0/user/tian/github/burn-mapping/notebooks/handover
-
-
-python3 burn_mapping_tiles.py -t $ti -y $year -m $method -np $PBS_NCPUS -d $dir -sd $subdir
+python3 burn_mapping_tiles.py -t $ti -y $year -m $method -np $PBS_NCPUS -d $dir -sd $subdir -fy $finyear
 
