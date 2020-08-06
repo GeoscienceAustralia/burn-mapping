@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l ncpus=8
+#PBS -l ncpus=16
 #PBS -l mem=64GB
 #PBS -l software=python
 #PBS -l wd
