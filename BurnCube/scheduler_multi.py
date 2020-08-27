@@ -2,6 +2,7 @@
 import os
 import datetime
 import geopandas as gpd
+import numpy as np
 import subprocess
 import sys
 import argparse
@@ -24,7 +25,7 @@ def submit_job_to_raijin(tilenumbers,mapyear,finyear,method,outdir,subdir,jobfil
     queue       : str (the queue you want the job submitted to)
     """
     # set the wall_time
-    walltime = 120*len(tilenumbers)
+    walltime = 60*len(tilenumbers)
     # do the qsub step to submit into the gadi queue    
     qsub_call = "qsub -P %s -q %s -l walltime=%d:00 -l storage=gdata/%s+gdata/rs0+gdata/v10 -v ti=%s,year=%d,method=%s,dir=%s,subdir=%s,finyear=%s %s" %(project,queue,walltime,project, '_'.join(map(str,tilenumbers)),mapyear,method,outdir,subdir,finyear,jobfile)
     print('The qsub call is:', qsub_call)
@@ -81,17 +82,24 @@ if __name__ == '__main__':
     #todo is to add an input so that a shape file can be made.
     parser.add_argument('-m', '--method', type=str, required=True, help="method for mapping i.e. NBR or NBRdist")
     parser.add_argument('-y', '--mapyear', type=int, required=True, help="Year to map [YYYY].")
-    parser.add_argument('-fy', '--finyear', type=bool, default=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
+    parser.add_argument('-fy', '--finyear', type=str, default="False", help="set to True if you want to map July/mapyear to June/mapyear+1")
     parser.add_argument('-d', '--outputdir', type=str, required=True, help="directory to save the output (no underscores!)")
     parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles outputdir/subdir (no underscores!)")
     parser.add_argument('-j', '--jobfile', type=str, required=True, help="jobfile to use as the template")
     parser.add_argument('-p', '--project', type=str, required=True, help="project to run on/charge to")
     parser.add_argument('-q', '--queue', type=str, default='normal', help="queue to submit the job to, normal or express")
     args = parser.parse_args()
+    # set up the finyear to be a bool
+    if args.finyear == "True":
+        finyear = True
+    else:
+        finyear = False
     # input area to map, and the Albers shape file
     inputshape = gpd.read_file(args.inputshape)
     shpfile = gpd.read_file('/g/data/v10/public/firescar/Albers_Grid/Albers_Australia_Coast_Islands_Reefs.shp')
     # get the tiles from the intersect of the two
     tilenumbers = gpd.sjoin(shpfile,inputshape,op='intersects').index.values
-    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,args.finyear,args.method,args.jobfile,tilenumbers,args.project,args.queue,ntile_per_job=24)
+    # check that all the tile numbers are unique to avoid double ups
+    tilenumbers = np.unique(tilenumbers)
+    run_unprocessed_tiles(shpfile,args.outputdir,args.subdir,args.mapyear,finyear,args.method,args.jobfile,tilenumbers,args.project,args.queue,ntile_per_job=24)
     

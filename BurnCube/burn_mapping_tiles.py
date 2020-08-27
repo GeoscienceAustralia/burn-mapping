@@ -38,6 +38,7 @@ def burn_mapping(x,y,mapyear,finyear,method,n_procs,filename,res=(-25,25)):
         res      : tuple - resolution 
     """
     #config the data period and mapping period
+    print('finyear:', finyear, type(finyear))
     if finyear:
         if mapyear>=2013:
             period = ('2013-07-01',str(mapyear-1)+'-06-30')# period used for the calculation of geometric median
@@ -209,8 +210,13 @@ if __name__ == '__main__':
     parser.add_argument('-np', '--ncpus', type=int, required=True, help="number of cpus to process each tile")
     parser.add_argument('-d', '--dir', type=str, required=True, help="directory to save the output (no underscores!)")
     parser.add_argument('-sd', '--subdir', type=str, required=True, help="directory to save the subtiles (no underscores!)")
-    parser.add_argument('-fy', '--finyear', type=bool, default=False, help="set to true if you want to map July/mapyear to June/mapyear+1")
+    parser.add_argument('-fy', '--finyear', type=str, default="False", help="set to True if you want to map July/mapyear to June/mapyear+1")
     args = parser.parse_args()
+    # set up the finyear to be a bool
+    if args.finyear == "True":
+        finyear = True
+    else:
+        finyear = False
     # check for the output directory and make it if not there
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
@@ -221,5 +227,5 @@ if __name__ == '__main__':
     #if not os.path.isfile('hotspot_historic.csv'):
     #    os.system('wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip')
     #    os.system('unzip all-data-csv.zip')   
-    check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=args.finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
+    check_existence(tilenumber=args.tileindex,mapyear=args.year,finyear=finyear,method=args.method, n_proces=args.ncpus,outdir=args.dir,subdir=args.subdir)
 
