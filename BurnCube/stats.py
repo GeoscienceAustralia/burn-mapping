@@ -362,7 +362,7 @@ def post_filtering(sev,hotspots_filtering=True,date_filtering=True):
             firedates = (sev.StartDate.data*hotspotsmask).reshape(-1)
             values, counts = np.unique(firedates[~np.isnan(firedates)], return_counts=True)
             sortcounts=np.array(sorted(counts,reverse=True))
-            datemask = np.zeros((sev.StartDate.data.shape))            
+            datemask = np.zeros((sev.StartDate.data.shape))
             HPmaskedDate = sev.StartDate*hotspotsmask.copy()
             #print(len(sortcounts))
             if len(sortcounts)<=2:
