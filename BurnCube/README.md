@@ -59,7 +59,7 @@ The outputs of severity and burnscar mapping are stored in one dataset and saved
 ## Validation data
 The validation dataset is currently located under /g/data/xc0/project/Burn_mapping/02_Fire_Perimeters_Polygons/
 
-## Run it on raijin
+## Run it on Gadi
 The 'burnmapping_test.py' provides the example of running the BurnCube for a 25km tile with the centre lat,lon coordinates for a list of selected sites in sites.txt. 
 
 
@@ -75,5 +75,19 @@ The 'scheduler.py' sets up the runs for multiple 100km tiles by submitting multi
     1. specify the mapping year, mapping method, change the directories for the 25km subtiles and merged 100km tiles in 'scheduler.py'. 
     2. pass the index range of tiles to scheduler.py and submit the jobs to raijin: 
     python scheduler.py 400,500
+
+The 'scheduler_multi.py' sets up the runs for multiple tiles by submitting multiple 'jobs_multi.pbs' with the given tile indices. Please note that the script will check the existence of subtiles and merged tiles before submitting the jobs to raijin, no job will be submitted if they were processed before. This script will submit multiple tiles per job to Gadi. 
+
+To run the script:
+Before you run a job for this, please make sure you have the hotspots historic file in your run directory with the following command: 
+    
+    wget https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip
+
+New updates to the way that the jobs are launched, to allow for a fire/financial year to be used and for someone outside our project to use it and potentially put it in the express queue if they would like: 
+
+    python scheduler_multi.py -i shape_test.shp -m NBRdist -y 2018 -d output/ -sd output/subdir/ -j jobs_multi.pbs -p <project> -q <normal> -fy True 
+
+fy and q are not required and it should run without them, the defaults if they are not included is the normal queue and to run over a calendar year and not a fire year. 
+NOTE: subdir and outdir CANNOT have underscores, this will cause the program to crash. 
 
 
