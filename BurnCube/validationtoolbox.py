@@ -41,7 +41,7 @@ def burnpixel_masking(data,varname):
     Burnpixel.data[Burnpixel.data>1]=1
     return Burnpixel
 
-def treecover_masking(year,data,prctg=60):
+def treecover_masking(year,data,prctg=60,size='25m'):
     """
     return the treecover mask for the given region in epsg:3577
     the threshold for the forest mask can be changed, the default value is 60%
@@ -57,8 +57,14 @@ def treecover_masking(year,data,prctg=60):
     gda94 = pyproj.Proj(init='epsg:4326')
     lon1,lat1=pyproj.transform(gda94aa,gda94,data.x.data[0],data.y.data[0])
     lon2,lat2=pyproj.transform(gda94aa,gda94,data.x.data[-1],data.y.data[-1])
+    #lon1,lat1=(data.x.data[0],data.y.data[0])
+    #lon2,lat2=(data.x.data[-1],data.y.data[-1])
     
-    filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/250m/ANUWALD.TreeCover.%s.250m.NCAS.nc' %str(year)
+    if size=='25m':
+        filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/ANUWALD.TreeCover.25m.%s.nc' %str(year)
+    else:
+        filename = 'http://dapds00.nci.org.au/thredds/dodsC/ub8/au/treecover/250m/ANUWALD.TreeCover.%s.250m.nc' %str(year)
+    #filename = '/g/data/u46/users/ekb100/burn-mapping/validation/ANUWALD.TreeCover.25m.%s.nc' %str(year)
 
     
     TC = xr.open_dataset(filename)
@@ -68,7 +74,7 @@ def treecover_masking(year,data,prctg=60):
     latmin = min([lat1,lat2])
     lonmax = max([lon1,lon2])
     latmax = max([lat1,lat2])
-    #extract the tree cover for the given region but 0.1 further in each direction for resample purpose
+    # extract the tree cover for the given region but 0.1 further in each direction for resample purpose
     
     row = np.where((TC.latitude.data>latmin-0.1)&(TC.latitude.data<latmax+0.1))[0] 
     col = np.where((TC.longitude.data>lonmin-0.1)&(TC.longitude.data<lonmax+0.1))[0]
@@ -78,23 +84,35 @@ def treecover_masking(year,data,prctg=60):
     Treecover = TC.squeeze()[col,row].transpose()
     x, y = np.meshgrid(data.x.data, data.y.data)
     from scipy.interpolate import griddata
-    gridnew = griddata((easting,northing),Treecover.data.ravel(),(x,y),method='nearest',fill_value=np.nan) #resample to the given data resolution and extent
+    gridnew = griddata((easting,northing),Treecover.data.ravel(),(x,y),method='nearest',fill_value=np.nan) # resample to the given data resolution and extent
     ds = xr.Dataset({'Treecover':(('y','x'),gridnew)},coords={'y':data.y,'x':data.x})
     TreecoverMask = np.zeros((gridnew.shape))
     TreecoverMask[:] = gridnew
-    TreecoverMask[TreecoverMask<=prctg]=0 #forest mask
-    TreecoverMask[TreecoverMask>prctg]=1
+    if size=='25m':
+        TreecoverMask[TreecoverMask<=0]=0 # forest mask
+        TreecoverMask[TreecoverMask>0]=1
+        TreecoverMask[np.isnan(TreecoverMask)]=0
+    else:
+        TreecoverMask[TreecoverMask<=prctg]=0 # forest mask
+        TreecoverMask[TreecoverMask>prctg]=1
     TreecoverMask2 = np.zeros((gridnew.shape))
     TreecoverMask2[:] = gridnew
-    TreecoverMask2[TreecoverMask2<=prctg]=1 #none forest mask
-    TreecoverMask2[TreecoverMask2>prctg]=0
+    if size=='25m':
+        TreecoverMask2[TreecoverMask2<=0]=1 # none forest mask
+        TreecoverMask2[TreecoverMask2>0]=0
+        TreecoverMask2[np.isnan(TreecoverMask2)]=1
+    else:
+        TreecoverMask2[TreecoverMask2<=prctg]=1 # none forest mask
+        TreecoverMask2[TreecoverMask2>prctg]=0
     mask = xr.Dataset({'ForestMask':(('y','x'),TreecoverMask),'NoneForestMask':(('y','x'),TreecoverMask2)},coords={'y':data.y,'x':data.x})
     return mask
 
 def validation_dataset_config(State,Validation_period,BurnPixel):
     """
     Please note: the working directory of the fire perimeters polygons are currently set to /g/data/xc0/projectBurn_Mapping/02_Fire_Perimeters_Polygons/
-    please modified if needed.
+    please modify if needed.
+    You may also need to modify the file paths, file names and potentially the column names as well to 
+    match the data that you have.
     
     This function sets the correct validation shapefile for validation and densifies the data to the validation period and 
     the geographic extent of the burnpixel mask
@@ -108,38 +126,44 @@ def validation_dataset_config(State,Validation_period,BurnPixel):
     df: dataset including the polygons
     date variable
     """
-    workingdir = '/g/data/xc0/project/Burn_Mapping/02_Fire_Perimeters_Polygons/'
+    #workingdir = '/g/data/xc0/project/Burn_Mapping/02_Fire_Perimeters_Polygons/'
+    workingdir = '/g/data/u46/users/ekb100/burn-mapping/validation/'
+    
     if State =='TAS':
-        shapefile_filepath = workingdir+'TAS_2017_State_Fire_History/fire_history_all_fires_20170907.shp'
+        #shapefile_filepath = workingdir+'TAS_2017_State_Fire_History/fire_history_all_fires_20170907.shp'
+        shapefile_filepath = workingdir+'tas/TAS_2017_State_Fire_History/fire_history_all_fires_20170907.shp'
         df = geopandas.read_file(shapefile_filepath)[['geometry','IGN_DATE']]
         df.columns=['geometry','Burn_Date']
 
-
     if State =='VIC':
-        shapefile_filepath = workingdir+'Victoria_FIRE_HISTORY/FIRE_HISTORY.shp'
+        #shapefile_filepath = workingdir+'Victoria_FIRE_HISTORY/FIRE_HISTORY.shp'
+        #shapefile_filepath = workingdir+'VIC/FIRE_HISTORY.shp'
+        shapefile_filepath = workingdir+'new_vic/ll_gda94/sde_shape/whole/VIC/FIRE/layer/fire_history_lastburnt.shp'
         df = geopandas.read_file(shapefile_filepath)[['geometry','START_DATE']]
         df.columns=['geometry','Burn_Date']
-
-
         
     if State =='NSW':
-        shapefile_filepath = workingdir+'NSW_RFS_Outlines/NSW_Fire_History/WildFireHistory.shp'
-        df = geopandas.read_file(shapefile_filepath)[['geometry','ENDDATE']]
+        #shapefile_filepath = workingdir+'NSW_RFS_Outlines/NSW_Fire_History/WildFireHistory.shp'
+        shapefile_filepath = workingdir+'nsw/firehistoryp/FireHistory_P.shp'
+        #df = geopandas.read_file(shapefile_filepath)[['geometry','ENDDATE']]
+        df = geopandas.read_file(shapefile_filepath)[['geometry','EndDate']]
         df.columns=['geometry','Burn_Date']
         
     if State =='SA':
-        shapefile_filepath = workingdir+'SA/FIREMGT_FireHistory_shp/FIREMGT_FireHistory.shp'
+        #shapefile_filepath = workingdir+'SA/FIREMGT_FireHistory_shp/FIREMGT_FireHistory.shp'
+        shapefile_filepath = workingdir+'sa/FIREMGT_FireHistory_shp/FIREMGT_FireHistory.shp'
         df = geopandas.read_file(shapefile_filepath)[['geometry','FIREDATE']]
         df.columns=['geometry','Burn_Date']     
     
     if State =='ACT':
-        shapefile_filepath = workingdir+'FireHistory_ACT/ShapeFile/FireHistory.shp'
+        #shapefile_filepath = workingdir+'FireHistory_ACT/ShapeFile/FireHistory.shp'
+        shapefile_filepath = workingdir+'ACT/ShapeFile/FireHistory.shp'
         df = geopandas.read_file(shapefile_filepath)[['geometry','DATE']]
         df.columns=['geometry','Burn_Date']
        
     if State =='QLD':
-        workingdir = '/g/data/xc0/project/Burn_Mapping/02_Fire_Perimeters_Polygons/'
-        shapefile_filepath = workingdir+'QLD/osmfirewildfire1992to2015/OSM_FIRE_WILDFIRE_1992to2015.shp'
+        #shapefile_filepath = workingdir+'QLD/osmfirewildfire1992to2015/OSM_FIRE_WILDFIRE_1992to2015.shp'
+        shapefile_filepath = workingdir+'ql/osmfirewildfire1992to2015.shp/OSM_FIRE_WILDFIRE_1992to2015.shp'
         df1 = geopandas.read_file(shapefile_filepath)[['geometry','YEAR_BURN_']]
         df1.columns = ['geometry','Burn_Date']
         df1.Burn_Date=pd.to_datetime(df1.Burn_Date,format='%Y').astype('datetime64[ns]').astype('str')
@@ -148,14 +172,13 @@ def validation_dataset_config(State,Validation_period,BurnPixel):
         #df2 = geopandas.read_file(shapefile_filepath)[['geometry','Date_Compl']] 
         #df2.columns = ['geometry','Burn_Date']
 
-        shapefile_filepath = workingdir+'QLD/wildfirereport2011to2018/WildfireReport_2011to2018.shp'
+        #shapefile_filepath = workingdir+'QLD/wildfirereport2011to2018/WildfireReport_2011to2018.shp'
+        shapefile_filepath = workingdir+'ql/wildfirereport2011to2018.shp/WildfireReport_2011to2018.shp'
         df3 = geopandas.read_file(shapefile_filepath)[['geometry','DateKNown']]  
         df3.columns = ['geometry','Burn_Date']
 
-
         df=pd.concat([df1, df3])
         
-    
     df = df[(df.Burn_Date>=Validation_period[0])&(df.Burn_Date<=Validation_period[1])]
     df = df.to_crs({'init': 'epsg:3577'})
     x_extent = [BurnPixel.x.min() , BurnPixel.x.max()]
@@ -168,7 +191,6 @@ def _forward_fill(Input_DataArray = None):
     """
     - backfills all NAN values with the last non-nan value in the xr.DataArray
     - this step is necessary, because the differencing technique gives misleading results when NAN values are present
-
 
     INPUT:
     - Input_DataArray must be a xarray DataArray
