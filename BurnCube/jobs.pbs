@@ -5,7 +5,7 @@
 #PBS -l wd
 
 module use /g/data/v10/public/modules/modulefiles
-module load dea/20191127
+module load dea
 
 python3 burn_mapping_tiles.py -t $ti -y $year -m $method -np $PBS_NCPUS -d $dir -sd $subdir -fy $finyear
 
