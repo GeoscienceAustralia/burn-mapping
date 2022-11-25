@@ -1,5 +1,8 @@
+import ctypes
 import logging
+import multiprocessing as mp
 import os
+from contextlib import closing
 
 import numpy as np
 import pandas as pd
@@ -57,8 +60,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref ** 2))
-        / np.sqrt(np.nansum(obs ** 2, axis=0))
+        / np.sqrt(np.sum(ref**2))
+        / np.sqrt(np.nansum(obs**2, axis=0))
     )
     return cosdist
 
@@ -81,7 +84,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist ** 2)
+    euc_norm = np.sqrt(euc_dist**2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -370,13 +373,78 @@ def post_filtering(sev, hotspots_filtering=True, date_filtering=True):
     return sev
 
 
+def dist_distance(params):
+    """
+    multiprocess version with shared memory of the cosine distances and nbr distances
+    """
+    ard = np.frombuffer(shared_in_arr1.get_obj(), dtype=np.int16).reshape(params[2])
+    gmed = np.frombuffer(shared_in_arr2.get_obj(), dtype=np.float32).reshape(
+        (params[2][0], params[2][2])
+    )
+    cos_dist = np.frombuffer(shared_out_arr1.get_obj(), dtype=np.float32).reshape(
+        (params[2][1], params[2][2])
+    )
+    nbr_dist = np.frombuffer(shared_out_arr2.get_obj(), dtype=np.float32).reshape(
+        (params[2][1], params[2][2])
+    )
+    direction = np.frombuffer(shared_out_arr3.get_obj(), dtype=np.int16).reshape(
+        (params[2][1], params[2][2])
+    )
+
+    for i in range(params[0], params[1]):
+        ind = np.where(ard[1, :, i] > 0)[0]
+
+        if len(ind) > 0:
+            cos_dist[ind, i] = cos_distance(gmed[:, i], ard[:, ind, i])
+            nbrmed = (gmed[3, i] - gmed[5, i]) / (gmed[3, i] + gmed[5, i])
+            nbr = (ard[3, :, i] - ard[5, :, i]) / (ard[3, :, i] + ard[5, :, i])
+            nbr_dist[ind, i], direction[ind, i] = nbr_eucdistance(nbrmed, nbr[ind])
+
+
+def dist_severity(params):
+    """
+    multiprocess version with shared memory of the severity algorithm
+    """
+    nbr = np.frombuffer(shared_in_arr01.get_obj(), dtype=np.float32).reshape(
+        (-1, params[2])
+    )
+    nbr_dist = np.frombuffer(shared_in_arr02.get_obj(), dtype=np.float32).reshape(
+        (-1, params[2])
+    )
+    c_dist = np.frombuffer(shared_in_arr03.get_obj(), dtype=np.float32).reshape(
+        (-1, params[2])
+    )
+    change_dir = np.frombuffer(shared_in_arr04.get_obj(), dtype=np.int16).reshape(
+        (-1, params[2])
+    )
+    nbr_outlier = np.frombuffer(shared_in_arr05.get_obj(), dtype=np.float32)
+    cdist_outlier = np.frombuffer(shared_in_arr06.get_obj(), dtype=np.float32)
+    t = np.frombuffer(shared_in_arr07.get_obj(), dtype=np.float64)
+
+    sev = np.frombuffer(shared_out_arr01.get_obj(), dtype=np.float64)
+    dates = np.frombuffer(shared_out_arr02.get_obj(), dtype=np.float64)
+    days = np.frombuffer(shared_out_arr03.get_obj(), dtype=np.float64)
+
+    for i in range(params[0], params[1]):
+        sev[i], dates[i], days[i] = severity(
+            nbr[:, i],
+            nbr_dist[:, i],
+            c_dist[:, i],
+            change_dir[:, i],
+            nbr_outlier[i],
+            cdist_outlier[i],
+            t,
+            method=params[3],
+        )
+
+
 def distances(ard, geomed):
     """
     Calculates the cosine distance between observation and reference.
     The calculation is point based, easily adaptable to any dimension.
         Note:
             This method saves the result of the computation into the
-            self.dists variable: p-dimensional vector with geometric
+            dists variable: p-dimensional vector with geometric
             median reflectances, where p is the number of bands.
         Args:
             ard: load from ODC
@@ -385,46 +453,94 @@ def distances(ard, geomed):
     """
 
     n = len(ard.y) * len(ard.x)
+    _x = ard
 
-    t_dim = ard.time.data
-
+    t_dim = _x.time.data
     if len(t_dim) < 1:
-        logger.warning(f"---{len(t_dim)} observations")
-        logger.warning("no enough data for the calculation of distances")
+        print(f"--- {len(t_dim)} observations")
+        print("no enough data for the calculation of distances")
         return
-    nir = ard[0, :, :, :].data.astype("float32")
-    swir2 = ard[1, :, :, :].data.astype("float32")
+
+    nir = _x[3, :, :, :].data.astype("float32")
+    swir2 = _x[5, :, :, :].data.astype("float32")
     nir[nir <= 0] = np.nan
     swir2[swir2 <= 0] = np.nan
     nbr = (nir - swir2) / (nir + swir2)
 
-    n = len(ard.y) * len(ard.x)
+    print("begin to process distance")
 
-    ard_val = ard.data.reshape((len(ard.band), len(ard.time), n))
-    gmed = geomed.data.reshape(len(ard.band), -1)
+    out_arr1 = mp.Array(ctypes.c_float, len(t_dim) * n)
+    out_arr2 = mp.Array(ctypes.c_float, len(t_dim) * n)
+    out_arr3 = mp.Array(ctypes.c_short, len(t_dim) * n)
 
-    cos_dist = np.empty([ard_val.shape[1], ard_val.shape[2]], dtype=np.float32)
+    cos_dist = np.frombuffer(out_arr1.get_obj(), dtype=np.float32).reshape(
+        (len(t_dim), n)
+    )
     cos_dist.fill(np.nan)
-    nbr_dist = np.empty([ard_val.shape[1], ard_val.shape[2]], dtype=np.float32)
+    nbr_dist = np.frombuffer(out_arr2.get_obj(), dtype=np.float32).reshape(
+        (len(t_dim), n)
+    )
     nbr_dist.fill(np.nan)
-    direction = np.empty([ard_val.shape[1], ard_val.shape[2]], dtype=np.int16)
+    direction = np.frombuffer(out_arr3.get_obj(), dtype=np.int16).reshape(
+        (len(t_dim), n)
+    )
     direction.fill(0)
-    
-    from tqdm import tqdm
 
-    # 0 is: nbart_nir
-    # 1 is: nbart_swir_2
-    
-    for i in tqdm(range(0, n)):
-        ind = np.where(ard_val[1, :, i] > 0)[0]
+    in_arr1 = mp.Array(ctypes.c_short, len(ard.band) * len(_x.time) * n)
+    x = np.frombuffer(in_arr1.get_obj(), dtype=np.int16).reshape(
+        (len(ard.band), len(_x.time), n)
+    )
+    x[:] = _x.data.reshape(len(ard.band), len(_x.time), -1)
 
-        if len(ind) > 0:
-            cos_dist[ind, i] = cos_distance(gmed[:, i], ard_val[:, ind, i])
-            nbrmed = (gmed[0, i] - gmed[1, i]) / (gmed[1, i] + gmed[0, i])
-            temp_nbr = (ard_val[0, :, i] - ard_val[1, :, i]) / (
-                ard_val[0, :, i] + ard_val[1, :, i]
-            )
-            nbr_dist[ind, i], direction[ind, i] = nbr_eucdistance(nbrmed, temp_nbr[ind])
+    in_arr2 = mp.Array(ctypes.c_float, len(ard.band) * n)
+    gmed = np.frombuffer(in_arr2.get_obj(), dtype=np.float32).reshape(
+        (len(ard.band), n)
+    )
+    gmed[:] = geomed.data.reshape(len(ard.band), -1)
+
+    def init(
+        shared_in_arr1_,
+        shared_in_arr2_,
+        shared_out_arr1_,
+        shared_out_arr2_,
+        shared_out_arr3_,
+    ):
+        global shared_in_arr1
+        global shared_in_arr2
+        global shared_out_arr1
+        global shared_out_arr2
+        global shared_out_arr3
+
+        shared_in_arr1 = shared_in_arr1_
+        shared_in_arr2 = shared_in_arr2_
+        shared_out_arr1 = shared_out_arr1_
+        shared_out_arr2 = shared_out_arr2_
+        shared_out_arr3 = shared_out_arr3_
+
+    # processes = 8
+    with closing(
+        mp.Pool(
+            initializer=init,
+            initargs=(
+                in_arr1,
+                in_arr2,
+                out_arr1,
+                out_arr2,
+                out_arr3,
+            ),
+            processes=8,
+        )
+    ) as p:
+        chunk = 1
+        if n == 0:
+            print("no point")
+            return
+        p.map_async(
+            dist_distance,
+            [(i, min(n, i + chunk), x.shape) for i in range(0, n, chunk)],
+        )
+
+    p.join()
 
     ds = xr.Dataset(
         coords={
@@ -450,6 +566,20 @@ def distances(ard, geomed):
     )
     ds["NBR"] = (("time", "y", "x"), nbr)
 
+    del (
+        in_arr1,
+        in_arr2,
+        out_arr1,
+        out_arr2,
+        out_arr3,
+        gmed,
+        ard,
+        cos_dist,
+        nbr_dist,
+        direction,
+        nbr,
+    )
+
     return ds
 
 
@@ -457,7 +587,7 @@ def outliers(dataset, distances):
     """
     Calculate the outliers for distances for change detection
     """
-    # print(self.dists)
+    # print(dists)
     if distances is None:
         logger.warning("no distances for the outlier calculations")
         return
@@ -511,7 +641,7 @@ def region_growing(severity, dists, outlrs):
         cos_score = (dists.ChangeDir * dists.CDist)[ti, :, :] / outlrs.CDistoutlier
         potential = ((nbr_score > z_distance) & (cos_score > z_distance)).astype(int)
         # Use the following line if using NBR is preferred
-        # Potential = ((self.dists.NBR[ti, :, :] > 0) & (cos_score > z_distance)).astype(int)
+        # Potential = ((dists.NBR[ti, :, :] > 0) & (cos_score > z_distance)).astype(int)
 
         all_labels = measure.label(
             potential.astype(int).values, background=0
@@ -675,11 +805,11 @@ def hotspot_polygon(period, extent, buffersize):
     >>>extent = [1648837.5, 1675812.5, -3671837.5, -3640887.5]
     >>>polygons = hotspot_polygon(year,extent,4000)
     """
-    
-    print("extent", extent)
-    
-    year = int(str(period[0])[0:4])
-    #if year >= 2019:
+
+    # print("extent", extent)
+
+    # year = int(str(period[0])[0:4])
+    # if year >= 2019:
     #    logger.warning("No complete hotspots data after 2018")
     #    return None
 
@@ -730,7 +860,7 @@ def hotspot_polygon(period, extent, buffersize):
 
 
 def severitymapping(
-    dists, outlrs, period, n_procs=1, method="NBR", growing=True, hotspots_period=None
+    dists, outlrs, period, method="NBR", growing=True, hotspots_period=None
 ):
     """Calculates burnt area for a given period
     Args:
@@ -740,10 +870,11 @@ def severitymapping(
         growing: whether to grow the region
     """
     if dists is None:
-        logger.warning("No data available for severity mapping")
+        print("No data available for severity mapping")
         return None
-    cos_dist = dists.CDist.data.reshape((len(dists.time), -1))
-    cos_dist_outlier = outlrs.CDistoutlier.data.reshape(len(dists.x) * len(dists.y))
+
+    c_dist = dists.CDist.data.reshape((len(dists.time), -1))
+    cdist_outlier = outlrs.CDistoutlier.data.reshape(len(dists.x) * len(dists.y))
     nbr_dist = dists.NBRDist.data.reshape((len(dists.time), -1))
     nbr = dists.NBR.data.reshape((len(dists.time), -1))
     nbr_outlier = outlrs.NBRoutlier.data.reshape(len(dists.x) * len(dists.y))
@@ -775,42 +906,122 @@ def severitymapping(
         raise ValueError
 
     if len(outlierind) == 0:
-        logger.warning("no burnt area detected")
+        print("no burnt area detected")
         return None
+    # input shared arrays
+    in_arr1 = mp.Array(ctypes.c_float, len(dists.time[:]) * len(outlierind))
+    nbr_shared = np.frombuffer(in_arr1.get_obj(), dtype=np.float32).reshape(
+        (len(dists.time[:]), len(outlierind))
+    )
+    nbr_shared[:] = nbr[:, outlierind]
 
-    nbr = nbr[:, outlierind].reshape((-1, len(outlierind)))
-    nbr_dist = nbr_dist[:, outlierind].reshape((-1, len(outlierind)))
-    cos_dist = cos_dist[:, outlierind].reshape((-1, len(outlierind)))
-    change_dir = change_dir[:, outlierind].reshape((-1, len(outlierind)))
+    in_arr2 = mp.Array(ctypes.c_float, len(dists.time[:]) * len(outlierind))
+    nbr_dist_shared = np.frombuffer(in_arr2.get_obj(), dtype=np.float32).reshape(
+        (len(dists.time[:]), len(outlierind))
+    )
+    nbr_dist_shared[:] = nbr_dist[:, outlierind]
 
-    nbr_outlier = nbr_outlier[outlierind]
-    cos_dist_outlier = cos_dist_outlier[outlierind]
-    t = dists.time.data.astype("float64")
+    in_arr3 = mp.Array(ctypes.c_float, len(dists.time[:]) * len(outlierind))
+    cosdist_shared = np.frombuffer(in_arr3.get_obj(), dtype=np.float32).reshape(
+        (len(dists.time[:]), len(outlierind))
+    )
+    cosdist_shared[:] = c_dist[:, outlierind]
 
-    sev = np.empty(len(outlierind), dtype=np.float64)
+    in_arr4 = mp.Array(ctypes.c_short, len(dists.time[:]) * len(outlierind))
+    change_dir_shared = np.frombuffer(in_arr4.get_obj(), dtype=np.int16).reshape(
+        (len(dists.time[:]), len(outlierind))
+    )
+    change_dir_shared[:] = change_dir[:, outlierind]
+
+    in_arr5 = mp.Array(ctypes.c_float, len(outlierind))
+    nbr_outlier_shared = np.frombuffer(in_arr5.get_obj(), dtype=np.float32)
+    nbr_outlier_shared[:] = nbr_outlier[outlierind]
+
+    in_arr6 = mp.Array(ctypes.c_float, len(outlierind))
+    cdist_outlier_shared = np.frombuffer(in_arr6.get_obj(), dtype=np.float32)
+    cdist_outlier_shared[:] = cdist_outlier[outlierind]
+
+    in_arr7 = mp.Array(ctypes.c_double, len(dists.time[:]))
+    t = np.frombuffer(in_arr7.get_obj(), dtype=np.float64)
+    t[:] = dists.time.data.astype("float64")
+
+    # output shared arrays
+    out_arr1 = mp.Array(ctypes.c_double, len(outlierind))
+    sev = np.frombuffer(out_arr1.get_obj(), dtype=np.float64)
     sev.fill(np.nan)
 
-    dates = np.empty(len(outlierind), dtype=np.float64)
+    out_arr2 = mp.Array(ctypes.c_double, len(outlierind))
+    dates = np.frombuffer(out_arr2.get_obj(), dtype=np.float64)
     dates.fill(np.nan)
 
-    days = np.empty(len(outlierind), dtype=np.float64)
+    out_arr3 = mp.Array(ctypes.c_double, len(outlierind))
+    days = np.frombuffer(out_arr3.get_obj(), dtype=np.float64)
     days.fill(0)
-    
-    from tqdm import tqdm
-    
-    for i in tqdm(range(len(outlierind))):
-        sev[i], dates[i], days[i] = severity(
-            nbr[:, i],
-            nbr_dist[:, i],
-            cos_dist[:, i],
-            change_dir[:, i],
-            nbr_outlier[i],
-            cos_dist_outlier[i],
-            t,
-            method=method,
+
+    def init(
+        shared_in_arr1_,
+        shared_in_arr2_,
+        shared_in_arr3_,
+        shared_in_arr4_,
+        shared_in_arr5_,
+        shared_in_arr6_,
+        shared_in_arr7_,
+        shared_out_arr1_,
+        shared_out_arr2_,
+        shared_out_arr3_,
+    ):
+        global shared_in_arr01
+        global shared_in_arr02
+        global shared_in_arr03
+        global shared_in_arr04
+        global shared_in_arr05
+        global shared_in_arr06
+        global shared_in_arr07
+        global shared_out_arr01
+        global shared_out_arr02
+        global shared_out_arr03
+
+        shared_in_arr01 = shared_in_arr1_
+        shared_in_arr02 = shared_in_arr2_
+        shared_in_arr03 = shared_in_arr3_
+        shared_in_arr04 = shared_in_arr4_
+        shared_in_arr05 = shared_in_arr5_
+        shared_in_arr06 = shared_in_arr6_
+        shared_in_arr07 = shared_in_arr7_
+        shared_out_arr01 = shared_out_arr1_
+        shared_out_arr02 = shared_out_arr2_
+        shared_out_arr03 = shared_out_arr3_
+
+    with closing(
+        mp.Pool(
+            initializer=init,
+            initargs=(
+                in_arr1,
+                in_arr2,
+                in_arr3,
+                in_arr4,
+                in_arr5,
+                in_arr6,
+                in_arr7,
+                out_arr1,
+                out_arr2,
+                out_arr3,
+            ),
+            processes=8,
+        )
+    ) as p:
+        chunk = 1
+        if len(outlierind) == 0:
+            return
+        p.map_async(
+            dist_severity,
+            [
+                (i, min(len(outlierind), i + chunk), len(outlierind), method)
+                for i in range(0, len(outlierind), chunk)
+            ],
         )
 
-    del nbr, nbr_dist, cos_dist, change_dir, nbr_outlier, cos_dist_outlier
+    p.join()
 
     sevindex = np.zeros(len(dists.y) * len(dists.x))
     duration = np.zeros(len(dists.y) * len(dists.x)) * np.nan
@@ -823,11 +1034,28 @@ def severitymapping(
     startdate = startdate.reshape((len(dists.y), len(dists.x)))
     startdate[startdate == 0] = np.nan
     duration[duration == 0] = np.nan
-
-    del sev, days, dates
-
-    # del in_arr1, in_arr2, in_arr3, in_arr4, in_arr5, in_arr6,out_arr1, out_arr2, out_arr3
-    # del sev,days,dates,NBR_shared,NBRDist_shared,CosDist_shared,NBRoutlier_shared,ChangeDir_shared,CDistoutlier_shared
+    del (
+        in_arr1,
+        in_arr2,
+        in_arr3,
+        in_arr4,
+        in_arr5,
+        in_arr6,
+        out_arr1,
+        out_arr2,
+        out_arr3,
+    )
+    del (
+        sev,
+        days,
+        dates,
+        nbr_shared,
+        nbr_dist_shared,
+        cosdist_shared,
+        nbr_outlier_shared,
+        change_dir_shared,
+        cdist_outlier_shared,
+    )
 
     out = xr.Dataset(coords={"y": dists.y[:], "x": dists.x[:]})
     out["StartDate"] = (("y", "x"), startdate)
