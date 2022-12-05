@@ -1,11 +1,4 @@
 plugin: gm-ls # this can help system find the relative plugin and plugin version
-plugin_config:
-  cloud_filters:
-    cloud:
-      - [dilation, 5]
-    shadow:
-      - [dilation, 10]
-
 product:
   name: ga_ls8c_nbart_gm_4cyear_3
   short_name: ga_ls8c_nbart_gm_4cyear_3
@@ -60,11 +53,11 @@ product:
     abstract: Simple true-colour image, using the red, green and blue bands
     components:
       red:
-        nbart_red: 1
+        red: 1
       green:
-        nbart_green: 1
+        green: 1
       blue:
-        nbart_blue: 1
+        blue: 1
     scale_range:
     - 0
     - 3000
@@ -80,11 +73,3 @@ s3_acl: public-read
 cog_opts:
   zlevel: 9
 apply_eodatasets3: True
-output_location: >-
-  s3://dea-public-data-dev/projects/burn_cube/ga_ls8c_nbart_gm_4cyear_3/3-0-0
-
-# save-tasks options -> I believe the Argo cfg will overwrite this
-input_products: ga_ls8c_ard_3
-frequency: all
-grid: au-30
-qga: 1
