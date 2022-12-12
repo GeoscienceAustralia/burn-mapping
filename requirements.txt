@@ -1,0 +1,6 @@
+psycopg2-binary==2.9.2
+datacube==1.8.6
+pyproj==3.2.1
+s3fs==0.4.2
+dea_tools
+aiohttp

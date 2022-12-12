@@ -12,14 +12,17 @@ import xarray as xr
 from shapely import geometry
 from shapely.geometry import Point
 from shapely.ops import unary_union
+import s3fs
 
 logger = logging.getLogger(__name__)
 
 
 def task_to_ranges(task_id):
 
+    fs = s3fs.S3FileSystem(anon=True)
+
     task_map = pd.read_csv(
-        "BurnCube 10-year-historical-processing.csv",
+        "s3://dea-public-data-dev/projects/burn_cube/configs/10-year-historical-processing.csv",
         parse_dates=[
             "Period Start",
             "Period End",
@@ -897,13 +900,19 @@ def hotspot_polygon(period, extent, buffersize):
     #    logger.warning("No complete hotspots data after 2018")
     #    return None
 
-    hotspotfile = "hotspot_historic.csv"
-    if os.path.isfile(hotspotfile):
-        column_names = ["datetime", "sensor", "latitude", "longitude"]
-        table = pd.read_csv(hotspotfile, usecols=column_names)
-    else:
-        logger.warning("No hotspots file is found")
-        return None
+    fs = s3fs.S3FileSystem(anon=True)
+
+    hotspotfile = "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
+    
+    #if os.path.isfile(hotspotfile):
+    #    column_names = ["datetime", "sensor", "latitude", "longitude"]
+    #    table = pd.read_csv(hotspotfile, usecols=column_names)
+    #else:
+    #    logger.warning("No hotspots file is found")
+    #    return None
+
+    column_names = ["datetime", "sensor", "latitude", "longitude"]
+    table = pd.read_csv(hotspotfile, usecols=column_names)
 
     start = (
         np.datetime64(period[0]).astype("datetime64[ns]") - np.datetime64(2, "M")
