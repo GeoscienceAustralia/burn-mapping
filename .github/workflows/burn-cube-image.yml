@@ -27,12 +27,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: lint Dockerfile
-        uses: hadolint/hadolint-action@v2.0.0
-        with:
-          dockerfile: docker/Dockerfile
-          ignore: DL3008,DL3002,DL3013,DL3059,SC2102
-
       - name: Build Burn Cube App image
         timeout-minutes: 20
         shell: bash
