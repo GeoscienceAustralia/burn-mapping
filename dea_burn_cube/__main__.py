@@ -154,31 +154,37 @@ def burn_cube_run(
 
     dc = datacube.Datacube(app='Burn Cube K8s processing', config=odc_config)
 
-    split_count = 2
+    split_count = 4
     
     x_code = region_id[:3]
     y_code = region_id[3:]
 
     polygon, geomed = get_geomed_ds(region_id, split_count, period, hnrs_config, geomed_bands)
     
-    out_list = []
-
     for x_i in range(split_count):
         for y_i in range(split_count):
             
             if x_i == 0 and y_i == 0:
                 out = generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polygon.geometry[0], x_i, y_i, split_count, x_code, y_code)
-                out_list.append(out)
                 
+                # let us assume the output is an AWS S3 path
                 if out:
+                    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                    local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+
                     comp = dict(zlib=True, complevel=5)
                     encoding = {var: comp for var in out.data_vars} # compression
 
-                    # just dump the result to local file
-                    os.makedirs(output, exist_ok=True)
-
                     # this will save it in the current working directory
-                    out.to_netcdf(f"{output}/{task_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc", encoding=encoding)
+                    out.to_netcdf(local_file_path, encoding=encoding)
+
+                    s3 = boto3.client('s3')
+
+                    from urllib.parse import urlparse
+                    o = urlparse(output)
+
+                    with open(local_file_path, "rb") as f:
+                        s3.upload_fileobj(f, o.netloc, f"{o.path}/{s3_file_path}")
 
 
 if __name__ == "__main__":
