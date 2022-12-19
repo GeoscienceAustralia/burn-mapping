@@ -1,0 +1,80 @@
+name: Burn Cube App Image Push
+
+env:
+  IMAGE_NAME: GeoscienceAustralia/burn-cube-app
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'dea_burn_cube/**'
+      - '.github/workflows/burn-cube-image.yml'
+      - 'Dockerfile'
+
+  release:
+    types: [created, edited]
+
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: lint Dockerfile
+        uses: hadolint/hadolint-action@v2.0.0
+        with:
+          dockerfile: docker/Dockerfile
+          ignore: DL3008,DL3002,DL3013,DL3059,SC2102
+
+      - name: Build Burn Cube App image
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          docker-compose build
+
+  set_tags:
+    if: github.ref == 'refs/heads/develop'
+      && (github.event_name == 'push' || (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build a new docker image with tag
+        id: tag-image
+        run: |
+          echo "TAG=dev$(git rev-parse --short HEAD)" \
+          >> $GITHUB_OUTPUT
+    outputs:
+      image_tag: ${{ steps.tag-image.outputs.TAG }}
+
+  push_ecr:
+    if: github.ref == 'refs/heads/develop'
+      && (needs.set_tags.outputs.image_tag)
+    needs: [test, set_tags]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::538673716275:role/burn_cube_github-actions-role
+          aws-region: ap-southeast-2
+
+      - name: Push image to ECR
+        uses: whoan/docker-build-with-cache-action@master
+        with:
+          context: ./docker
+          registry: 538673716275.dkr.ecr.ap-southeast-2.amazonaws.com
+          image_name: ${{ env.IMAGE_NAME }}
+          image_tag: latest,${{ needs.set_tags.outputs.image_tag }}
