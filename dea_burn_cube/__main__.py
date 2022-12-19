@@ -29,6 +29,10 @@ import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
 
 
+def gqa_predicate(ds):
+    return ds.metadata.gqa_iterative_mean_xy <= 1
+
+
 def get_geomed_ds(region_id, split_count, period, hnrs_config, geomed_bands):
     hnrs_dc = datacube.Datacube(app="geomed_loading", config=hnrs_config)
     
@@ -56,6 +60,7 @@ def generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polg
                                      geopolygon=gpgon,
                                      output_crs='EPSG:3577', resolution=(-30, 30), resampling={'fmask': 'nearest', '*': 'bilinear'},
                                      dask_chunks={},
+                                     predicate=gqa_predicate,
                                      time=period, group_by='solar_day')
     
     region_code = f"{x_code}{y_code}"
@@ -78,6 +83,7 @@ def generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polg
                                      geopolygon=gpgon,
                                      output_crs='EPSG:3577', resolution=(-30, 30), resampling={'fmask': 'nearest', '*': 'bilinear'},
                                      dask_chunks={},
+                                     predicate=gqa_predicate,
                                      time=mappingperiod, group_by='solar_day')
     
     mapping_ard = mapping_ard[ard_bands].to_array(dim='band').to_dataset(name='ard')
@@ -133,13 +139,12 @@ def burn_cube_run(
     period = (bc_running_task['Period Start'], bc_running_task['Period End'])
     mappingperiod = (bc_running_task['Mapping Period Start'], bc_running_task['Mapping Period End'])
 
+    # The following variables passed by K8s Pod manifest
     hnrs_config = {'db_hostname': os.getenv("HNRS_DB_HOSTNAME"),
                    'db_password': os.getenv("HNRS_DC_DB_PASSWORD"),
                    'db_username': os.getenv("HNRS_DC_DB_USERNAME"),
                    'db_port': 5432,
                    'db_database': os.getenv("HNRS_DC_DB_DATABASE")}
-
-    #print("hnrs_config:", hnrs_config)
 
     odc_config = {'db_hostname': os.getenv("ODC_DB_HOSTNAME"),
                   'db_password': os.getenv("ODC_DB_PASSWORD"),
@@ -147,16 +152,12 @@ def burn_cube_run(
                   'db_port': 5432,
                   'db_database': os.getenv("ODC_DB_DATABASE")}
 
-    #print("odc_config:", odc_config)
-
     dc = datacube.Datacube(app='Burn Cube K8s processing', config=odc_config)
 
     split_count = 2
     
     x_code = region_id[:3]
     y_code = region_id[3:]
-    
-    create_local_dask_cluster()
 
     polygon, geomed = get_geomed_ds(region_id, split_count, period, hnrs_config, geomed_bands)
     
@@ -177,7 +178,7 @@ def burn_cube_run(
                     os.makedirs(output, exist_ok=True)
 
                     # this will save it in the current working directory
-                    out.to_netcdf(f"{output}/BurnMapping_SirIvan_2017_C3_AWS_sandbox-{region_id}-{x_i}-{y_i}.nc",encoding=encoding)
+                    out.to_netcdf(f"{output}/{task_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc", encoding=encoding)
 
 
 if __name__ == "__main__":
