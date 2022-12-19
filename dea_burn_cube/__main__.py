@@ -79,6 +79,8 @@ def generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polg
     dis = utils.distances(ard, geomed)
     outliers_result = utils.outliers(ard, dis)
 
+    del ard, dis
+
     mapping_ard = dea_tools.datahandling.load_ard(dc, products=['ga_ls8c_ard_3'], measurements=ard_bands,
                                      geopolygon=gpgon,
                                      output_crs='EPSG:3577', resolution=(-30, 30), resampling={'fmask': 'nearest', '*': 'bilinear'},

@@ -4,3 +4,5 @@ pyproj==3.2.1
 s3fs==0.4.2
 dea_tools
 aiohttp
+Shapely==1.8.5.post1
+numpy==1.23.5

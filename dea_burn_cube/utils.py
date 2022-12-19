@@ -29,6 +29,7 @@ def task_to_ranges(task_id):
             "Mapping Period Start",
             "Mapping Period End",
         ],
+        dayfirst=True,
     )
 
     result_dict = {}
