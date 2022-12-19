@@ -1,7 +1,7 @@
 name: Burn Cube App Image Push
 
 env:
-  IMAGE_NAME: GeoscienceAustralia/burn-cube-app
+  IMAGE_NAME: geoscienceaustralia/burn-cube-app
 
 on:
   push:
