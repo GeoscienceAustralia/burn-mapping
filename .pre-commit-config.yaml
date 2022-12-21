@@ -1,0 +1,42 @@
+---
+# Test data is supposed to be verbatim, including errors. Exclude it from linting.
+exclude: nci_notebooks
+
+repos:
+    # Normalise all Python code. (Black + isort + pyupgrade + autoflake)
+    - repo: https://github.com/Zac-HD/shed
+      rev: 0.5.3
+      hooks:
+      - id: shed
+    - repo: https://gitlab.com/pycqa/flake8
+      # flake8 version should match .travis.yml
+      rev: 3.9.2
+      hooks:
+          - id: flake8
+            additional_dependencies:
+                  - flake8-broken-line # Don't escape newlines. (surround in parens or simplify)
+                  - flake8-debugger # Don't commit debugger calls
+                  - flake8-executable # Check shebangs and executable permissions
+                  - flake8-logging-format # Use log arguments, not string format
+                  - flake8-pep3101 # Don't use old string % formatting
+                  - flake8-pytest # Use plain assert, not unittest assertions
+                  - pep8-naming # Follow pep8 naming rules (eg. function names lowercase)
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v4.0.1
+      hooks:
+        - id: check-added-large-files # We don't want huge files. (Cut down test data!)
+          args: ['--maxkb=2000']
+        - id: check-case-conflict # Don't allow files that differ by case sensitivity.
+        - id: check-docstring-first # Avoid common error of code before docstring.
+        - id: check-json # Check json file syntax
+        - id: check-merge-conflict
+        - id: check-symlinks # Symlinks that don't point to anything?
+        - id: check-yaml # Check Yaml file syntax
+        - id: debug-statements # Avoid commiting debug/breakpoints
+        - id: end-of-file-fixer # Normalise on exactly one newline
+        - id: fix-byte-order-marker # No UTF-8 byte order marks
+        - id: mixed-line-ending # Don't allow mixed line endings
+        - id: pretty-format-json
+          args: ['--no-sort-keys', '--indent=4', '--autofix']
+        - id: requirements-txt-fixer # Keep requirements files sorted.
+        - id: trailing-whitespace # Auto remove trailing whitespace

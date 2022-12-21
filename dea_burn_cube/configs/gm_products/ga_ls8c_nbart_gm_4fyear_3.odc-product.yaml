@@ -68,7 +68,7 @@ measurements:
 
 load:
   crs: 'epsg:3577'
-  resolution: 
+  resolution:
     y: -30
     x: 30
   align:

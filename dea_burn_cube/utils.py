@@ -2,24 +2,23 @@ import ctypes
 import datetime
 import logging
 import multiprocessing as mp
-import os
 from contextlib import closing
 
 import numpy as np
 import pandas as pd
 import pyproj
+import s3fs
 import xarray as xr
 from shapely import geometry
 from shapely.geometry import Point
 from shapely.ops import unary_union
-import s3fs
 
 logger = logging.getLogger(__name__)
 
 
 def task_to_ranges(task_id):
 
-    fs = s3fs.S3FileSystem(anon=True)
+    _ = s3fs.S3FileSystem(anon=True)
 
     task_map = pd.read_csv(
         "s3://dea-public-data-dev/projects/burn_cube/configs/10-year-historical-processing.csv",
@@ -148,8 +147,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref ** 2))
-        / np.sqrt(np.nansum(obs ** 2, axis=0))
+        / np.sqrt(np.sum(ref**2))
+        / np.sqrt(np.nansum(obs**2, axis=0))
     )
     return cosdist
 
@@ -172,7 +171,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist ** 2)
+    euc_norm = np.sqrt(euc_dist**2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -901,14 +900,16 @@ def hotspot_polygon(period, extent, buffersize):
     #    logger.warning("No complete hotspots data after 2018")
     #    return None
 
-    fs = s3fs.S3FileSystem(anon=True)
+    _ = s3fs.S3FileSystem(anon=True)
 
-    hotspotfile = "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
-    
-    #if os.path.isfile(hotspotfile):
+    hotspotfile = (
+        "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
+    )
+
+    # if os.path.isfile(hotspotfile):
     #    column_names = ["datetime", "sensor", "latitude", "longitude"]
     #    table = pd.read_csv(hotspotfile, usecols=column_names)
-    #else:
+    # else:
     #    logger.warning("No hotspots file is found")
     #    return None
 

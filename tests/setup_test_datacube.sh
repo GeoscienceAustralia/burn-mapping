@@ -16,7 +16,7 @@ docker-compose exec -T public_index bash -c "tail -n+2 product_list.csv | grep '
 # Setup datacube
 docker-compose exec -T private_index datacube system init --no-default-types --no-init-users
 # Setup metadata types
-docker-compose exec -T private_index datacube metadata add "$METADATA_CATALOG" 
+docker-compose exec -T private_index datacube metadata add "$METADATA_CATALOG"
 # Add the product catalog
 docker-compose exec -T private_index datacube product add "$GEOMED_PRODUCT"
 
