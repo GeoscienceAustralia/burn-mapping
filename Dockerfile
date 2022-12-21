@@ -30,6 +30,7 @@ RUN apt-get update \
          curl \
          nano \
          unzip \
+         vim \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp

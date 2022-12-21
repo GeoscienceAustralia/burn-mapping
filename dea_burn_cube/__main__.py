@@ -4,26 +4,13 @@ Geoscience Australia
 """
 
 import click
-import itertools
+import boto3
 
 import datacube
 import dea_tools.datahandling
-import dea_tools.bandindices
 import geopandas as gpd
-import matplotlib.pyplot as plt
-import numpy as np
-import xarray as xr
-import datetime
-import matplotlib.dates as mdates
-import pandas as pd
 
-import numpy as np
-import geopandas as gpd
-from shapely.geometry import Polygon
-import json
-import xarray as xr
 import os
-from dea_tools.dask import create_local_dask_cluster
 
 import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
@@ -166,27 +153,29 @@ def burn_cube_run(
     for x_i in range(split_count):
         for y_i in range(split_count):
             
-            if x_i == 0 and y_i == 0:
-                out = generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polygon.geometry[0], x_i, y_i, split_count, x_code, y_code)
+            out = generate_subregion_result(dc, geomed, ard_bands, period, mappingperiod, polygon.geometry[0], x_i, y_i, split_count, x_code, y_code)
                 
-                # let us assume the output is an AWS S3 path
-                if out:
-                    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                    local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+            s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+            local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                
+            from urllib.parse import urlparse
+            o = urlparse(output)
+                
+            target_file_path = f"{o.path}/{s3_file_path}"
+                
+            # let us assume the output is an AWS S3 path
+            if out:
+                    
+                comp = dict(zlib=True, complevel=5)
+                encoding = {var: comp for var in out.data_vars} # compression
 
-                    comp = dict(zlib=True, complevel=5)
-                    encoding = {var: comp for var in out.data_vars} # compression
+                # this will save it in the current working directory
+                out.to_netcdf(local_file_path, encoding=encoding)
 
-                    # this will save it in the current working directory
-                    out.to_netcdf(local_file_path, encoding=encoding)
+                s3 = boto3.client('s3')
 
-                    s3 = boto3.client('s3')
-
-                    from urllib.parse import urlparse
-                    o = urlparse(output)
-
-                    with open(local_file_path, "rb") as f:
-                        s3.upload_fileobj(f, o.netloc, f"{o.path}/{s3_file_path}")
+                with open(local_file_path, "rb") as f:
+                    s3.upload_fileobj(f, o.netloc, target_file_path[1:])
 
 
 if __name__ == "__main__":
