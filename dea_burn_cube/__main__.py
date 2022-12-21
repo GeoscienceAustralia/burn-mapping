@@ -159,10 +159,18 @@ def main():
     # Don't mandate existence since this might be s3://.
     help="REQUIRED. Path to the output directory.",
 )
+@click.option(
+    "--split_count",
+    "-s",
+    type=int,
+    default=2,
+    help="The number of sub-region from a signle au-30 Grid region.",
+)
 def burn_cube_run(
     task_id,
     region_id,
     output,
+    split_count,
 ):
     bc_running_task = utils.generate_task(task_id)
 
@@ -196,8 +204,6 @@ def burn_cube_run(
     }
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
-
-    split_count = 4
 
     x_code = region_id[:3]
     y_code = region_id[3:]
