@@ -26,11 +26,13 @@ def gqa_predicate(ds):
     return ds.metadata.gqa_iterative_mean_xy <= 1
 
 
-def display_current_step_processing_duration(log_text, burn_cube_process_timer):
+def display_current_step_processing_duration(
+    log_text, burn_cube_process_timer, log_code
+):
     # display the datacube loading time
     now = datetime.now()
     duration = now - burn_cube_process_timer
-    logger.info(f"{log_text}: {duration.total_seconds()} seconds")
+    logger.info(f"{log_code}: {log_text} - {duration.total_seconds()} seconds")
 
     # remember to reset the timer
     return now
@@ -143,6 +145,8 @@ def generate_subregion_result(
     period,
     mappingperiod,
     gpgon,
+    task_id,
+    region_code,
     x_i,
     y_i,
     split_count,
@@ -180,6 +184,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text="Dask lazy loading duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     geomed = geomed.load()
@@ -189,6 +194,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The datacube loading {period} duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     dis = utils.distances(ard, geomed)
@@ -196,6 +202,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The burn cube processing {period} distance duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     outliers_result = utils.outliers(ard, dis)
@@ -203,6 +210,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The burn cube processing {period} outlier duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     del ard, dis
@@ -232,6 +240,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The datacube loading {mappingperiod} duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     mapping_dis = utils.distances(mapping_ard, geomed)
@@ -239,6 +248,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The burn cube processing {period} distance duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     severitymapping_result = utils.severitymapping(
@@ -248,6 +258,7 @@ def generate_subregion_result(
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text="The burn cube processing severity_mapping_result duration",
         burn_cube_process_timer=burn_cube_process_timer,
+        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
     return severitymapping_result, burn_cube_process_timer
@@ -367,7 +378,7 @@ def burn_cube_run(
     }
 
     logger.info(
-        f"processing info: period - {period}, mappingperiod - {mappingperiod}, region - region_id, task id - {task_id}"
+        f"period:{period}, mappingperiod:{mappingperiod}, region:{region_id}, task_id:{task_id}"
     )
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
@@ -384,6 +395,8 @@ def burn_cube_run(
                 period,
                 mappingperiod,
                 gpgon,
+                task_id,
+                region_id,
                 x_i,
                 y_i,
                 split_count,
@@ -414,6 +427,7 @@ def burn_cube_run(
                 burn_cube_process_timer = display_current_step_processing_duration(
                     log_text="The burn cube processing by wofs_summary",
                     burn_cube_process_timer=burn_cube_process_timer,
+                    log_code=f"{task_id}-{region_id}-{x_i}-{y_i}",
                 )
 
                 comp = dict(zlib=True, complevel=5)
@@ -434,11 +448,13 @@ def burn_cube_run(
                 burn_cube_process_timer = display_current_step_processing_duration(
                     log_text="The burn cube uploading result duration",
                     burn_cube_process_timer=burn_cube_process_timer,
+                    log_code=f"{task_id}-{region_id}-{x_i}-{y_i}",
                 )
 
     _ = display_current_step_processing_duration(
-        log_text=f"The burn cube processing resgion {task_id} - {region_id} duration",
+        log_text="The burn cube processing duration",
         burn_cube_process_timer=burn_cube_process_beginning,
+        log_code=f"{task_id}-{region_id}",
     )
 
 
