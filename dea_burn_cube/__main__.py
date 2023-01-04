@@ -230,7 +230,7 @@ def generate_subregion_result(
     mapping_ard = mapping_ard.load()
 
     burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The datacube loading {mapping_ard} duration",
+        log_text=f"The datacube loading {mappingperiod} duration",
         burn_cube_process_timer=burn_cube_process_timer,
     )
 
