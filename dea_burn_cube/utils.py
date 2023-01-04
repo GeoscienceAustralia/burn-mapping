@@ -147,8 +147,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref**2))
-        / np.sqrt(np.nansum(obs**2, axis=0))
+        / np.sqrt(np.sum(ref ** 2))
+        / np.sqrt(np.nansum(obs ** 2, axis=0))
     )
     return cosdist
 
@@ -171,7 +171,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist**2)
+    euc_norm = np.sqrt(euc_dist ** 2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -492,6 +492,7 @@ def dist_severity(params):
     """
     multiprocess version with shared memory of the severity algorithm
     """
+
     nbr = np.frombuffer(shared_in_arr01.get_obj(), dtype=np.float32).reshape(
         (-1, params[2])
     )
@@ -544,8 +545,8 @@ def distances(ard, geomed):
 
     t_dim = _x.time.data
     if len(t_dim) < 1:
-        print(f"--- {len(t_dim)} observations")
-        print("no enough data for the calculation of distances")
+        logger.warning(f"--- {len(t_dim)} observations")
+        logger.warning("no enough data for the calculation of distances")
         return
 
     nir = _x[3, :, :, :].data.astype("float32")
@@ -554,7 +555,7 @@ def distances(ard, geomed):
     swir2[swir2 <= 0] = np.nan
     nbr = (nir - swir2) / (nir + swir2)
 
-    print("begin to process distance")
+    logger.info("begin to process distance")
 
     out_arr1 = mp.Array(ctypes.c_float, len(t_dim) * n)
     out_arr2 = mp.Array(ctypes.c_float, len(t_dim) * n)
@@ -620,7 +621,7 @@ def distances(ard, geomed):
     ) as p:
         chunk = 1
         if n == 0:
-            print("no point")
+            logger.warning("no point")
             return
         p.map_async(
             dist_distance,
@@ -674,7 +675,8 @@ def outliers(dataset, distances):
     """
     Calculate the outliers for distances for change detection
     """
-    # print(dists)
+    logger.info("begin to process outlier")
+
     if distances is None:
         logger.warning("no distances for the outlier calculations")
         return
@@ -893,6 +895,8 @@ def hotspot_polygon(period, extent, buffersize):
     >>>polygons = hotspot_polygon(year,extent,4000)
     """
 
+    logger.info("begin to process hotspot polygon")
+
     # print("extent", extent)
 
     # year = int(str(period[0])[0:4])
@@ -964,8 +968,11 @@ def severitymapping(
         method: methods for change detection
         growing: whether to grow the region
     """
+
+    logger.info("begin to process severity")
+
     if dists is None:
-        print("No data available for severity mapping")
+        logger.warning("no data available for severity mapping")
         return None
 
     c_dist = dists.CDist.data.reshape((len(dists.time), -1))
@@ -1001,7 +1008,7 @@ def severitymapping(
         raise ValueError
 
     if len(outlierind) == 0:
-        print("no burnt area detected")
+        logger.warning("no burnt area detected")
         return None
     # input shared arrays
     in_arr1 = mp.Array(ctypes.c_float, len(dists.time[:]) * len(outlierind))
@@ -1198,7 +1205,7 @@ def severitymapping(
     hot_spot_mask = np.zeros((len(dists.y), len(dists.x)))
 
     if polygons is None or polygons.is_empty:
-        logger.warning("No hotspots data.")
+        logger.warning("no hotspots data")
     else:
         coords = out.coords
 
@@ -1216,3 +1223,14 @@ def severitymapping(
         out["Corroborate"] = (("y", "x"), hot_spot_mask.data.astype("int16"))
         out = post_filtering(out, hotspots_filtering=True, date_filtering=False)
     return create_attributes(out, "Burned Area Map", "v1.0", method)
+
+
+def burnpixel_masking(data, varname):
+    """
+    This function converts the severity map into a burn pixel mask
+    Required input:
+    data: severity data in 2D, e.g. output from severity_mapping in the changedection.py
+    """
+    burnpixel = data[varname]
+    burnpixel.data[burnpixel.data > 1] = 1
+    return burnpixel

@@ -1,4 +1,4 @@
 [flake8]
-ignore = W293, W504, W503
+ignore = W293, W504, W503, G004
 
 max_line_length = 120
