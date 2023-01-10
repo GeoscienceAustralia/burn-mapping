@@ -22,6 +22,9 @@ logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+BUCKET_NAME = "dea-public-data-dev"
+
+
 def gqa_predicate(ds):
     return ds.metadata.gqa_iterative_mean_xy <= 1
 
@@ -251,8 +254,12 @@ def generate_subregion_result(
         log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
+    hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
+
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"s3://dea-public-data-dev/projects/burn_cube/support_data/{task_id}-hotspot_historic.csv"
+    hotspotfile = f"s3://{BUCKET_NAME}/projects/WaterBodies/sai-test/burn-cube-app/support_data/{hotspot_csv_file}"
+
+    logger.info(f"Load hotspot information from: {hotspotfile}")
 
     severitymapping_result = utils.severitymapping(
         mapping_dis,
@@ -321,9 +328,6 @@ def update_hotspot_data(
     task_id,
     verbose,
 ):
-    # the latest hotspot_historic will be saved in:
-    # "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
-
     logging_setup(verbose)
 
     # use task_id to get the mappingperiod information to filter hotspot
@@ -385,8 +389,19 @@ def update_hotspot_data(
 
             filtered_df = hotspot_df[hotspot_df.index.isin(index)]
 
+            filtered_csv = f"{task_id}-{csv_filename}"
+
             # save the current task hotspot information to its CSV file, and upload to S3 later
-            filtered_df.to_csv(f"{task_id}-{csv_filename}", index=False)
+            filtered_df.to_csv(filtered_csv, index=False)
+
+            s3 = boto3.client("s3")
+
+            with open(filtered_csv, "rb") as f:
+                s3.upload_fileobj(
+                    f,
+                    BUCKET_NAME,
+                    f"projects/WaterBodies/sai-test/burn-cube-app/support_data/{filtered_csv}",
+                )
 
 
 @main.command(no_args_is_help=True)
