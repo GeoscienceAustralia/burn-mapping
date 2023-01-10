@@ -35,7 +35,10 @@ def display_current_step_processing_duration(
     # display the datacube loading time
     now = datetime.now()
     duration = now - burn_cube_process_timer
-    logger.info(f"{log_code}: {log_text} - {duration.total_seconds()} seconds")
+
+    log_info = f"{log_code}: {log_text} - {duration.total_seconds()} seconds"
+
+    logger.info(log_info)
 
     # remember to reset the timer
     return now
@@ -481,9 +484,9 @@ def burn_cube_run(
         "db_database": os.getenv("ODC_DB_DATABASE"),
     }
 
-    logger.info(
-        f"period:{period}, mappingperiod:{mappingperiod}, region:{region_id}, task_id:{task_id}"
-    )
+    logger.info(f"Use period: {period}")
+
+    logger.info(f"Use mappingperiod: {mappingperiod}")
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
 
