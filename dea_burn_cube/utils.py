@@ -882,7 +882,7 @@ def create_attributes(dataset, product_name, version, method, res=30):
     return dataset
 
 
-def hotspot_polygon(period, extent, buffersize):
+def hotspot_polygon(period, extent, buffersize, hotspotfile):
     """Create polygons for the hotspot with a buffer
     year: given year for hotspots data
     extent: [xmin,xmax,ymin,ymax] in crs EPSG:3577
@@ -906,9 +906,9 @@ def hotspot_polygon(period, extent, buffersize):
 
     _ = s3fs.S3FileSystem(anon=True)
 
-    hotspotfile = (
-        "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
-    )
+    # hotspotfile = (
+    #    "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
+    # )
 
     # if os.path.isfile(hotspotfile):
     #    column_names = ["datetime", "sensor", "latitude", "longitude"]
@@ -959,7 +959,7 @@ def hotspot_polygon(period, extent, buffersize):
 
 
 def severitymapping(
-    dists, outlrs, period, method="NBR", growing=True, hotspots_period=None
+    dists, outlrs, period, hotspotfile, method="NBR", growing=True, hotspots_period=None
 ):
     """Calculates burnt area for a given period
     Args:
@@ -1198,7 +1198,7 @@ def severitymapping(
     if hotspots_period is None:
         hotspots_period = period
     polygons = hotspot_polygon(
-        hotspots_period, extent, 4000
+        hotspots_period, extent, 4000, hotspotfile
     )  # generate hotspot polygons with 4km buffer
 
     # default mask

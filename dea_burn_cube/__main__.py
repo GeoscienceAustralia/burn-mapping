@@ -251,8 +251,16 @@ def generate_subregion_result(
         log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
     )
 
+    # the hotspotfile setup will be finished by step: update_hotspot_data
+    hotspotfile = f"s3://dea-public-data-dev/projects/burn_cube/support_data/{task_id}-hotspot_historic.csv"
+
     severitymapping_result = utils.severitymapping(
-        mapping_dis, outliers_result, mappingperiod, method="NBR", growing=True
+        mapping_dis,
+        outliers_result,
+        mappingperiod,
+        hotspotfile,
+        method="NBR",
+        growing=True,
     )
 
     burn_cube_process_timer = display_current_step_processing_duration(
@@ -298,6 +306,87 @@ def logging_setup(verbose: int):
 @click.version_option(version=dea_burn_cube.__version__)
 def main():
     """Run dea-burn-cube."""
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option("-v", "--verbose", count=True)
+def update_hotspot_data(
+    task_id,
+    verbose,
+):
+    # the latest hotspot_historic will be saved in:
+    # "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
+
+    logging_setup(verbose)
+
+    # use task_id to get the mappingperiod information to filter hotspot
+    bc_running_task = utils.generate_task(task_id)
+
+    mappingperiod = (
+        bc_running_task["Mapping Period Start"],
+        bc_running_task["Mapping Period End"],
+    )
+
+    logger.info(f"Use mappingperiod:{mappingperiod} to filter hotspot file")
+
+    import numpy as np
+
+    start = (
+        np.datetime64(mappingperiod[0]).astype("datetime64[ns]") - np.datetime64(2, "M")
+    ).astype("datetime64[ns]")
+    stop = np.datetime64(mappingperiod[1])
+
+    # the current (10/01/2023) zip file size is 430MB. It is safe to download it to local file system
+    import shutil
+
+    import requests
+
+    hotspot_product_url = (
+        "https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip"
+    )
+    filename = "all-data-csv.zip"
+    csv_filename = "hotspot_historic.csv"
+
+    r = requests.get(hotspot_product_url, stream=True)
+    r.raw.decode_content = True
+    with open(filename, "wb") as f:
+        shutil.copyfileobj(r.raw, f)
+
+    # load the CSV file from zip file
+    import zipfile
+
+    import pandas as pd
+
+    with zipfile.ZipFile(filename) as z:
+        # TODO: find a way to check the actual CSV file from zip file
+        with z.open(csv_filename) as f:
+
+            # only load these 4 columns from hotspot to save RAM
+            column_names = ["datetime", "sensor", "latitude", "longitude"]
+
+            # read the hotspot data as Pandas.DataFrame
+            hotspot_df = pd.read_csv(f, usecols=column_names, low_memory=False)
+
+            dates = pd.to_datetime(
+                hotspot_df.datetime.apply(lambda x: x.split("+")[0]).values
+            )
+
+            # filter the dataframe: just filter by period and sensor information
+            index = np.where(
+                (hotspot_df.sensor == "MODIS") & (dates >= start) & (dates <= stop)
+            )[0]
+
+            filtered_df = hotspot_df[hotspot_df.index.isin(index)]
+
+            # save the current task hotspot information to its CSV file, and upload to S3 later
+            filtered_df.to_csv(f"{task_id}-{csv_filename}", index=False)
 
 
 @main.command(no_args_is_help=True)
