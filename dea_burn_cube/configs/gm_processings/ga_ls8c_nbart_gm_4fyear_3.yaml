@@ -53,11 +53,11 @@ product:
     abstract: Simple true-colour image, using the red, green and blue bands
     components:
       red:
-        nbart_red: 1
+        red: 1
       green:
-        nbart_green: 1
+        green: 1
       blue:
-        nbart_blue: 1
+        blue: 1
     scale_range:
     - 0
     - 3000
