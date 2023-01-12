@@ -44,10 +44,10 @@ def display_current_step_processing_duration(
     return now
 
 
-def get_geomed_ds(region_id, period, hnrs_config, geomed_bands):
+def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_name):
     hnrs_dc = datacube.Datacube(app="geomed_loading", config=hnrs_config)
 
-    metadata_files = hnrs_dc.find_datasets(product="ga_ls8c_nbart_gm_4cyear_3")
+    metadata_files = hnrs_dc.find_datasets(product=geomed_product_name)
 
     # TODO: we should use au-30 grid to replace this section
     sample_dataset = [
@@ -68,9 +68,11 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands):
         region_polygon.geometry[0], crs="epsg:3577"
     )
 
+    # Use find_datasets to get the
+
     # TODO: check the 4-year period will grab only one GeoMAD as we wish, or more than one
     geomed = hnrs_dc.load(
-        "ga_ls8c_nbart_gm_4cyear_3",
+        geomed_product_name,
         time=period,
         geopolygon=gpgon,
         resampling="nearest",
@@ -437,12 +439,19 @@ def update_hotspot_data(
     default=2,
     help="The number of sub-region from a signle au-30 Grid region.",
 )
+@click.option(
+    "--geomed_product_name",
+    "-g",
+    type=str,
+    help="The 4-year period GeoMED product name, e.g. ga_ls8c_nbart_gm_4cyear_3 or ga_ls8c_nbart_gm_4fyear_3.",
+)
 @click.option("-v", "--verbose", count=True)
 def burn_cube_run(
     task_id,
     region_id,
     output,
     split_count,
+    geomed_product_name,
     verbose,
 ):
 
@@ -490,7 +499,9 @@ def burn_cube_run(
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
 
-    gpgon, geomed = get_geomed_ds(region_id, period, hnrs_config, geomed_bands)
+    gpgon, geomed = get_geomed_ds(
+        region_id, period, hnrs_config, geomed_bands, geomed_product_name
+    )
 
     for x_i in range(split_count):
         for y_i in range(split_count):
@@ -510,8 +521,14 @@ def burn_cube_run(
                 burn_cube_process_timer,
             )
 
-            s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-            local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+            if split_count != 1:
+                s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+            else:
+                s3_file_path = (
+                    f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
+                )
+                local_file_path = f"BurnMapping-{task_id}-{region_id}.nc"
 
             from urllib.parse import urlparse
 
