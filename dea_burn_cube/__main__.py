@@ -532,12 +532,12 @@ def burn_cube_run(
 
             if split_count != 1:
                 s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                local_file_path = f"BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
             else:
                 s3_file_path = (
                     f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
                 )
-                local_file_path = f"BurnMapping-{task_id}-{region_id}.nc"
+                local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
 
             from urllib.parse import urlparse
 
