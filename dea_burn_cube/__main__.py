@@ -68,7 +68,16 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
         region_polygon.geometry[0], crs="epsg:3577"
     )
 
-    # Use find_datasets to get the
+    # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
+    datasets = hnrs_dc.find_datasets(
+        product=geomed_product_name, geopolygon=gpgon, time=period
+    )
+
+    # Ideally, the number of datasets should be 1
+    logger.info(f"Loda GeoMAD from {geomed_product_name}")
+
+    for dataset in datasets:
+        logger.info(f"Find GeoMAD dataset with metadata: {dataset.metadata_doc}")
 
     # TODO: check the 4-year period will grab only one GeoMAD as we wish, or more than one
     geomed = hnrs_dc.load(
