@@ -14,6 +14,7 @@ import datacube
 import dea_tools.datahandling
 import geopandas as gpd
 import xarray as xr
+from dea_tools.dask import create_local_dask_cluster
 
 import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
@@ -168,6 +169,7 @@ def generate_subregion_result(
     y_i,
     split_count,
     burn_cube_process_timer,
+    dask_client,
 ):
 
     ard = dea_tools.datahandling.load_ard(
@@ -207,6 +209,9 @@ def generate_subregion_result(
     geomed = geomed.load()
     ard = ard.load()
 
+    # turn off the dask client to aviod RAM dump to Disk behavior
+    dask_client.close()
+
     # display the datacube loading time
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The datacube loading {period} duration",
@@ -232,6 +237,8 @@ def generate_subregion_result(
 
     del ard, dis
 
+    dask_client = create_local_dask_cluster(return_client=True)
+
     mapping_ard = dea_tools.datahandling.load_ard(
         dc,
         products=["ga_ls8c_ard_3"],
@@ -253,6 +260,9 @@ def generate_subregion_result(
     )
 
     mapping_ard = mapping_ard.load()
+
+    # turn off the dask client to aviod RAM dump to Disk behavior
+    dask_client.close()
 
     burn_cube_process_timer = display_current_step_processing_duration(
         log_text=f"The datacube loading {mappingperiod} duration",
@@ -508,6 +518,8 @@ def burn_cube_run(
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
 
+    dask_client = create_local_dask_cluster(return_client=True)
+
     gpgon, geomed = get_geomed_ds(
         region_id, period, hnrs_config, geomed_bands, geomed_product_name
     )
@@ -528,11 +540,14 @@ def burn_cube_run(
                 y_i,
                 split_count,
                 burn_cube_process_timer,
+                dask_client,
             )
 
             if split_count != 1:
                 s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                local_file_path = (
+                    f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                )
             else:
                 s3_file_path = (
                     f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
