@@ -907,7 +907,7 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
     _ = s3fs.S3FileSystem(anon=True)
 
     # hotspotfile = (
-    #    "s3://dea-public-data-dev/projects/burn_cube/support_data/hotspot_historic.csv"
+    #    "s3://dea-public-data-dev/projects/burn_cube/ancillary_file/hotspot_historic.csv"
     # )
 
     # if os.path.isfile(hotspotfile):

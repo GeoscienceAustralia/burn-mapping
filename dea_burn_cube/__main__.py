@@ -273,7 +273,7 @@ def generate_subregion_result(
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"s3://{BUCKET_NAME}/projects/WaterBodies/sai-test/burn-cube-app/support_data/{hotspot_csv_file}"
+    hotspotfile = f"s3://{BUCKET_NAME}/projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{hotspot_csv_file}"
 
     logger.info(f"Load hotspot information from: {hotspotfile}")
 
@@ -414,7 +414,7 @@ def update_hotspot_data(
                 s3.upload_fileobj(
                     f,
                     BUCKET_NAME,
-                    f"projects/WaterBodies/sai-test/burn-cube-app/support_data/{filtered_csv}",
+                    f"projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{filtered_csv}",
                 )
 
 
