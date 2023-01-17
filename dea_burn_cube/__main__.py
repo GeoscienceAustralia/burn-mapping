@@ -14,6 +14,8 @@ import datacube
 import dea_tools.datahandling
 import geopandas as gpd
 import xarray as xr
+from datacube.utils import geometry
+from datacube.utils.cog import write_cog
 
 import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
@@ -532,7 +534,9 @@ def burn_cube_run(
 
             if split_count != 1:
                 s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                local_file_path = (
+                    f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+                )
             else:
                 s3_file_path = (
                     f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
@@ -577,6 +581,27 @@ def burn_cube_run(
 
                 with open(local_file_path, "rb") as f:
                     s3.upload_fileobj(f, o.netloc, target_file_path[1:])
+
+                # use to_cog feature to convert each band from XArray.Dataset to COG
+                for band, dv in burn_cube_result_apply_wofs.data_vars.items():
+                    ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
+                    ds_output.attrs["crs"] = geometry.CRS("EPSG:3577")
+                    da_output = ds_output.to_array()
+
+                    local_tiff_file = local_file_path.replace(
+                        ".nc", f"-{band.lower()}.tif"
+                    )
+
+                    write_cog(geo_im=da_output, fname=local_tiff_file)
+
+                    logger.info(f"Dump GeoTiff file: {local_tiff_file}")
+
+                    with open(local_tiff_file, "rb") as f:
+                        s3.upload_fileobj(
+                            f,
+                            o.netloc,
+                            target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
+                        )
 
                 burn_cube_process_timer = display_current_step_processing_duration(
                     log_text="The burn cube uploading result duration",
