@@ -306,9 +306,7 @@ def logging_setup(verbose: int):
     loggers = [
         logging.getLogger(name)
         for name in logging.root.manager.loggerDict
-        if not name.startswith("fiona")
-        and not name.startswith("sqlalchemy")
-        and not name.startswith("boto")
+        if not name.startswith("sqlalchemy") and not name.startswith("boto")
     ]
     # For compatibility with docker+pytest+click stack...
     stdout_hdlr = logging.StreamHandler(sys.stdout)
