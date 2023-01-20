@@ -924,10 +924,10 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
         np.datetime64(period[0]).astype("datetime64[ns]") - np.datetime64(2, "M")
     ).astype("datetime64[ns]")
     stop = np.datetime64(period[1])
-    extent[0] = extent[0] - 200000
-    extent[1] = extent[1] + 200000
-    extent[2] = extent[2] - 200000
-    extent[3] = extent[3] + 200000
+    extent[0] = extent[0] - 100000
+    extent[1] = extent[1] + 100000
+    extent[2] = extent[2] - 100000
+    extent[3] = extent[3] + 100000
 
     dates = pd.to_datetime(table.datetime.apply(lambda x: x.split("+")[0]).values)
 
