@@ -712,7 +712,7 @@ def region_growing(severity, dists, outlrs):
     from skimage import measure
 
     # see http://www.scipy-lectures.org/packages/scikit-image/index.html#binary-segmentation-foreground-background
-    fraction_seedmap = 0.20  # this much of region must already have been mapped as burnt to be included
+    fraction_seedmap = 0.10  # this much of region must already have been mapped as burnt to be included
     seed_map = (severity.Severe.data > 0).astype(
         int
     )  # use 'Severe' burns as seed map to grow
