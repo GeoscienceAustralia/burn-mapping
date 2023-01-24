@@ -179,7 +179,7 @@ def generate_subregion_result(
         mask_filters=[("dilation", 10)],
         mask_contiguity=True,
         dask_chunks={},
-        predicate=gqa_predicate,
+        # predicate=gqa_predicate,
         time=period,
         group_by="solar_day",
     )
@@ -243,7 +243,7 @@ def generate_subregion_result(
         mask_filters=[("dilation", 10)],
         mask_contiguity=True,
         dask_chunks={},
-        predicate=gqa_predicate,
+        # predicate=gqa_predicate,
         time=mappingperiod,
         group_by="solar_day",
     )

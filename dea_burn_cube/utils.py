@@ -1163,7 +1163,7 @@ def severitymapping(
     out["StartDate"] = (("y", "x"), startdate)
     out["Duration"] = (("y", "x"), duration.astype("int16"))
     burnt = np.zeros((len(dists.y), len(dists.x)))
-    burnt[duration > 0] = 1
+    burnt[duration > 1] = 1
     out["Severity"] = (("y", "x"), sevindex.astype("float32"))
     out["Severe"] = (("y", "x"), burnt.astype("int16"))
 
