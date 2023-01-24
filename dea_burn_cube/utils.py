@@ -257,7 +257,7 @@ def severity(
                         cosdist[outlierind[ii] + 1] + cosdist[outlierind[ii]]
                     ) - 2 * cos_dist_outlier
                     area_above_d0 = (
-                        area_above_d0 + 0.6 * y1_y0 * t1_t0
+                        area_above_d0 + 0.5 * y1_y0 * t1_t0
                     )  # calculate the area under the curve
                     duration = duration + t1_t0
                     tt.append(ii)  # record the index where it is detected as a change
