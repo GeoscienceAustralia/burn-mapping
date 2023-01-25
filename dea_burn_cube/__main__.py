@@ -13,6 +13,8 @@ import click
 import datacube
 import dea_tools.datahandling
 import geopandas as gpd
+import pandas as pd
+import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
@@ -327,6 +329,114 @@ def logging_setup(verbose: int):
 @click.version_option(version=dea_burn_cube.__version__)
 def main():
     """Run dea-burn-cube."""
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
+    "--region-list-s3-path",
+    "-r",
+    type=str,
+    default=None,
+    help="REQUIRED. The AU-30 Region list in GeoJSON format.",
+)
+@click.option("-v", "--verbose", count=True)
+def filter_regions(task_id, region_list_s3_path, verbose):
+    """
+    There are two assumptions on this method:
+    1. user always use AU-30 grid standard GeoJSON
+        The example region-list:
+            s3://dea-public-data-dev/mangroves_aux/easter_vic.geojson
+    2. user already updated hotspot, and we can use the clean-up CSV file
+    """
+    logging_setup(verbose)
+
+    _ = s3fs.S3FileSystem(anon=True)
+
+    region_gdf = gpd.read_file(region_list_s3_path)
+
+    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/airflow-run/burn-cube-app/ancillary_file"
+
+    logger.info(f"Filter {region_list_s3_path} by Ocean Mask")
+    ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
+    ocean_mask = gpd.read_file(ocean_mask_path)
+
+    # the Ocean Mask CRS should be: EPSG:3577
+    filter_by_ocean_mask = []
+
+    for region_index in region_gdf.index:
+        region_id = region_gdf.region_code[region_index]
+        region_geometry = region_gdf.geometry[region_index]
+
+        for ocean_index in ocean_mask.index:
+            if region_geometry.intersects(ocean_mask.geometry[ocean_index]):
+                filter_by_ocean_mask.append(region_id)
+                break
+
+    region_gdf = region_gdf[
+        region_gdf["region_code"].isin(filter_by_ocean_mask)
+    ].reindex()
+
+    logger.info(
+        f"The number of region changes to {len(region_gdf)} after Ocean Mask filter"
+    )
+
+    # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
+    # also the geometry are always Polygon
+
+    hotspot_file = f"{ancillary_folder}/{task_id}-hotspot_historic.csv"
+
+    logger.info(f"Filter regions by Hot Spot {hotspot_file}")
+
+    hotspot_df = pd.read_csv(hotspot_file)
+
+    import pyproj
+    from shapely.geometry import Point
+    from shapely.ops import unary_union
+
+    latitude = hotspot_df.latitude.values
+    longitude = hotspot_df.longitude.values
+
+    reverse_transformer = pyproj.Transformer.from_crs("EPSG:4283", "EPSG:3577")
+    easting, northing = reverse_transformer.transform(latitude, longitude)
+
+    patch = [
+        Point(easting[i], northing[i]).buffer(4000) for i in range(0, len(hotspot_df))
+    ]
+    hotspot_polygons = unary_union(patch)
+
+    filter_by_hotspot = []
+
+    for region_index in region_gdf.index:
+        region_id = region_gdf.region_code[region_index]
+        region_geometry = region_gdf.geometry[region_index]
+        if region_geometry.intersects(hotspot_polygons):
+            filter_by_hotspot.append(region_id)
+
+    region_gdf = region_gdf[region_gdf["region_code"].isin(filter_by_hotspot)].reindex()
+
+    logger.info(
+        f"The number of region changes to {len(region_gdf)} after Hot Spot filter"
+    )
+
+    local_json_file = f"{task_id}-regions.json"
+
+    region_gdf.to_file(local_json_file, driver="GeoJSON")
+
+    s3 = boto3.client("s3")
+
+    with open(local_json_file, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            BUCKET_NAME,
+            f"projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{local_json_file}",
+        )
 
 
 @main.command(no_args_is_help=True)
