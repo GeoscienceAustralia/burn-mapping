@@ -363,6 +363,7 @@ def filter_regions(task_id, region_list_s3_path, verbose):
     gpd.io.file._VALID_URLS.discard("s3")
 
     region_gdf = gpd.read_file(region_list_s3_path)
+    region_gdf = region_gdf.to_crs(epsg='3577')
 
     ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/airflow-run/burn-cube-app/ancillary_file"
 
