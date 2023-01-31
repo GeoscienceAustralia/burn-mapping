@@ -168,6 +168,7 @@ def generate_subregion_result(
     y_i,
     split_count,
     burn_cube_process_timer,
+    output_folder,
 ):
 
     ard = dea_tools.datahandling.load_ard(
@@ -275,7 +276,7 @@ def generate_subregion_result(
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"s3://{BUCKET_NAME}/projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{hotspot_csv_file}"
+    hotspotfile = f"{output_folder}/ancillary_file/{hotspot_csv_file}"
 
     logger.info(f"Load hotspot information from: {hotspotfile}")
 
@@ -346,8 +347,15 @@ def main():
     default=None,
     help="REQUIRED. The AU-30 Region list in GeoJSON format.",
 )
+@click.option(
+    "--output-s3-folder",
+    "-o",
+    type=str,
+    default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
+    help="The ancillary_file folder which save clean-up region list file.",
+)
 @click.option("-v", "--verbose", count=True)
-def filter_regions(task_id, region_list_s3_path, verbose):
+def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     """
     There are two assumptions on this method:
     1. user always use AU-30 grid standard GeoJSON
@@ -363,9 +371,9 @@ def filter_regions(task_id, region_list_s3_path, verbose):
     gpd.io.file._VALID_URLS.discard("s3")
 
     region_gdf = gpd.read_file(region_list_s3_path)
-    region_gdf = region_gdf.to_crs(epsg='3577')
+    region_gdf = region_gdf.to_crs(epsg="3577")
 
-    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/airflow-run/burn-cube-app/ancillary_file"
+    ancillary_folder = f"s3://dea-public-data-dev/{output_s3_folder}"
 
     logger.info(f"Filter {region_list_s3_path} by Ocean Mask")
     ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
@@ -439,7 +447,7 @@ def filter_regions(task_id, region_list_s3_path, verbose):
         s3.upload_fileobj(
             f,
             BUCKET_NAME,
-            f"projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{local_json_file}",
+            f"{output_s3_folder}/{local_json_file}",
         )
 
 
@@ -451,9 +459,17 @@ def filter_regions(task_id, region_list_s3_path, verbose):
     default=None,
     help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
 )
+@click.option(
+    "--output-s3-folder",
+    "-o",
+    type=str,
+    default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
+    help="The ancillary_file folder which save clean-up Hotspot CSV file.",
+)
 @click.option("-v", "--verbose", count=True)
 def update_hotspot_data(
     task_id,
+    output_s3_folder,
     verbose,
 ):
     logging_setup(verbose)
@@ -528,7 +544,7 @@ def update_hotspot_data(
                 s3.upload_fileobj(
                     f,
                     BUCKET_NAME,
-                    f"projects/burn_cube/airflow-run/burn-cube-app/ancillary_file/{filtered_csv}",
+                    f"{output_s3_folder}/{filtered_csv}",
                 )
 
 
@@ -642,6 +658,7 @@ def burn_cube_run(
                 y_i,
                 split_count,
                 burn_cube_process_timer,
+                output,
             )
 
             if split_count != 1:
