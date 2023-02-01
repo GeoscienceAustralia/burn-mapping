@@ -572,17 +572,24 @@ def update_hotspot_data(
     help="REQUIRED. Path to the output directory.",
 )
 @click.option(
-    "--split_count",
+    "--split-count",
     "-s",
     type=int,
     default=2,
     help="The number of sub-region from a signle au-30 Grid region.",
 )
 @click.option(
-    "--geomed_product_name",
+    "--geomed-product-name",
     "-g",
     type=str,
     help="The 4-year period GeoMED product name, e.g. ga_ls8c_nbart_gm_4cyear_3 or ga_ls8c_nbart_gm_4fyear_3.",
+)
+@click.option(
+    "--task-table",
+    "-b",
+    type=str,
+    default="10-year-historical-processing-4year-geomad.csv",
+    help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
 )
 @click.option("-v", "--verbose", count=True)
 def burn_cube_run(
@@ -591,6 +598,7 @@ def burn_cube_run(
     output,
     split_count,
     geomed_product_name,
+    task_table,
     verbose,
 ):
 
@@ -601,7 +609,7 @@ def burn_cube_run(
 
     logging_setup(verbose)
 
-    bc_running_task = utils.generate_task(task_id)
+    bc_running_task = utils.generate_task(task_id, task_table)
 
     geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]
 

@@ -16,18 +16,20 @@ from shapely.ops import unary_union
 logger = logging.getLogger(__name__)
 
 
-def task_to_ranges(task_id):
+def task_to_ranges(task_id, task_table):
 
     _ = s3fs.S3FileSystem(anon=True)
 
+    periods_columns = [
+        "Period Start",
+        "Period End",
+        "Mapping Period Start",
+        "Mapping Period End",
+    ]
+
     task_map = pd.read_csv(
-        "s3://dea-public-data-dev/projects/burn_cube/configs/10-year-historical-processing.csv",
-        parse_dates=[
-            "Period Start",
-            "Period End",
-            "Mapping Period Start",
-            "Mapping Period End",
-        ],
+        f"s3://dea-public-data-dev/projects/burn_cube/configs/{task_table}",
+        parse_dates=periods_columns,
         dayfirst=True,
     )
 
@@ -37,18 +39,6 @@ def task_to_ranges(task_id):
         return result_dict
 
     task_info = task_map[task_map["Processing Name"] == task_id].iloc[0]
-
-    upstream_products = ["GeoMED", "WOfS summary"]
-
-    for upstream_product in upstream_products:
-        result_dict[upstream_product] = task_info[upstream_product]
-
-    periods_columns = [
-        "Period Start",
-        "Period End",
-        "Mapping Period Start",
-        "Mapping Period End",
-    ]
 
     for periods_column in periods_columns:
         result_dict[periods_column] = task_info[periods_column].strftime("%Y-%m-%d")
@@ -63,6 +53,7 @@ def dynamic_task_to_ranges(dtime):
 
     result_dict = {}
 
+    # TODO: change me if we plan to move to 3/2 years processing period
     result_dict["Period Start"] = datetime.datetime(
         dtime.year - 5, dtime.month + 1, 1
     ).strftime("%Y-%m-%d")
@@ -78,27 +69,17 @@ def dynamic_task_to_ranges(dtime):
         dtime.year, dtime.month, mapping_period_last_day
     ).strftime("%Y-%m-%d")
 
-    if dtime.month < 5:
-        result_dict["GeoMED"] = f"ga_ls8c_gm_cyear_3_{dtime.year - 5}--P4Y"
-        result_dict["WOfS summary"] = f"ga_ls_wo_fq_cyear_3_{dtime.year - 1}--P1Y"
-    elif dtime.month == 12:
-        result_dict["GeoMED"] = f"ga_ls8c_gm_cyear_3_{dtime.year - 4}--P4Y"
-        result_dict["WOfS summary"] = f"ga_ls_wo_fq_cyear_3_{dtime.year}--P1Y"
-    else:
-        result_dict["GeoMED"] = f"ga_ls8c_gm_fyear_3_{dtime.year - 5}-07--P4Y"
-        result_dict["WOfS summary"] = f"ga_ls_wo_fq_fyear_3_{dtime.year}-07--P1Y"
-
     return result_dict
 
 
-def generate_task(task_id):
+def generate_task(task_id, task_table):
     updated_task_id = f"{task_id.split('-')[0]}-20{task_id.split('-')[1]}"
     dtime = datetime.datetime.strptime(updated_task_id, "%b-%Y")
 
     if dtime.year > 2023:
         result_dict = dynamic_task_to_ranges(dtime)
     else:
-        result_dict = task_to_ranges(task_id)
+        result_dict = task_to_ranges(task_id, task_table)
     return result_dict
 
 
