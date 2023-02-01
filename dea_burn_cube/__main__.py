@@ -49,28 +49,25 @@ def display_current_step_processing_duration(
 
 
 def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_name):
-    hnrs_dc = datacube.Datacube(app="geomed_loading", config=hnrs_config)
 
-    metadata_files = hnrs_dc.find_datasets(product=geomed_product_name)
+    # Use region_id to query AU-30 grid file, and get its geometry
+    _ = s3fs.S3FileSystem(anon=True)
 
-    # TODO: we should use au-30 grid to replace this section
-    sample_dataset = [
-        e
-        for e in metadata_files
-        if e.metadata_doc["properties"]["odc:region_code"] == region_id
-    ][0]
+    _ = "s3" in gpd.io.file._VALID_URLS
+    gpd.io.file._VALID_URLS.discard("s3")
 
-    metadata = hnrs_dc.index.datasets.get(str(sample_dataset.id))
-
-    geometry_list = [metadata.extent]
-
-    region_polygon = gpd.GeoDataFrame(
-        index=range(len(geometry_list)), crs="epsg:3577", geometry=geometry_list
+    au_grid = gpd.read_file(
+        "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
     )
+
+    au_grid.to_crs(epsg="3577")
+    au_grid = au_grid[au_grid["region_code"] == region_id]
 
     gpgon = datacube.utils.geometry.Geometry(
-        region_polygon.geometry[0], crs="epsg:3577"
+        au_grid.geometry[au_grid.index[0]], crs="epsg:3577"
     )
+
+    hnrs_dc = datacube.Datacube(app="geomed_loading", config=hnrs_config)
 
     # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
     datasets = hnrs_dc.find_datasets(
@@ -78,7 +75,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     )
 
     # Ideally, the number of datasets should be 1
-    logger.info(f"Loda GeoMAD from {geomed_product_name}")
+    logger.info(f"Load GeoMAD from {geomed_product_name}")
 
     for dataset in datasets:
         logger.info(f"Find GeoMAD dataset with metadata: {dataset.metadata_doc}")
