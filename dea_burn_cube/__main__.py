@@ -60,7 +60,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
         "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
     )
 
-    au_grid.to_crs(epsg="3577")
+    au_grid = au_grid.to_crs(epsg="3577")
     au_grid = au_grid[au_grid["region_code"] == region_id]
 
     gpgon = datacube.utils.geometry.Geometry(
@@ -77,10 +77,27 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     # Ideally, the number of datasets should be 1
     logger.info(f"Load GeoMAD from {geomed_product_name}")
 
+    # clean up the dataset by region_code
+    datasets = [
+        e
+        for e in datasets
+        if e.metadata_doc["properties"]["odc:region_code"] == region_id
+    ]
+
     for dataset in datasets:
         logger.info(f"Find GeoMAD dataset with metadata: {dataset.metadata_doc}")
 
-    # TODO: check the 4-year period will grab only one GeoMAD as we wish, or more than one
+    # get gpgon from the clean dataset list
+    # metadata = hnrs_dc.index.datasets.get(str(datasets[0].id))
+    geometry_list = [datasets[0].extent]
+
+    region_polygon = gpd.GeoDataFrame(
+        index=range(len(geometry_list)), crs="epsg:3577", geometry=geometry_list
+    )
+    gpgon = datacube.utils.geometry.Geometry(
+        region_polygon.geometry[0], crs="epsg:3577"
+    )
+
     geomed = hnrs_dc.load(
         geomed_product_name,
         time=period,
