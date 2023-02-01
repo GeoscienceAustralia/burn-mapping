@@ -466,16 +466,24 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
     help="The ancillary_file folder which save clean-up Hotspot CSV file.",
 )
+@click.option(
+    "--task-table",
+    "-b",
+    type=str,
+    default="10-year-historical-processing-4year-geomad.csv",
+    help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
+)
 @click.option("-v", "--verbose", count=True)
 def update_hotspot_data(
     task_id,
     output_s3_folder,
+    task_table,
     verbose,
 ):
     logging_setup(verbose)
 
     # use task_id to get the mappingperiod information to filter hotspot
-    bc_running_task = utils.generate_task(task_id)
+    bc_running_task = utils.generate_task(task_id, task_table)
 
     mappingperiod = (
         bc_running_task["Mapping Period Start"],
