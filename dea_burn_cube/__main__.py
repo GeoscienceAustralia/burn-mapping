@@ -40,7 +40,9 @@ def display_current_step_processing_duration(
     now = datetime.now()
     duration = now - burn_cube_process_timer
 
-    log_info = f"{log_code}: {log_text} - {duration.total_seconds()} seconds"
+    info = f"{log_code}: {log_text} - {duration.total_seconds()} secondss"
+
+    log_info = info
 
     logger.info(log_info)
 
@@ -75,7 +77,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     )
 
     # Ideally, the number of datasets should be 1
-    logger.info(f"Load GeoMAD from {geomed_product_name}")
+    logger.info("Load GeoMAD from %s", geomed_product_name)
 
     # clean up the dataset by region_code
     datasets = [
@@ -85,7 +87,9 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     ]
 
     for dataset in datasets:
-        logger.info(f"Find GeoMAD dataset with metadata: {dataset.metadata_doc}")
+        logger.info(
+            "Find GeoMAD dataset with metadata:  %s", dataset.metadata_doc["label"]
+        )
 
     # get gpgon from the clean dataset list
     # metadata = hnrs_dc.index.datasets.get(str(datasets[0].id))
@@ -292,7 +296,7 @@ def generate_subregion_result(
     # the hotspotfile setup will be finished by step: update_hotspot_data
     hotspotfile = f"{output_folder}/ancillary_file/{hotspot_csv_file}"
 
-    logger.info(f"Load hotspot information from: {hotspotfile}")
+    logger.info("Load hotspot information from:  %s", hotspotfile)
 
     severitymapping_result = utils.severitymapping(
         mapping_dis,
@@ -389,7 +393,7 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
 
     ancillary_folder = f"s3://dea-public-data-dev/{output_s3_folder}"
 
-    logger.info(f"Filter {region_list_s3_path} by Ocean Mask")
+    logger.info("Filter  %s  by Ocean Mask", region_list_s3_path)
     ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
     ocean_mask = gpd.read_file(ocean_mask_path)
 
@@ -410,7 +414,8 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     ].reindex()
 
     logger.info(
-        f"The number of region changes to {len(region_gdf)} after Ocean Mask filter"
+        "The number of region changes to %s after Ocean Mask filter",
+        str(len(region_gdf)),
     )
 
     # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
@@ -418,7 +423,7 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
 
     hotspot_file = f"{ancillary_folder}/{task_id}-hotspot_historic.csv"
 
-    logger.info(f"Filter regions by Hot Spot {hotspot_file}")
+    logger.info("Filter regions by Hot Spot %s", hotspot_file)
 
     hotspot_df = pd.read_csv(hotspot_file)
 
@@ -448,7 +453,8 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     region_gdf = region_gdf[region_gdf["region_code"].isin(filter_by_hotspot)].reindex()
 
     logger.info(
-        f"The number of region changes to {len(region_gdf)} after Hot Spot filter"
+        "The number of region changes to %s  after Hot Spot filter",
+        str(len(region_gdf)),
     )
 
     local_json_file = f"{task_id}-regions.json"
@@ -504,7 +510,7 @@ def update_hotspot_data(
         bc_running_task["Mapping Period End"],
     )
 
-    logger.info(f"Use mappingperiod:{mappingperiod} to filter hotspot file")
+    logger.info("Use mappingperiod: %s to filter hotspot file", str(mappingperiod))
 
     import numpy as np
 
@@ -662,9 +668,9 @@ def burn_cube_run(
         "db_database": os.getenv("ODC_DB_DATABASE"),
     }
 
-    logger.info(f"Use period: {period}")
+    logger.info("Use period: %s", str(period))
 
-    logger.info(f"Use mappingperiod: {mappingperiod}")
+    logger.info("Use mappingperiod: %s", str(mappingperiod))
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
 
@@ -741,6 +747,8 @@ def burn_cube_run(
                 with open(local_file_path, "rb") as f:
                     s3.upload_fileobj(f, o.netloc, target_file_path[1:])
 
+                    logger.info("Upload NetCDF file to: %s", target_file_path)
+
                 # use to_cog feature to convert each band from XArray.Dataset to COG
                 for band, dv in burn_cube_result_apply_wofs.data_vars.items():
                     ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
@@ -753,13 +761,16 @@ def burn_cube_run(
 
                     write_cog(geo_im=da_output, fname=local_tiff_file)
 
-                    logger.info(f"Dump GeoTiff file: {local_tiff_file}")
-
                     with open(local_tiff_file, "rb") as f:
                         s3.upload_fileobj(
                             f,
                             o.netloc,
                             target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
+                        )
+
+                        logger.info(
+                            "Upload GeoTiff file: %s",
+                            target_file_path.replace(".nc", f"-{band.lower()}.tif"),
                         )
 
                 burn_cube_process_timer = display_current_step_processing_duration(
