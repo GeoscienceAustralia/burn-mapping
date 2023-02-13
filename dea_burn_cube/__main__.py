@@ -6,6 +6,7 @@ Geoscience Australia
 import logging
 import os
 import sys
+import warnings
 from datetime import datetime
 
 import boto3
@@ -18,6 +19,7 @@ import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
+from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
@@ -25,6 +27,8 @@ import dea_burn_cube.utils as utils
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+warnings.filterwarnings("SAWarning")
+warnings.filterwarnings("RasterioDeprecationWarning")
 
 BUCKET_NAME = "dea-public-data-dev"
 
@@ -116,8 +120,45 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     return gpgon, geomed
 
 
+def generate_ocean_mask(ds, region_id):
+    au_grid = gpd.read_file(
+        "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
+    )
+
+    au_grid = au_grid.to_crs(epsg="3577")
+    au_grid = au_grid[au_grid["region_code"] == region_id]
+
+    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/argo-run/burn-cube-app/ancillary_file"
+    ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
+
+    ocean_df = gpd.read_file(ocean_mask_path)
+    ocean_mask = unary_union(list(ocean_df.geometry))
+
+    land_area = au_grid.geometry[au_grid.index[0]].intersection(ocean_mask)
+
+    y, x = ds.geobox.shape
+    transform = ds.geobox.transform
+    dims = ds.geobox.dims
+
+    xy_coords = [ds[dims[0]], ds[dims[1]]]
+
+    import rasterio.features
+
+    arr = rasterio.features.rasterize(
+        shapes=[land_area], out_shape=(y, x), transform=transform
+    )
+
+    not_ocean_layer = xr.DataArray(
+        arr, coords=xy_coords, dims=dims, name="not_ocean_layer"
+    )
+    data = xr.combine_by_coords(
+        [ds, not_ocean_layer], coords=["x", "y"], join="inner", combine_attrs="override"
+    )
+    return data.not_ocean_layer
+
+
 def apply_post_processing_by_wo_summary(
-    dc, burn_cube_result, gpgon, mappingperiod, x_i, y_i, split_count
+    dc, burn_cube_result, gpgon, mappingperiod, x_i, y_i, split_count, region_id
 ):
 
     # TODO: we dont use Dask to walkaround the loading issue here cause the WOfS result size is small
@@ -140,6 +181,8 @@ def apply_post_processing_by_wo_summary(
 
     wofs_mask = (wofs_summary_frequency[0, :, :].values < 0.2).astype(float)
 
+    ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
+
     burnpixel_mod = utils.burnpixel_masking(
         burn_cube_result, "Moderate"
     )  # mask the burnt area with "Medium" burnt area
@@ -152,6 +195,14 @@ def apply_post_processing_by_wo_summary(
     wofs_duration = wofs_mask * burn_cube_result["Duration"]
     wofs_corroborate = wofs_mask * burn_cube_result["Corroborate"]
     wofs_cleaned = wofs_mask * burn_cube_result["Cleaned"]
+
+    ocean_moderate = ocean_mask * wofs_moderate
+    ocean_severe = ocean_mask * wofs_severe
+    ocean_severity = ocean_mask * wofs_severity
+    ocean_startdate = ocean_mask * wofs_startdate
+    ocean_duration = ocean_mask * wofs_duration
+    ocean_corroborate = ocean_mask * wofs_corroborate
+    ocean_cleaned = ocean_mask * wofs_cleaned
 
     return xr.Dataset(
         {
@@ -169,6 +220,13 @@ def apply_post_processing_by_wo_summary(
             "WOfSDuration": wofs_duration,
             "WOfSCorroborate": wofs_corroborate,
             "WOfSCleaned": wofs_cleaned,
+            "OceanModerate": ocean_moderate,
+            "OceanSevere": ocean_severe,
+            "OceanSeverity": ocean_severity,
+            "OceanStartDate": ocean_startdate,
+            "OceanDuration": ocean_duration,
+            "OceanCorroborate": ocean_corroborate,
+            "OceanCleaned": ocean_cleaned,
         }
     )
 
@@ -724,6 +782,7 @@ def burn_cube_run(
                     x_i,
                     y_i,
                     split_count,
+                    region_id,
                 )
 
                 burn_cube_process_timer = display_current_step_processing_duration(
