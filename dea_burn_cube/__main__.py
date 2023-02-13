@@ -6,7 +6,6 @@ Geoscience Australia
 import logging
 import os
 import sys
-import warnings
 from datetime import datetime
 
 import boto3
@@ -26,9 +25,6 @@ import dea_burn_cube.utils as utils
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-
-warnings.filterwarnings("SAWarning")
-warnings.filterwarnings("RasterioDeprecationWarning")
 
 BUCKET_NAME = "dea-public-data-dev"
 
