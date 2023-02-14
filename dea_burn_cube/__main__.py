@@ -159,8 +159,8 @@ def apply_post_processing_by_wo_summary(
 
     # TODO: we dont use Dask to walkaround the loading issue here cause the WOfS result size is small
     wofs_summary = dc.load(
-        "ga_ls_wo_fq_fyear_3",
-        time=mappingperiod,
+        "ga_ls_wo_fq_cyear_3",
+        time=mappingperiod[0],
         geopolygon=gpgon,
         resolution=(-30, 30),
         dask_chunks={},
@@ -177,7 +177,7 @@ def apply_post_processing_by_wo_summary(
 
     wofs_mask = (wofs_summary_frequency[0, :, :].values < 0.2).astype(float)
 
-    ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
+    # ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
 
     burnpixel_mod = utils.burnpixel_masking(
         burn_cube_result, "Moderate"
@@ -192,13 +192,13 @@ def apply_post_processing_by_wo_summary(
     wofs_corroborate = wofs_mask * burn_cube_result["Corroborate"]
     wofs_cleaned = wofs_mask * burn_cube_result["Cleaned"]
 
-    ocean_moderate = ocean_mask * wofs_moderate
-    ocean_severe = ocean_mask * wofs_severe
-    ocean_severity = ocean_mask * wofs_severity
-    ocean_startdate = ocean_mask * wofs_startdate
-    ocean_duration = ocean_mask * wofs_duration
-    ocean_corroborate = ocean_mask * wofs_corroborate
-    ocean_cleaned = ocean_mask * wofs_cleaned
+    # ocean_moderate = ocean_mask * wofs_moderate
+    # ocean_severe = ocean_mask * wofs_severe
+    # ocean_severity = ocean_mask * wofs_severity
+    # ocean_startdate = ocean_mask * wofs_startdate
+    # ocean_duration = ocean_mask * wofs_duration
+    # ocean_corroborate = ocean_mask * wofs_corroborate
+    # ocean_cleaned = ocean_mask * wofs_cleaned
 
     return xr.Dataset(
         {
@@ -216,13 +216,13 @@ def apply_post_processing_by_wo_summary(
             "WOfSDuration": wofs_duration,
             "WOfSCorroborate": wofs_corroborate,
             "WOfSCleaned": wofs_cleaned,
-            "OceanModerate": ocean_moderate,
-            "OceanSevere": ocean_severe,
-            "OceanSeverity": ocean_severity,
-            "OceanStartDate": ocean_startdate,
-            "OceanDuration": ocean_duration,
-            "OceanCorroborate": ocean_corroborate,
-            "OceanCleaned": ocean_cleaned,
+            # "OceanModerate": ocean_moderate,
+            # "OceanSevere": ocean_severe,
+            # "OceanSeverity": ocean_severity,
+            # "OceanStartDate": ocean_startdate,
+            # "OceanDuration": ocean_duration,
+            # "OceanCorroborate": ocean_corroborate,
+            # "OceanCleaned": ocean_cleaned,
         }
     )
 
