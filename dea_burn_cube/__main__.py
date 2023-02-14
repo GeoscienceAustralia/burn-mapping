@@ -73,7 +73,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
 
     # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
     datasets = hnrs_dc.find_datasets(
-        product=geomed_product_name, geopolygon=gpgon, time=period
+        product=geomed_product_name, geopolygon=gpgon, time=period[0]
     )
 
     # Ideally, the number of datasets should be 1
@@ -104,7 +104,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
 
     geomed = hnrs_dc.load(
         geomed_product_name,
-        time=period,
+        time=period[0],
         geopolygon=gpgon,
         output_crs="EPSG:3577",
         resolution=(-30, 30),
