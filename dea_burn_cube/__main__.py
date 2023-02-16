@@ -357,7 +357,7 @@ def generate_subregion_result(
         outliers_result,
         mappingperiod,
         hotspotfile,
-        method="NBR",
+        method="NBRdist",
         growing=True,
     )
 
