@@ -166,8 +166,6 @@ def apply_post_processing_by_wo_summary(
         dask_chunks={},
     )
 
-    print(wofs_summary)
-
     interval = int(len(wofs_summary.frequency.x) / split_count)
 
     wofs_summary_frequency = wofs_summary.frequency.isel(
