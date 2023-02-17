@@ -128,8 +128,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref ** 2))
-        / np.sqrt(np.nansum(obs ** 2, axis=0))
+        / np.sqrt(np.sum(ref**2))
+        / np.sqrt(np.nansum(obs**2, axis=0))
     )
     return cosdist
 
@@ -152,7 +152,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist ** 2)
+    euc_norm = np.sqrt(euc_dist**2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
