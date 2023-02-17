@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "dea-public-data-dev"
 
+os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
+
 
 def gqa_predicate(ds):
     return ds.metadata.gqa_iterative_mean_xy <= 1
@@ -251,8 +253,8 @@ def generate_subregion_result(
         output_crs="EPSG:3577",
         resolution=(-30, 30),
         resampling={"fmask": "nearest", "*": "bilinear"},
-        mask_filters=[("dilation", 10)],
-        mask_contiguity=True,
+        # mask_filters=[("dilation", 10)],
+        # mask_contiguity=True,
         dask_chunks={},
         # predicate=gqa_predicate,
         time=period,
@@ -315,8 +317,8 @@ def generate_subregion_result(
         output_crs="EPSG:3577",
         resolution=(-30, 30),
         resampling={"fmask": "nearest", "*": "bilinear"},
-        mask_filters=[("dilation", 10)],
-        mask_contiguity=True,
+        # mask_filters=[("dilation", 10)],
+        # mask_contiguity=True,
         dask_chunks={},
         # predicate=gqa_predicate,
         time=mappingperiod,
