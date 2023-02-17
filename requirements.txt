@@ -1,9 +1,9 @@
 aiohttp==3.8.3
-datacube==1.8.6
+datacube==1.8.9
 dea_tools
 numpy==1.23.5
 psycopg2-binary==2.9.2
-pyproj==3.2.1
+pyproj==3.4.0
 s3fs==0.4.2
 Shapely==1.8.5.post1
 SQLAlchemy==1.4.46
