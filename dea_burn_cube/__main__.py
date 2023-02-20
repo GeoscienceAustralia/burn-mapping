@@ -450,7 +450,9 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     ancillary_folder = f"s3://dea-public-data-dev/{output_s3_folder}"
 
     logger.info("Filter  %s  by Ocean Mask", region_list_s3_path)
-    ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
+    ocean_mask_path = (
+        "s3://dea-public-data-dev/projects/burn_cube/configs/ITEMCoastlineCleaned.shp"
+    )
     ocean_mask = gpd.read_file(ocean_mask_path)
 
     # the Ocean Mask CRS should be: EPSG:3577
