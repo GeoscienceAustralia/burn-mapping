@@ -126,7 +126,7 @@ def generate_ocean_mask(ds, region_id):
     au_grid = au_grid.to_crs(epsg="3577")
     au_grid = au_grid[au_grid["region_code"] == region_id]
 
-    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/argo-run/burn-cube-app/ancillary_file"
+    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/configs"
     ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
 
     ocean_df = gpd.read_file(ocean_mask_path)
