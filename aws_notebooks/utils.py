@@ -1,3 +1,5 @@
+# pass test at 22/02/2023 in PROD SANDBOX environment
+
 import ctypes
 import datetime
 import logging
@@ -1182,6 +1184,8 @@ def severitymapping(
         hotspots_period, extent, 4000, hotspotfile
     )  # generate hotspot polygons with 4km buffer
 
+    # return polygons
+
     # default mask
     hot_spot_mask = np.zeros((len(dists.y), len(dists.x)))
 
@@ -1193,7 +1197,10 @@ def severitymapping(
         if polygons.type == "MultiPolygon":
             for polygon in polygons.geoms:
                 hot_spot_mask_tmp = outline_to_mask(
-                    polygon.exterior, coords["x"], coords["y"]
+                    # change polygon.exterior to polygon.exterior.coords in PROD SANDBOX environment
+                    polygon.exterior.coords,
+                    coords["x"],
+                    coords["y"],
                 )
                 hot_spot_mask = hot_spot_mask_tmp + hot_spot_mask
             hot_spot_mask = xr.DataArray(hot_spot_mask, coords=coords, dims=("y", "x"))
