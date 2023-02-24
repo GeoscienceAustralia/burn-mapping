@@ -128,8 +128,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref ** 2))
-        / np.sqrt(np.nansum(obs ** 2, axis=0))
+        / np.sqrt(np.sum(ref**2))
+        / np.sqrt(np.nansum(obs**2, axis=0))
     )
     return cosdist
 
@@ -152,7 +152,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist ** 2)
+    euc_norm = np.sqrt(euc_dist**2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -817,6 +817,12 @@ def _create_variable_attributes(dataset):
         "standard_name": "Cleaned",
         "coverage_content_type": "model results",
     }
+    dataset["Count"].attrs = {
+        "units": "Number of available pixels in ARD",
+        "long_name": "Count",
+        "standard_name": "Count",
+        "coverage_content_type": "debug information",
+    }
     return dataset
 
 
@@ -1147,6 +1153,9 @@ def severitymapping(
     burnt[duration > 1] = 1
     out["Severity"] = (("y", "x"), sevindex.astype("float32"))
     out["Severe"] = (("y", "x"), burnt.astype("int16"))
+
+    count = dists["NBR"].count(dim="time")
+    out["Count"] = count
 
     if burnt.sum() == 0:
         out["Corroborate"] = (
