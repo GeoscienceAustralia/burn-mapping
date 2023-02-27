@@ -211,6 +211,7 @@ def apply_post_processing_by_wo_summary(
             "Moderate": burn_cube_result["Moderate"],
             "Corroborate": burn_cube_result["Corroborate"],
             "Cleaned": burn_cube_result["Cleaned"],
+            "Count": burn_cube_result["Count"],
             "WOfSModerate": wofs_moderate,
             "WOfSSevere": wofs_severe,
             "WOfSSeverity": wofs_severity,
