@@ -6,7 +6,6 @@ Geoscience Australia
 import logging
 import os
 import sys
-from datetime import datetime
 
 import boto3
 import click
@@ -24,6 +23,7 @@ import dea_burn_cube.__version__
 import dea_burn_cube.utils as utils
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "dea-public-data-dev"
@@ -31,27 +31,7 @@ BUCKET_NAME = "dea-public-data-dev"
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
 
 
-def gqa_predicate(ds):
-    return ds.metadata.gqa_iterative_mean_xy <= 1
-
-
-def display_current_step_processing_duration(
-    log_text, burn_cube_process_timer, log_code
-):
-    # display the datacube loading time
-    now = datetime.now()
-    duration = now - burn_cube_process_timer
-
-    info = f"{log_code}: {log_text} - {duration.total_seconds()} secondss"
-
-    log_info = info
-
-    logger.info(log_info)
-
-    # remember to reset the timer
-    return now
-
-
+@utils.log_execution_time
 def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_name):
 
     # Use region_id to query AU-30 grid file, and get its geometry
@@ -118,6 +98,7 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     return gpgon, geomed
 
 
+@utils.log_execution_time
 def generate_ocean_mask(ds, region_id):
     au_grid = gpd.read_file(
         "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
@@ -155,6 +136,7 @@ def generate_ocean_mask(ds, region_id):
     return data.not_ocean_layer
 
 
+@utils.log_execution_time
 def apply_post_processing_by_wo_summary(
     dc, burn_cube_result, gpgon, mappingperiod, x_i, y_i, split_count, region_id
 ):
@@ -230,22 +212,19 @@ def apply_post_processing_by_wo_summary(
     )
 
 
-def generate_subregion_result(
+@utils.log_execution_time
+def load_reference_data(
     dc,
     geomed,
     ard_bands,
     period,
-    mappingperiod,
     gpgon,
     task_id,
     region_code,
     x_i,
     y_i,
     split_count,
-    burn_cube_process_timer,
-    output_folder,
 ):
-
     ard = dea_tools.datahandling.load_ard(
         dc,
         products=["ga_ls8c_ard_3"],
@@ -275,41 +254,25 @@ def generate_subregion_result(
         y=range(y_i * interval, (y_i + 1) * interval),
     )
 
-    # display the Dask lazy loading time
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text="Dask lazy loading duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
-
     geomed = geomed.load()
     ard = ard.load()
 
-    # display the datacube loading time
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The datacube loading {period} duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
+    return ard, geomed
 
-    dis = utils.distances(ard, geomed)
 
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The burn cube processing {period} distance duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
-
-    outliers_result = utils.outliers(ard, dis)
-
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The burn cube processing {period} outlier duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
-
-    del ard, dis
-
+@utils.log_execution_time
+def load_mapping_data(
+    dc,
+    geomed,
+    ard_bands,
+    mappingperiod,
+    gpgon,
+    task_id,
+    region_code,
+    x_i,
+    y_i,
+    split_count,
+):
     mapping_ard = dea_tools.datahandling.load_ard(
         dc,
         products=["ga_ls8c_ard_3"],
@@ -327,6 +290,8 @@ def generate_subregion_result(
     )
 
     mapping_ard = mapping_ard[ard_bands].to_array(dim="band").to_dataset(name="ard")
+    interval = int(len(mapping_ard.ard.x) / split_count)
+
     mapping_ard = mapping_ard.ard.isel(
         x=range(x_i * interval, (x_i + 1) * interval),
         y=range(y_i * interval, (y_i + 1) * interval),
@@ -334,19 +299,63 @@ def generate_subregion_result(
 
     mapping_ard = mapping_ard.load()
 
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The datacube loading {mappingperiod} duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
+    return mapping_ard
+
+
+@utils.log_execution_time
+def generate_reference_result(ard, geomed):
+    dis = utils.distances(ard, geomed)
+    outliers_result = utils.outliers(ard, dis)
+    return outliers_result
+
+
+@utils.log_execution_time
+def generate_subregion_result(
+    dc,
+    geomed,
+    ard_bands,
+    period,
+    mappingperiod,
+    gpgon,
+    task_id,
+    region_code,
+    x_i,
+    y_i,
+    split_count,
+    output_folder,
+):
+
+    ard, geomed = load_reference_data(
+        dc,
+        geomed,
+        ard_bands,
+        period,
+        gpgon,
+        task_id,
+        region_code,
+        x_i,
+        y_i,
+        split_count,
+    )
+
+    outliers_result = generate_reference_result(ard, geomed)
+
+    del ard
+
+    mapping_ard = load_mapping_data(
+        dc,
+        geomed,
+        ard_bands,
+        mappingperiod,
+        gpgon,
+        task_id,
+        region_code,
+        x_i,
+        y_i,
+        split_count,
     )
 
     mapping_dis = utils.distances(mapping_ard, geomed)
-
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text=f"The burn cube processing {period} distance duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
 
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
@@ -364,13 +373,7 @@ def generate_subregion_result(
         growing=True,
     )
 
-    burn_cube_process_timer = display_current_step_processing_duration(
-        log_text="The burn cube processing severity_mapping_result duration",
-        burn_cube_process_timer=burn_cube_process_timer,
-        log_code=f"{task_id}-{region_code}-{x_i}-{y_i}",
-    )
-
-    return severitymapping_result, burn_cube_process_timer
+    return severitymapping_result
 
 
 def logging_setup(verbose: int):
@@ -386,17 +389,9 @@ def logging_setup(verbose: int):
         for name in logging.root.manager.loggerDict
         if not name.startswith("sqlalchemy") and not name.startswith("boto")
     ]
-    # For compatibility with docker+pytest+click stack...
+
     stdout_hdlr = logging.StreamHandler(sys.stdout)
     for logger in loggers:
-        if verbose == 0:
-            logging.basicConfig(level=logging.WARNING)
-        elif verbose == 1:
-            logging.basicConfig(level=logging.INFO)
-        elif verbose == 2:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            raise click.ClickException("Maximum verbosity is -vv")
         logger.addHandler(stdout_hdlr)
         logger.propagate = False
 
@@ -689,11 +684,6 @@ def burn_cube_run(
     verbose,
 ):
 
-    # save the beginning value to display whole region processing duration
-    burn_cube_process_beginning = datetime.now()
-
-    burn_cube_process_timer = burn_cube_process_beginning
-
     logging_setup(verbose)
 
     bc_running_task = utils.generate_task(task_id, task_table)
@@ -743,7 +733,7 @@ def burn_cube_run(
     for x_i in range(split_count):
         for y_i in range(split_count):
 
-            burn_cube_result, burn_cube_process_timer = generate_subregion_result(
+            burn_cube_result = generate_subregion_result(
                 dc,
                 geomed,
                 ard_bands,
@@ -755,7 +745,6 @@ def burn_cube_run(
                 x_i,
                 y_i,
                 split_count,
-                burn_cube_process_timer,
                 output,
             )
 
@@ -787,12 +776,6 @@ def burn_cube_run(
                     y_i,
                     split_count,
                     region_id,
-                )
-
-                burn_cube_process_timer = display_current_step_processing_duration(
-                    log_text="The burn cube processing by wofs_summary",
-                    burn_cube_process_timer=burn_cube_process_timer,
-                    log_code=f"{task_id}-{region_id}-{x_i}-{y_i}",
                 )
 
                 comp = dict(zlib=True, complevel=5)
@@ -835,18 +818,6 @@ def burn_cube_run(
                             "Upload GeoTiff file: %s",
                             target_file_path.replace(".nc", f"-{band.lower()}.tif"),
                         )
-
-                burn_cube_process_timer = display_current_step_processing_duration(
-                    log_text="The burn cube uploading result duration",
-                    burn_cube_process_timer=burn_cube_process_timer,
-                    log_code=f"{task_id}-{region_id}-{x_i}-{y_i}",
-                )
-
-    _ = display_current_step_processing_duration(
-        log_text="The burn cube processing duration",
-        burn_cube_process_timer=burn_cube_process_beginning,
-        log_code=f"{task_id}-{region_id}",
-    )
 
 
 if __name__ == "__main__":

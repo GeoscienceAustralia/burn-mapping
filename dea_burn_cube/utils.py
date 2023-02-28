@@ -2,6 +2,7 @@ import ctypes
 import datetime
 import logging
 import multiprocessing as mp
+import time
 from contextlib import closing
 
 import numpy as np
@@ -14,6 +15,19 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+
+
+def log_execution_time(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        duration = end_time - start_time
+        logging.info(f"{func.__name__} took {duration:.2f} seconds to execute.")
+        return result
+
+    return wrapper
 
 
 def task_to_ranges(task_id, task_table):
@@ -507,6 +521,7 @@ def dist_severity(params):
         )
 
 
+@log_execution_time
 def distances(ard, geomed):
     """
     Calculates the cosine distance between observation and reference.
@@ -535,8 +550,6 @@ def distances(ard, geomed):
     nir[nir <= 0] = np.nan
     swir2[swir2 <= 0] = np.nan
     nbr = (nir - swir2) / (nir + swir2)
-
-    logger.info("begin to process distance")
 
     out_arr1 = mp.Array(ctypes.c_float, len(t_dim) * n)
     out_arr2 = mp.Array(ctypes.c_float, len(t_dim) * n)
@@ -652,11 +665,11 @@ def distances(ard, geomed):
     return ds
 
 
+@log_execution_time
 def outliers(dataset, distances):
     """
     Calculate the outliers for distances for change detection
     """
-    logger.info("begin to process outlier")
 
     if distances is None:
         logger.warning("no distances for the outlier calculations")
@@ -869,6 +882,7 @@ def create_attributes(dataset, product_name, version, method, res=30):
     return dataset
 
 
+@log_execution_time
 def hotspot_polygon(period, extent, buffersize, hotspotfile):
     """Create polygons for the hotspot with a buffer
     year: given year for hotspots data
@@ -881,8 +895,6 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
     >>>extent = [1648837.5, 1675812.5, -3671837.5, -3640887.5]
     >>>polygons = hotspot_polygon(year,extent,4000)
     """
-
-    logger.info("begin to process hotspot polygon")
 
     # print("extent", extent)
 
@@ -945,6 +957,7 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
     return polygons
 
 
+@log_execution_time
 def severitymapping(
     dists, outlrs, period, hotspotfile, method="NBR", growing=True, hotspots_period=None
 ):
@@ -955,8 +968,6 @@ def severitymapping(
         method: methods for change detection
         growing: whether to grow the region
     """
-
-    logger.info("begin to process severity")
 
     if dists is None:
         logger.warning("no data available for severity mapping")
@@ -1154,7 +1165,7 @@ def severitymapping(
     out["Severity"] = (("y", "x"), sevindex.astype("float32"))
     out["Severe"] = (("y", "x"), burnt.astype("int16"))
 
-    count = dists["NBR"].count(dim="time")
+    count = dists["NBR"].count(dim="time").astype("int16")
     out["Count"] = count
 
     if burnt.sum() == 0:
