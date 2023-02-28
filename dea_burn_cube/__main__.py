@@ -6,8 +6,10 @@ Geoscience Australia
 import logging
 import os
 import sys
+from urllib.parse import urlparse
 
 import boto3
+import botocore
 import click
 import datacube
 import dea_tools.datahandling
@@ -29,6 +31,44 @@ logger = logging.getLogger(__name__)
 BUCKET_NAME = "dea-public-data-dev"
 
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
+
+
+def check_file_exists(bucket_name, file_key):
+    """
+    Checks if a file exists in an S3 bucket.
+
+    :param bucket_name: The name of the S3 bucket.
+    :param file_key: The key of the file in the bucket.
+    :return: True if the file exists, False otherwise.
+    """
+    s3 = boto3.client("s3")
+
+    try:
+        s3.head_object(Bucket=bucket_name, Key=file_key)
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            return False
+        else:
+            raise
+    else:
+        return True
+
+
+def generate_output_filenames(output, task_id, region_id, x_i, y_i, split_count):
+    if split_count != 1:
+        s3_file_path = (
+            f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+        )
+        local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
+    else:
+        s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
+        local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
+
+    o = urlparse(output)
+
+    target_file_path = f"{o.path}/{s3_file_path}"
+
+    return local_file_path, target_file_path
 
 
 @utils.log_execution_time
@@ -96,6 +136,46 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
     geomed = geomed[geomed_bands].to_array(dim="band").to_dataset(name="geomedian")
 
     return gpgon, geomed
+
+
+@utils.log_execution_time
+def result_file_saving_and_uploading(
+    burn_cube_result_apply_wofs, local_file_path, target_file_path, bucket_name
+):
+    comp = dict(zlib=True, complevel=5)
+    encoding = {
+        var: comp for var in burn_cube_result_apply_wofs.data_vars
+    }  # compression
+
+    # this will save it in the current working directory
+    burn_cube_result_apply_wofs.to_netcdf(local_file_path, encoding=encoding, mode="w")
+
+    s3 = boto3.client("s3")
+
+    with open(local_file_path, "rb") as f:
+        s3.upload_fileobj(f, bucket_name, target_file_path[1:])
+
+    # use to_cog feature to convert each band from XArray.Dataset to COG
+    for band, dv in burn_cube_result_apply_wofs.data_vars.items():
+        ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
+        ds_output.attrs["crs"] = geometry.CRS("EPSG:3577")
+        da_output = ds_output.to_array()
+
+        local_tiff_file = local_file_path.replace(".nc", f"-{band.lower()}.tif")
+
+        write_cog(geo_im=da_output, fname=local_tiff_file, overwrite=True)
+
+    with open(local_tiff_file, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            bucket_name,
+            target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
+        )
+
+        logger.info(
+            "Upload GeoTiff file: %s",
+            target_file_path.replace(".nc", f"-{band.lower()}.tif"),
+        )
 
 
 @utils.log_execution_time
@@ -673,6 +753,11 @@ def update_hotspot_data(
     default="10-year-historical-processing-4year-geomad.csv",
     help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
 )
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun region that have already been processed.",
+)
 @click.option("-v", "--verbose", count=True)
 def burn_cube_run(
     task_id,
@@ -681,6 +766,7 @@ def burn_cube_run(
     split_count,
     geomed_product_name,
     task_table,
+    overwrite,
     verbose,
 ):
 
@@ -726,12 +812,27 @@ def burn_cube_run(
 
     dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
 
+    # The geomed is stiil a Dask lazy loading dataset, which is a lightweight data loading
     gpgon, geomed = get_geomed_ds(
         region_id, period, hnrs_config, geomed_bands, geomed_product_name
     )
 
     for x_i in range(split_count):
         for y_i in range(split_count):
+
+            local_file_path, target_file_path = generate_output_filenames(
+                output, task_id, region_id, x_i, y_i, split_count
+            )
+            o = urlparse(output)
+
+            logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
+            logger.info("Will upload NetCDF file to: %s", target_file_path)
+
+            # TODO: only check the NetCDF is not enough
+            if not overwrite:
+                if check_file_exists(o.netloc, target_file_path[1:]):
+                    logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
+                    continue
 
             burn_cube_result = generate_subregion_result(
                 dc,
@@ -748,24 +849,7 @@ def burn_cube_run(
                 output,
             )
 
-            if split_count != 1:
-                s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                local_file_path = (
-                    f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-                )
-            else:
-                s3_file_path = (
-                    f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
-                )
-                local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
-
-            from urllib.parse import urlparse
-
-            o = urlparse(output)
-
-            target_file_path = f"{o.path}/{s3_file_path}"
-
-            # let us assume the output is an AWS S3 path
+            # TODO: us assume the output is always an AWS S3 path
             if burn_cube_result:
                 burn_cube_result_apply_wofs = apply_post_processing_by_wo_summary(
                     dc,
@@ -778,46 +862,13 @@ def burn_cube_run(
                     region_id,
                 )
 
-                comp = dict(zlib=True, complevel=5)
-                encoding = {
-                    var: comp for var in burn_cube_result_apply_wofs.data_vars
-                }  # compression
-
-                # this will save it in the current working directory
-                burn_cube_result_apply_wofs.to_netcdf(
-                    local_file_path, encoding=encoding
+                # TODO: should use Try-Catch to know IO is OK or not
+                result_file_saving_and_uploading(
+                    burn_cube_result_apply_wofs,
+                    local_file_path,
+                    target_file_path,
+                    o.netloc,
                 )
-
-                s3 = boto3.client("s3")
-
-                with open(local_file_path, "rb") as f:
-                    s3.upload_fileobj(f, o.netloc, target_file_path[1:])
-
-                    logger.info("Upload NetCDF file to: %s", target_file_path)
-
-                # use to_cog feature to convert each band from XArray.Dataset to COG
-                for band, dv in burn_cube_result_apply_wofs.data_vars.items():
-                    ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
-                    ds_output.attrs["crs"] = geometry.CRS("EPSG:3577")
-                    da_output = ds_output.to_array()
-
-                    local_tiff_file = local_file_path.replace(
-                        ".nc", f"-{band.lower()}.tif"
-                    )
-
-                    write_cog(geo_im=da_output, fname=local_tiff_file)
-
-                    with open(local_tiff_file, "rb") as f:
-                        s3.upload_fileobj(
-                            f,
-                            o.netloc,
-                            target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
-                        )
-
-                        logger.info(
-                            "Upload GeoTiff file: %s",
-                            target_file_path.replace(".nc", f"-{band.lower()}.tif"),
-                        )
 
 
 if __name__ == "__main__":
