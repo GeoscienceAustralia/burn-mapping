@@ -156,7 +156,7 @@ def result_file_saving_and_uploading(
         s3.upload_fileobj(f, bucket_name, target_file_path[1:])
 
     # use to_cog feature to convert each band from XArray.Dataset to COG
-    for band, dv in burn_cube_result_apply_wofs.data_vars.items():
+    for band, _ in burn_cube_result_apply_wofs.data_vars.items():
         ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
         ds_output.attrs["crs"] = geometry.CRS("EPSG:3577")
         da_output = ds_output.to_array()
@@ -165,17 +165,17 @@ def result_file_saving_and_uploading(
 
         write_cog(geo_im=da_output, fname=local_tiff_file, overwrite=True)
 
-    with open(local_tiff_file, "rb") as f:
-        s3.upload_fileobj(
-            f,
-            bucket_name,
-            target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
-        )
+        with open(local_tiff_file, "rb") as f:
+            s3.upload_fileobj(
+                f,
+                bucket_name,
+                target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
+            )
 
-        logger.info(
-            "Upload GeoTiff file: %s",
-            target_file_path.replace(".nc", f"-{band.lower()}.tif"),
-        )
+            logger.info(
+                "Upload GeoTiff file: %s",
+                target_file_path.replace(".nc", f"-{band.lower()}.tif"),
+            )
 
 
 @utils.log_execution_time
