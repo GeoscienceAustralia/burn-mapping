@@ -474,12 +474,12 @@ def dist_distance(params):
     )
 
     for i in range(params[0], params[1]):
-        ind = np.where(ard[0, :, i] > 0)[0]
+        ind = np.where(ard[1, :, i] > 0)[0]
 
         if len(ind) > 0:
             cos_dist[ind, i] = cos_distance(gmed[:, i], ard[:, ind, i])
-            nbrmed = (gmed[1, i] - gmed[2, i]) / (gmed[1, i] + gmed[2, i])
-            nbr = (ard[1, :, i] - ard[2, :, i]) / (ard[1, :, i] + ard[2, :, i])
+            nbrmed = (gmed[3, i] - gmed[5, i]) / (gmed[3, i] + gmed[5, i])
+            nbr = (ard[3, :, i] - ard[5, :, i]) / (ard[3, :, i] + ard[5, :, i])
             nbr_dist[ind, i], direction[ind, i] = nbr_eucdistance(nbrmed, nbr[ind])
 
 
@@ -545,8 +545,8 @@ def distances(ard, geomed):
         logger.warning("no enough data for the calculation of distances")
         return
 
-    nir = _x[1, :, :, :].data.astype("float32")
-    swir2 = _x[2, :, :, :].data.astype("float32")
+    nir = _x[3, :, :, :].data.astype("float32")
+    swir2 = _x[5, :, :, :].data.astype("float32")
     nir[nir <= 0] = np.nan
     swir2[swir2 <= 0] = np.nan
     nbr = (nir - swir2) / (nir + swir2)

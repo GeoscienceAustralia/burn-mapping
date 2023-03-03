@@ -774,14 +774,14 @@ def burn_cube_run(
 
     bc_running_task = utils.generate_task(task_id, task_table)
 
-    # geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]
-    geomed_bands = ["green", "nir", "swir2"]
+    geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]
+    # geomed_bands = ["green", "nir", "swir2"]
 
-    # ard_bands = [
-    #     f"nbart_{band}" for band in ("red", "green", "blue", "nir", "swir_1", "swir_2")
-    # ]
+    ard_bands = [
+        f"nbart_{band}" for band in ("red", "green", "blue", "nir", "swir_1", "swir_2")
+    ]
 
-    ard_bands = [f"nbart_{band}" for band in ("green", "nir", "swir_2")]
+    # ard_bands = [f"nbart_{band}" for band in ("green", "nir", "swir_2")]
 
     period = (bc_running_task["Period Start"], bc_running_task["Period End"])
     mappingperiod = (
