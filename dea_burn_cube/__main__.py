@@ -229,9 +229,10 @@ def generate_bc_result(
     mappingperiod,
     gpgon,
     task_id,
-    output_folder,
+    output,
 ):
 
+    logger.info("Begin to load reference data")
     ard, geomed = data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
@@ -247,6 +248,7 @@ def generate_bc_result(
 
     del ard
 
+    logger.info("Begin to load mapping data")
     mapping_ard = data_loading.load_mapping_data(
         odc_dc,
         ard_product_names,
@@ -260,7 +262,7 @@ def generate_bc_result(
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"{output_folder}/ancillary_file/{hotspot_csv_file}"
+    hotspotfile = f"{output}/ancillary_file/{hotspot_csv_file}"
 
     logger.info("Load hotspot information from:  %s", hotspotfile)
 
@@ -640,24 +642,7 @@ def burn_cube_run(
     wofs_summary_product_name = "ga_ls_wo_fq_cyear_3"
     ard_product_names = ["ga_ls8c_ard_3"]
 
-    # check the input product detail
-    try:
-        gpgon = data_loading.check_input_datasets(
-            hnrs_dc,
-            odc_dc,
-            period,
-            mappingperiod,
-            geomed_product_name,
-            wofs_summary_product_name,
-            ard_product_names,
-            region_id,
-        )
-    except data_loading.IncorrectInputDataError:
-        logger.error(
-            "The input datasets have problem. finish the processing %s", region_id
-        )
-        # Not enough data to finish the processing, so stop it here
-        sys.exit(0)
+    # TODO: only check the NetCDF is not enough
 
     local_file_path, target_file_path = generate_output_filenames(
         output, task_id, region_id
@@ -665,42 +650,61 @@ def burn_cube_run(
 
     o = urlparse(output)
 
-    logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
-    logger.info("Will upload NetCDF file to: %s", target_file_path)
-
-    # TODO: only check the NetCDF is not enough
-    if not overwrite:
-        if check_file_exists(o.netloc, target_file_path[1:]):
-            logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
-        else:
-            burn_cube_result = generate_bc_result(
-                odc_dc,
+    if check_file_exists(o.netloc, target_file_path[1:]) and not overwrite:
+        logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
+    else:
+        # check the input product detail
+        try:
+            gpgon = data_loading.check_input_datasets(
                 hnrs_dc,
-                ard_bands,
-                geomed_bands,
+                odc_dc,
                 period,
                 mappingperiod,
+                geomed_product_name,
+                wofs_summary_product_name,
+                ard_product_names,
+                region_id,
+            )
+        except data_loading.IncorrectInputDataError:
+            logger.error(
+                "The input datasets have problem. finish the processing %s", region_id
+            )
+            # Not enough data to finish the processing, so stop it here
+            sys.exit(0)
+
+        logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
+        logger.info("Will upload NetCDF file to: %s", target_file_path)
+
+        burn_cube_result = generate_bc_result(
+            odc_dc,
+            hnrs_dc,
+            ard_product_names,
+            geomed_product_name,
+            ard_bands,
+            geomed_bands,
+            period,
+            mappingperiod,
+            gpgon,
+            task_id,
+            output,
+        )
+
+        if burn_cube_result:
+            burn_cube_result_apply_wofs = apply_post_processing_by_wo_summary(
+                odc_dc,
+                burn_cube_result,
                 gpgon,
-                task_id,
-                output,
+                mappingperiod,
+                wofs_summary_product_name,
             )
 
-            if burn_cube_result:
-                burn_cube_result_apply_wofs = apply_post_processing_by_wo_summary(
-                    odc_dc,
-                    burn_cube_result,
-                    gpgon,
-                    mappingperiod,
-                    wofs_summary_product_name,
-                )
-
-                # TODO: should use Try-Catch to know IO is OK or not
-                result_file_saving_and_uploading(
-                    burn_cube_result_apply_wofs,
-                    local_file_path,
-                    target_file_path,
-                    o.netloc,
-                )
+            # TODO: should use Try-Catch to know IO is OK or not
+            result_file_saving_and_uploading(
+                burn_cube_result_apply_wofs,
+                local_file_path,
+                target_file_path,
+                o.netloc,
+            )
 
 
 if __name__ == "__main__":
