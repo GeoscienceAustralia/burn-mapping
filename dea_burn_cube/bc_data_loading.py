@@ -127,13 +127,27 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than WOfS summary dataset")
 
-    # Use find_datasets to get the ARD dataset ID, and display it on LOG
+    # Use find_datasets to get the reference ARD datasets
     datasets = odc_dc.find_datasets(
-        product=ard_product_names, geopolygon=gpgon, time=mapping_period[0]
+        product=ard_product_names, geopolygon=gpgon, time=period
     )
 
     if len(datasets) == 0:
-        raise IncorrectInputDataError("Cannot find any ARD dataset")
+        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
+
+    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
+    logger.info("Find %s referance ARD datasets", str(len(datasets)))
+
+    # Use find_datasets to get the mapping ARD dataset datasets
+    datasets = odc_dc.find_datasets(
+        product=ard_product_names, geopolygon=gpgon, time=mapping_period
+    )
+
+    if len(datasets) == 0:
+        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
+
+    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
+    logger.info("Find %s mapping ARD datasets", str(len(datasets)))
 
     # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
     datasets = hnrs_dc.find_datasets(

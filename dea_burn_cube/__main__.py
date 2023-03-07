@@ -22,7 +22,7 @@ from datacube.utils.cog import write_cog
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
-import dea_burn_cube.data_loading as data_loading
+import dea_burn_cube.bc_data_loading as bc_data_loading
 import dea_burn_cube.utils as utils
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
@@ -150,7 +150,7 @@ def apply_post_processing_by_wo_summary(
 ):
 
     # TODO: we dont use Dask to walkaround the loading issue here cause the WOfS result size is small
-    wofs_summary = data_loading.load_wofs_summary_ds(
+    wofs_summary = bc_data_loading.load_wofs_summary_ds(
         odc_dc, gpgon, mappingperiod, wofs_summary_product_name
     )
 
@@ -268,7 +268,7 @@ def generate_bc_result(
     """
 
     logger.info("Begin to load reference data")
-    ard, geomed = data_loading.load_reference_data(
+    ard, geomed = bc_data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
         ard_product_names,
@@ -284,7 +284,7 @@ def generate_bc_result(
     del ard
 
     logger.info("Begin to load mapping data")
-    mapping_ard = data_loading.load_mapping_data(
+    mapping_ard = bc_data_loading.load_mapping_data(
         odc_dc,
         ard_product_names,
         ard_bands,
@@ -690,7 +690,7 @@ def burn_cube_run(
     else:
         # check the input product detail
         try:
-            gpgon = data_loading.check_input_datasets(
+            gpgon = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
                 period,
@@ -700,7 +700,7 @@ def burn_cube_run(
                 ard_product_names,
                 region_id,
             )
-        except data_loading.IncorrectInputDataError:
+        except bc_data_loading.IncorrectInputDataError:
             logger.error(
                 "The input datasets have problem. finish the processing %s", region_id
             )
