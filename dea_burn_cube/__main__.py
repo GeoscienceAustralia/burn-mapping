@@ -12,7 +12,6 @@ import boto3
 import botocore
 import click
 import datacube
-import dea_tools.datahandling
 import geopandas as gpd
 import pandas as pd
 import s3fs
@@ -22,6 +21,7 @@ from datacube.utils.cog import write_cog
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
+import dea_burn_cube.data_loading as data_loading
 import dea_burn_cube.utils as utils
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
@@ -54,15 +54,9 @@ def check_file_exists(bucket_name, file_key):
         return True
 
 
-def generate_output_filenames(output, task_id, region_id, x_i, y_i, split_count):
-    if split_count != 1:
-        s3_file_path = (
-            f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-        )
-        local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}-{x_i}-{y_i}.nc"
-    else:
-        s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
-        local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
+def generate_output_filenames(output, task_id, region_id):
+    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
+    local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
 
     o = urlparse(output)
 
@@ -115,6 +109,14 @@ def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_n
 
     # get gpgon from the clean dataset list
     # metadata = hnrs_dc.index.datasets.get(str(datasets[0].id))
+
+    if len(datasets) == 0:
+        raise data_loading.IncorrectInputDataException("Cannot find GeoMAD dataset")
+    elif len(datasets) > 1:
+        raise data_loading.IncorrectInputDataException(
+            "Find one more than GeoMAD dataset"
+        )
+
     geometry_list = [datasets[0].extent]
 
     region_polygon = gpd.GeoDataFrame(
@@ -218,24 +220,15 @@ def generate_ocean_mask(ds, region_id):
 
 @utils.log_execution_time
 def apply_post_processing_by_wo_summary(
-    dc, burn_cube_result, gpgon, mappingperiod, x_i, y_i, split_count, region_id
+    odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
 ):
 
     # TODO: we dont use Dask to walkaround the loading issue here cause the WOfS result size is small
-    wofs_summary = dc.load(
-        "ga_ls_wo_fq_cyear_3",
-        time=mappingperiod[0],
-        geopolygon=gpgon,
-        resolution=(-30, 30),
-        dask_chunks={},
+    wofs_summary = data_loading.load_wofs_summary_ds(
+        odc_dc, gpgon, mappingperiod, wofs_summary_product_name
     )
 
-    interval = int(len(wofs_summary.frequency.x) / split_count)
-
-    wofs_summary_frequency = wofs_summary.frequency.isel(
-        x=range(x_i * interval, (x_i + 1) * interval),
-        y=range(y_i * interval, (y_i + 1) * interval),
-    )
+    wofs_summary_frequency = wofs_summary.frequency
 
     wofs_summary_frequency = wofs_summary_frequency.load()
 
@@ -294,45 +287,30 @@ def apply_post_processing_by_wo_summary(
 
 @utils.log_execution_time
 def load_reference_data(
-    dc,
-    geomed,
+    odc_dc,
+    hnrs_dc,
+    ard_product_names,
+    geomed_product_name,
     ard_bands,
+    geomed_bands,
     period,
     gpgon,
-    task_id,
-    region_code,
-    x_i,
-    y_i,
-    split_count,
 ):
-    ard = dea_tools.datahandling.load_ard(
-        dc,
-        products=["ga_ls8c_ard_3"],
-        measurements=ard_bands,
-        geopolygon=gpgon,
-        output_crs="EPSG:3577",
-        resolution=(-30, 30),
-        resampling={"fmask": "nearest", "*": "bilinear"},
-        # mask_filters=[("dilation", 10)],
-        # mask_contiguity=True,
-        dask_chunks={},
-        # predicate=gqa_predicate,
-        time=period,
-        group_by="solar_day",
+    ard = data_loading.load_ard_ds(
+        odc_dc,
+        gpgon,
+        period,
+        ard_product_names,
+        ard_bands,
     )
 
-    ard = ard[ard_bands].to_array(dim="band").to_dataset(name="ard")
+    ard = ard.ard
 
-    interval = int(len(ard.ard.x) / split_count)
+    geomed = data_loading.load_geomed_ds(
+        hnrs_dc, gpgon, period, geomed_product_name, geomed_bands
+    )
 
-    ard = ard.ard.isel(
-        x=range(x_i * interval, (x_i + 1) * interval),
-        y=range(y_i * interval, (y_i + 1) * interval),
-    )
-    geomed = geomed.geomedian.isel(
-        x=range(x_i * interval, (x_i + 1) * interval),
-        y=range(y_i * interval, (y_i + 1) * interval),
-    )
+    geomed = geomed.geomedian
 
     geomed = geomed.load()
     ard = ard.load()
@@ -342,40 +320,21 @@ def load_reference_data(
 
 @utils.log_execution_time
 def load_mapping_data(
-    dc,
-    geomed,
+    odc_dc,
+    ard_product_names,
     ard_bands,
     mappingperiod,
     gpgon,
-    task_id,
-    region_code,
-    x_i,
-    y_i,
-    split_count,
 ):
-    mapping_ard = dea_tools.datahandling.load_ard(
-        dc,
-        products=["ga_ls8c_ard_3"],
-        measurements=ard_bands,
-        geopolygon=gpgon,
-        output_crs="EPSG:3577",
-        resolution=(-30, 30),
-        resampling={"fmask": "nearest", "*": "bilinear"},
-        # mask_filters=[("dilation", 10)],
-        # mask_contiguity=True,
-        dask_chunks={},
-        # predicate=gqa_predicate,
-        time=mappingperiod,
-        group_by="solar_day",
+    mapping_ard = data_loading.load_ard_ds(
+        odc_dc,
+        gpgon,
+        mappingperiod,
+        ard_product_names,
+        ard_bands,
     )
 
-    mapping_ard = mapping_ard[ard_bands].to_array(dim="band").to_dataset(name="ard")
-    interval = int(len(mapping_ard.ard.x) / split_count)
-
-    mapping_ard = mapping_ard.ard.isel(
-        x=range(x_i * interval, (x_i + 1) * interval),
-        y=range(y_i * interval, (y_i + 1) * interval),
-    )
+    mapping_ard = mapping_ard.ard
 
     mapping_ard = mapping_ard.load()
 
@@ -390,32 +349,29 @@ def generate_reference_result(ard, geomed):
 
 
 @utils.log_execution_time
-def generate_subregion_result(
-    dc,
-    geomed,
+def generate_bc_result(
+    odc_dc,
+    hnrs_dc,
+    ard_product_names,
+    geomed_product_name,
     ard_bands,
+    geomed_bands,
     period,
     mappingperiod,
     gpgon,
     task_id,
-    region_code,
-    x_i,
-    y_i,
-    split_count,
     output_folder,
 ):
 
     ard, geomed = load_reference_data(
-        dc,
-        geomed,
+        odc_dc,
+        hnrs_dc,
+        ard_product_names,
+        geomed_product_name,
         ard_bands,
+        geomed_bands,
         period,
         gpgon,
-        task_id,
-        region_code,
-        x_i,
-        y_i,
-        split_count,
     )
 
     outliers_result = generate_reference_result(ard, geomed)
@@ -423,16 +379,11 @@ def generate_subregion_result(
     del ard
 
     mapping_ard = load_mapping_data(
-        dc,
-        geomed,
+        odc_dc,
+        ard_product_names,
         ard_bands,
         mappingperiod,
         gpgon,
-        task_id,
-        region_code,
-        x_i,
-        y_i,
-        split_count,
     )
 
     mapping_dis = utils.distances(mapping_ard, geomed)
@@ -810,56 +761,68 @@ def burn_cube_run(
 
     logger.info("Use mappingperiod: %s", str(mappingperiod))
 
-    dc = datacube.Datacube(app="Burn Cube K8s processing", config=odc_config)
-
-    # The geomed is stiil a Dask lazy loading dataset, which is a lightweight data loading
-    gpgon, geomed = get_geomed_ds(
-        region_id, period, hnrs_config, geomed_bands, geomed_product_name
+    odc_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
+    )
+    hnrs_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {region_id}", config=hnrs_config
     )
 
-    for x_i in range(split_count):
-        for y_i in range(split_count):
+    wofs_summary_product_name = "ga_ls_wo_fq_cyear_3"
+    ard_product_names = ["ga_ls8c_ard_3"]
 
-            local_file_path, target_file_path = generate_output_filenames(
-                output, task_id, region_id, x_i, y_i, split_count
-            )
-            o = urlparse(output)
+    # check the input product detail
+    try:
+        gpgon = data_loading.check_input_datasets(
+            hnrs_dc,
+            odc_dc,
+            period,
+            mappingperiod,
+            geomed_product_name,
+            wofs_summary_product_name,
+            ard_product_names,
+            region_id,
+        )
+    except data_loading.IncorrectInputDataError:
+        logger.error(
+            "The input datasets have problem. finish the processing %s", region_id
+        )
+        # Not enough data to finish the processing, so stop it here
+        sys.exit(0)
 
-            logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
-            logger.info("Will upload NetCDF file to: %s", target_file_path)
+    local_file_path, target_file_path = generate_output_filenames(
+        output, task_id, region_id
+    )
 
-            # TODO: only check the NetCDF is not enough
-            if not overwrite:
-                if check_file_exists(o.netloc, target_file_path[1:]):
-                    logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
-                    continue
+    o = urlparse(output)
 
-            burn_cube_result = generate_subregion_result(
-                dc,
-                geomed,
+    logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
+    logger.info("Will upload NetCDF file to: %s", target_file_path)
+
+    # TODO: only check the NetCDF is not enough
+    if not overwrite:
+        if check_file_exists(o.netloc, target_file_path[1:]):
+            logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
+        else:
+            burn_cube_result = generate_bc_result(
+                odc_dc,
+                hnrs_dc,
                 ard_bands,
+                geomed_bands,
                 period,
                 mappingperiod,
                 gpgon,
                 task_id,
-                region_id,
-                x_i,
-                y_i,
-                split_count,
                 output,
             )
 
-            # TODO: us assume the output is always an AWS S3 path
             if burn_cube_result:
                 burn_cube_result_apply_wofs = apply_post_processing_by_wo_summary(
-                    dc,
+                    odc_dc,
                     burn_cube_result,
                     gpgon,
                     mappingperiod,
-                    x_i,
-                    y_i,
-                    split_count,
-                    region_id,
+                    wofs_summary_product_name,
                 )
 
                 # TODO: should use Try-Catch to know IO is OK or not
