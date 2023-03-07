@@ -9,6 +9,7 @@ import xarray as xr
 
 import dea_burn_cube.utils as utils
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -126,7 +127,7 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than WOfS summary dataset")
 
-    # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
+    # Use find_datasets to get the ARD dataset ID, and display it on LOG
     datasets = odc_dc.find_datasets(
         product=ard_product_names, geopolygon=gpgon, time=mapping_period[0]
     )
