@@ -6,6 +6,7 @@ Geoscience Australia
 import logging
 import os
 import sys
+from typing import List, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -219,18 +220,52 @@ def generate_reference_result(ard, geomed):
 
 @utils.log_execution_time
 def generate_bc_result(
-    odc_dc,
-    hnrs_dc,
-    ard_product_names,
-    geomed_product_name,
-    ard_bands,
-    geomed_bands,
-    period,
-    mappingperiod,
-    gpgon,
-    task_id,
-    output,
-):
+    odc_dc: datacube.Datacube,
+    hnrs_dc: datacube.Datacube,
+    ard_product_names: List[str],
+    geomed_product_name: str,
+    ard_bands: List[str],
+    geomed_bands: List[str],
+    period: Tuple[str, str],
+    mappingperiod: Tuple[str, str],
+    gpgon: datacube.utils.geometry.Geometry,
+    task_id: str,
+    output: str,
+) -> xr.Dataset:
+
+    """
+    Generate burnt area severity mapping result for a given period of time.
+
+    Parameters
+    ----------
+    odc_dc : datacube.Datacube
+        Datacube object for loading mapping data.
+    hnrs_dc : datacube.Datacube
+        Datacube object for loading reference data.
+    ard_product_names : list of str
+        List of names of Analysis Ready Data (ARD) products.
+    geomed_product_name : str
+        Name of geomedian product.
+    ard_bands : list of str
+        List of measurement names to load for ARD products.
+    geomed_bands : list of str
+        List of measurement names to load for geomedian product.
+    period : tuple of str
+        Start and end dates of the reference data period in the format "YYYY-MM-DD".
+    mappingperiod : tuple of str
+        Start and end dates of the mapping data period in the format "YYYY-MM-DD".
+    gpgon : datacube.utils.geometry.Geometry
+        Geopolygon to load data for.
+    task_id : str
+        Identifier for the task being executed.
+    output : str
+        Path to the output directory.
+
+    Returns
+    -------
+    xr.Dataset
+        Burnt area severity mapping result.
+    """
 
     logger.info("Begin to load reference data")
     ard, geomed = data_loading.load_reference_data(
