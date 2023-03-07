@@ -292,3 +292,108 @@ def load_wofs_summary_ds(
     )
 
     return wofs_summary
+
+
+@utils.log_execution_time
+def load_reference_data(
+    odc_dc: datacube.Datacube,
+    hnrs_dc: datacube.Datacube,
+    ard_product_names: List[str],
+    geomed_product_name: str,
+    ard_bands: List[str],
+    geomed_bands: List[str],
+    period: Tuple[str, str],
+    gpgon: datacube.utils.geometry.Geometry,
+) -> Tuple[xr.Dataset, xr.Dataset]:
+    """
+    Load reference data for a given time period and spatial extent.
+
+    Args:
+        odc_dc : datacube.Datacube
+            Datacube object for loading ARD data.
+        hnrs_dc : datacube.Datacube
+            Datacube object for loading geomedian data.
+        ard_product_names : List[str]
+            List of product names to use for loading ARD data.
+        geomed_product_name : str
+            Name of the product to use for loading geomedian data.
+        ard_bands : List[str]
+            List of band names to load from ARD data.
+        geomed_bands : List[str]
+            List of band names to load from geomedian data.
+        period: Tuple[str, str])
+            A tuple of two strings indicating the start and end dates (in "YYYY-MM-DD" format) for the
+            time period of interest.
+        gpgon : datacube.utils.geometry.Geometry
+            A polygon object defining the spatial extent of interest.
+
+    Returns:
+        Tuple[xr.Dataset, xr.Dataset]: A tuple of two xarray datasets containing the loaded ARD
+            and geomedian data, respectively.
+    """
+
+    # Load ARD data
+    ard = load_ard_ds(
+        odc_dc,
+        gpgon,
+        period,
+        ard_product_names,
+        ard_bands,
+    )
+
+    ard = ard.ard
+
+    # Load geomedian data
+    geomed = load_geomed_ds(hnrs_dc, gpgon, period, geomed_product_name, geomed_bands)
+
+    geomed = geomed.geomedian
+
+    # Load the data into memory
+    geomed = geomed.load()
+    ard = ard.load()
+
+    return ard, geomed
+
+
+@utils.log_execution_time
+def load_mapping_data(
+    odc_dc: datacube.Datacube,
+    ard_product_names: List[str],
+    ard_bands: List[str],
+    mappingperiod: Tuple[str, str],
+    gpgon: datacube.utils.geometry.Geometry,
+) -> xr.Dataset:
+    """
+    Loads and returns mapping data as an xarray.Dataset.
+
+    Parameters
+    ----------
+    odc_dc : datacube.Datacube
+        Datacube object for loading data.
+    ard_product_names : List[str]
+        A list of product names to load as ARD.
+    ard_bands : List[str]
+        A list of band names to load.
+    mappingperiod : Tuple[str, str]
+        A tuple containing the start and end date of the time period of interest, formatted as "YYYY-MM-DD".
+    gpgon : datacube.utils.geometry.Geometry
+        A geometry defining the spatial region of interest.
+
+    Returns
+    -------
+    xr.Dataset
+        An xarray dataset containing the loaded mapping data.
+    """
+    mapping_ard = load_ard_ds(
+        odc_dc,
+        gpgon,
+        mappingperiod,
+        ard_product_names,
+        ard_bands,
+    )
+
+    mapping_ard = mapping_ard.ard
+
+    mapping_ard = mapping_ard.load()
+
+    return mapping_ard

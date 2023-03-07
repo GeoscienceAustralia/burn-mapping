@@ -66,81 +66,6 @@ def generate_output_filenames(output, task_id, region_id):
 
 
 @utils.log_execution_time
-def get_geomed_ds(region_id, period, hnrs_config, geomed_bands, geomed_product_name):
-
-    # Use region_id to query AU-30 grid file, and get its geometry
-    _ = s3fs.S3FileSystem(anon=True)
-
-    _ = "s3" in gpd.io.file._VALID_URLS
-    gpd.io.file._VALID_URLS.discard("s3")
-
-    au_grid = gpd.read_file(
-        "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
-    )
-
-    au_grid = au_grid.to_crs(epsg="3577")
-    au_grid = au_grid[au_grid["region_code"] == region_id]
-
-    gpgon = datacube.utils.geometry.Geometry(
-        au_grid.geometry[au_grid.index[0]], crs="epsg:3577"
-    )
-
-    hnrs_dc = datacube.Datacube(app="geomed_loading", config=hnrs_config)
-
-    # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
-    datasets = hnrs_dc.find_datasets(
-        product=geomed_product_name, geopolygon=gpgon, time=period[0]
-    )
-
-    # Ideally, the number of datasets should be 1
-    logger.info("Load GeoMAD from %s", geomed_product_name)
-
-    # clean up the dataset by region_code
-    datasets = [
-        e
-        for e in datasets
-        if e.metadata_doc["properties"]["odc:region_code"] == region_id
-    ]
-
-    for dataset in datasets:
-        logger.info(
-            "Find GeoMAD dataset with metadata:  %s", dataset.metadata_doc["label"]
-        )
-
-    # get gpgon from the clean dataset list
-    # metadata = hnrs_dc.index.datasets.get(str(datasets[0].id))
-
-    if len(datasets) == 0:
-        raise data_loading.IncorrectInputDataException("Cannot find GeoMAD dataset")
-    elif len(datasets) > 1:
-        raise data_loading.IncorrectInputDataException(
-            "Find one more than GeoMAD dataset"
-        )
-
-    geometry_list = [datasets[0].extent]
-
-    region_polygon = gpd.GeoDataFrame(
-        index=range(len(geometry_list)), crs="epsg:3577", geometry=geometry_list
-    )
-    gpgon = datacube.utils.geometry.Geometry(
-        region_polygon.geometry[0], crs="epsg:3577"
-    )
-
-    geomed = hnrs_dc.load(
-        geomed_product_name,
-        time=period[0],
-        geopolygon=gpgon,
-        output_crs="EPSG:3577",
-        resolution=(-30, 30),
-        dask_chunks={},
-    )
-
-    geomed = geomed[geomed_bands].to_array(dim="band").to_dataset(name="geomedian")
-
-    return gpgon, geomed
-
-
-@utils.log_execution_time
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs, local_file_path, target_file_path, bucket_name
 ):
@@ -286,62 +211,6 @@ def apply_post_processing_by_wo_summary(
 
 
 @utils.log_execution_time
-def load_reference_data(
-    odc_dc,
-    hnrs_dc,
-    ard_product_names,
-    geomed_product_name,
-    ard_bands,
-    geomed_bands,
-    period,
-    gpgon,
-):
-    ard = data_loading.load_ard_ds(
-        odc_dc,
-        gpgon,
-        period,
-        ard_product_names,
-        ard_bands,
-    )
-
-    ard = ard.ard
-
-    geomed = data_loading.load_geomed_ds(
-        hnrs_dc, gpgon, period, geomed_product_name, geomed_bands
-    )
-
-    geomed = geomed.geomedian
-
-    geomed = geomed.load()
-    ard = ard.load()
-
-    return ard, geomed
-
-
-@utils.log_execution_time
-def load_mapping_data(
-    odc_dc,
-    ard_product_names,
-    ard_bands,
-    mappingperiod,
-    gpgon,
-):
-    mapping_ard = data_loading.load_ard_ds(
-        odc_dc,
-        gpgon,
-        mappingperiod,
-        ard_product_names,
-        ard_bands,
-    )
-
-    mapping_ard = mapping_ard.ard
-
-    mapping_ard = mapping_ard.load()
-
-    return mapping_ard
-
-
-@utils.log_execution_time
 def generate_reference_result(ard, geomed):
     dis = utils.distances(ard, geomed)
     outliers_result = utils.outliers(ard, dis)
@@ -363,7 +232,7 @@ def generate_bc_result(
     output_folder,
 ):
 
-    ard, geomed = load_reference_data(
+    ard, geomed = data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
         ard_product_names,
@@ -378,7 +247,7 @@ def generate_bc_result(
 
     del ard
 
-    mapping_ard = load_mapping_data(
+    mapping_ard = data_loading.load_mapping_data(
         odc_dc,
         ard_product_names,
         ard_bands,
