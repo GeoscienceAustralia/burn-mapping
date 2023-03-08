@@ -128,7 +128,9 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than WOfS summary dataset")
     else:
-        overall_input_datasets.extend([dataset["label"] for dataset in datasets])
+        overall_input_datasets.extend(
+            [dataset.metadata_doc["label"] for dataset in datasets]
+        )
 
     # Use find_datasets to get the reference ARD datasets
     datasets = odc_dc.find_datasets(
@@ -138,7 +140,9 @@ def check_input_datasets(
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
     else:
-        overall_input_datasets.extend([dataset["label"] for dataset in datasets])
+        overall_input_datasets.extend(
+            [dataset.metadata_doc["label"] for dataset in datasets]
+        )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s referance ARD datasets", str(len(datasets)))
@@ -151,7 +155,9 @@ def check_input_datasets(
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
     else:
-        overall_input_datasets.extend([dataset["label"] for dataset in datasets])
+        overall_input_datasets.extend(
+            [dataset.metadata_doc["label"] for dataset in datasets]
+        )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s mapping ARD datasets", str(len(datasets)))
@@ -181,7 +187,9 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than GeoMAD dataset")
     else:
-        overall_input_datasets.extend([dataset["label"] for dataset in datasets])
+        overall_input_datasets.extend(
+            [dataset.metadata_doc["label"] for dataset in datasets]
+        )
 
     # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue
     geometry_list = [datasets[0].extent]
