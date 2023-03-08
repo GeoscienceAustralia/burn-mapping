@@ -315,14 +315,8 @@ def generate_bc_result(
     return severitymapping_result
 
 
-def logging_setup(verbose: int):
-    """Set up logging.
-
-    Arguments
-    ---------
-    verbose : int
-        Verbosity level (0, 1, 2).
-    """
+def logging_setup():
+    """Set up logging."""
     loggers = [
         logging.getLogger(name)
         for name in logging.root.manager.loggerDict
@@ -363,8 +357,7 @@ def main():
     default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
     help="The ancillary_file folder which save clean-up region list file.",
 )
-@click.option("-v", "--verbose", count=True)
-def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
+def filter_regions(task_id, region_list_s3_path, output_s3_folder):
     """
     There are two assumptions on this method:
     1. user always use AU-30 grid standard GeoJSON
@@ -372,7 +365,7 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
             s3://dea-public-data-dev/mangroves_aux/easter_vic.geojson
     2. user already updated hotspot, and we can use the clean-up CSV file
     """
-    logging_setup(verbose)
+    logging_setup()
 
     _ = s3fs.S3FileSystem(anon=True)
 
@@ -486,14 +479,12 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder, verbose):
     default="10-year-historical-processing-4year-geomad.csv",
     help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
 )
-@click.option("-v", "--verbose", count=True)
 def update_hotspot_data(
     task_id,
     output_s3_folder,
     task_table,
-    verbose,
 ):
-    logging_setup(verbose)
+    logging_setup()
 
     # use task_id to get the mappingperiod information to filter hotspot
     bc_running_task = task.generate_task(task_id, task_table)
@@ -593,13 +584,6 @@ def update_hotspot_data(
     help="REQUIRED. Path to the output directory.",
 )
 @click.option(
-    "--split-count",
-    "-s",
-    type=int,
-    default=2,
-    help="The number of sub-region from a signle au-30 Grid region.",
-)
-@click.option(
     "--geomed-product-name",
     "-g",
     type=str,
@@ -617,19 +601,16 @@ def update_hotspot_data(
     default=False,
     help="Rerun region that have already been processed.",
 )
-@click.option("-v", "--verbose", count=True)
 def burn_cube_run(
     task_id,
     region_id,
     output,
-    split_count,
     geomed_product_name,
     task_table,
     overwrite,
-    verbose,
 ):
 
-    logging_setup(verbose)
+    logging_setup()
 
     bc_running_task = task.generate_task(task_id, task_table)
 
