@@ -7,7 +7,7 @@ import geopandas as gpd
 import s3fs
 import xarray as xr
 
-import dea_burn_cube.utils as utils
+import dea_burn_cube.task as task
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def _get_gpgon(region_id: str) -> datacube.utils.geometry.Geometry:
     return gpgon
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def check_input_datasets(
     hnrs_dc: datacube.Datacube,
     odc_dc: datacube.Datacube,
@@ -196,7 +196,7 @@ def check_input_datasets(
     return gpgon, overall_input_datasets
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def load_geomed_ds(
     hnrs_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
@@ -284,7 +284,7 @@ def load_ard_ds(
     return ard
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def load_wofs_summary_ds(
     odc_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
@@ -318,7 +318,7 @@ def load_wofs_summary_ds(
     return wofs_summary
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def load_reference_data(
     odc_dc: datacube.Datacube,
     hnrs_dc: datacube.Datacube,
@@ -379,7 +379,7 @@ def load_reference_data(
     return ard, geomed
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def load_mapping_data(
     odc_dc: datacube.Datacube,
     ard_product_names: List[str],
