@@ -24,6 +24,7 @@ from shapely.ops import unary_union
 import dea_burn_cube.__version__
 import dea_burn_cube.algo as algo
 import dea_burn_cube.bc_data_loading as bc_data_loading
+import dea_burn_cube.io as io
 import dea_burn_cube.task as task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
@@ -691,7 +692,7 @@ def burn_cube_run(
     else:
         # check the input product detail
         try:
-            gpgon = bc_data_loading.check_input_datasets(
+            gpgon, input_dataset_list = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
                 period,
@@ -710,6 +711,26 @@ def burn_cube_run(
 
         logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
         logger.info("Will upload NetCDF file to: %s", target_file_path)
+
+        # After the check_input_datasets pass, we can use input information to generate
+        # processing log
+        processing_log = task.generate_processing_log(
+            task_id,
+            period,
+            mappingperiod,
+            geomed_product_name,
+            wofs_summary_product_name,
+            ard_product_names,
+            region_id,
+            output,
+            task_table,
+            input_dataset_list,
+        )
+
+        # No matter upload successful or not, should not block the main processing
+        io.upload_processing_log(
+            processing_log, o.netloc, target_file_path[1:].replace(".nc", ".json")
+        )
 
         burn_cube_result = generate_bc_result(
             odc_dc,

@@ -2,10 +2,12 @@ import calendar
 import datetime
 import logging
 import time
-from typing import Dict
+from typing import Any, Dict, List
 
 import pandas as pd
 import s3fs
+
+import dea_burn_cube.__version__ as version
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -156,3 +158,60 @@ def generate_task(task_id: str, task_table: str) -> Dict[str, str]:
         result_dict = task_to_ranges(task_id, task_table)
 
     return result_dict
+
+
+def generate_processing_log(
+    task_id: str,
+    period: List[str],
+    mappingperiod: List[str],
+    geomed_product_name: str,
+    wofs_summary_product_name: str,
+    ard_product_names: List[str],
+    region_id: str,
+    output: str,
+    task_table: str,
+    input_dataset_list: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Generates a processing log dictionary for the task.
+
+    Args:
+    task_id : str
+        ID of the task being processed
+    period : List[str]
+        Period to process data for
+    mappingperiod : List[str])
+        Mapping period to process data for
+    geomed_product_name : str)
+        Name of the GeoMAD product
+    wofs_summary_product_name : str
+        Name of the WOfS summary product
+    ard_product_names : List[str]
+        List of reference ARD products
+    region_id : str
+        Region ID to process data for
+    output : str
+        Output folder path
+    task_table : str
+        Name of the table to store the task
+    input_dataset_list : List[Dict[str, Any]]
+        List of input datasets with metadata
+
+    Returns:
+    processing_log : Dict[str, Any]): A dictionary containing processing log information
+    """
+    processing_log: Dict[str, Any] = {}
+    processing_log["task_id"] = task_id
+    processing_log["period"] = period
+    processing_log["mappingperiod"] = mappingperiod
+    processing_log["geomed_product_name"] = geomed_product_name
+    processing_log["wofs_summary_product_name"] = wofs_summary_product_name
+    processing_log["ard_product_names"] = ard_product_names
+    processing_log["region_id"] = region_id
+    processing_log["output"] = region_id
+    processing_log["task_table"] = task_table
+    processing_log["input_dataset_list"] = input_dataset_list
+
+    processing_log["DEA Burn Cube"] = version
+
+    return processing_log
