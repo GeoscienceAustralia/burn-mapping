@@ -20,7 +20,7 @@ def upload_dict_to_s3(dictionary: Dict, bucket_name: str, file_name: str):
     """
     # Initialize the S3 resource and convert the dictionary to a JSON string
     s3 = boto3.resource("s3")
-    json_string = json.dumps(dictionary)
+    json_string = json.dumps(dictionary, indent=4)
 
     # Upload the JSON string to S3
     try:
