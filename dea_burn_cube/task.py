@@ -200,18 +200,19 @@ def generate_processing_log(
     Returns:
     processing_log : Dict[str, Any]): A dictionary containing processing log information
     """
-    processing_log: Dict[str, Any] = {}
-    processing_log["task_id"] = task_id
-    processing_log["period"] = period
-    processing_log["mappingperiod"] = mappingperiod
-    processing_log["geomed_product_name"] = geomed_product_name
-    processing_log["wofs_summary_product_name"] = wofs_summary_product_name
-    processing_log["ard_product_names"] = ard_product_names
-    processing_log["region_id"] = region_id
-    processing_log["output"] = region_id
-    processing_log["task_table"] = task_table
-    processing_log["DEA Burn Cube"] = version
 
-    processing_log["input_dataset_list"] = input_dataset_list
+    # We can change it to EODatasets3 format in the future
 
-    return processing_log
+    return {
+        "task_id": task_id,
+        "period": period,
+        "mappingperiod": mappingperiod,
+        "geomed_product_name": geomed_product_name,
+        "wofs_summary_product_name": wofs_summary_product_name,
+        "ard_product_names": ard_product_names,
+        "region_id": region_id,
+        "output": region_id,
+        "task_table": task_table,
+        "DEA Burn Cube": version,
+        "input_dataset_list": input_dataset_list,
+    }
