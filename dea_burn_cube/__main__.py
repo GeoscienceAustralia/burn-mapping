@@ -728,7 +728,7 @@ def burn_cube_run(
         )
 
         # No matter upload successful or not, should not block the main processing
-        io.upload_processing_log(
+        io.upload_dict_to_s3(
             processing_log, o.netloc, target_file_path[1:].replace(".nc", ".json")
         )
 
