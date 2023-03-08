@@ -129,7 +129,7 @@ def check_input_datasets(
         raise IncorrectInputDataError("Find one more than WOfS summary dataset")
     else:
         overall_input_datasets.extend(
-            [dataset.metadata_doc["label"] for dataset in datasets]
+            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
     # Use find_datasets to get the reference ARD datasets
@@ -141,7 +141,7 @@ def check_input_datasets(
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
     else:
         overall_input_datasets.extend(
-            [dataset.metadata_doc["label"] for dataset in datasets]
+            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
@@ -156,7 +156,7 @@ def check_input_datasets(
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
     else:
         overall_input_datasets.extend(
-            [dataset.metadata_doc["label"] for dataset in datasets]
+            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
@@ -188,7 +188,7 @@ def check_input_datasets(
         raise IncorrectInputDataError("Find one more than GeoMAD dataset")
     else:
         overall_input_datasets.extend(
-            [dataset.metadata_doc["label"] for dataset in datasets]
+            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
     # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue

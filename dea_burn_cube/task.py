@@ -210,8 +210,8 @@ def generate_processing_log(
     processing_log["region_id"] = region_id
     processing_log["output"] = region_id
     processing_log["task_table"] = task_table
-    processing_log["input_dataset_list"] = input_dataset_list
-
     processing_log["DEA Burn Cube"] = version
+
+    processing_log["input_dataset_list"] = input_dataset_list
 
     return processing_log
