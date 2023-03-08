@@ -22,8 +22,10 @@ from datacube.utils.cog import write_cog
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
+import dea_burn_cube.algo as algo
 import dea_burn_cube.bc_data_loading as bc_data_loading
-import dea_burn_cube.utils as utils
+import dea_burn_cube.io as io
+import dea_burn_cube.task as task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -66,7 +68,7 @@ def generate_output_filenames(output, task_id, region_id):
     return local_file_path, target_file_path
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs, local_file_path, target_file_path, bucket_name
 ):
@@ -106,7 +108,7 @@ def result_file_saving_and_uploading(
             )
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def generate_ocean_mask(ds, region_id):
     au_grid = gpd.read_file(
         "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
@@ -144,7 +146,7 @@ def generate_ocean_mask(ds, region_id):
     return data.not_ocean_layer
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def apply_post_processing_by_wo_summary(
     odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
 ):
@@ -162,10 +164,10 @@ def apply_post_processing_by_wo_summary(
 
     # ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
 
-    burnpixel_mod = utils.burnpixel_masking(
+    burnpixel_mod = algo.burnpixel_masking(
         burn_cube_result, "Moderate"
     )  # mask the burnt area with "Medium" burnt area
-    burnpixel_sev = utils.burnpixel_masking(burn_cube_result, "Severe")
+    burnpixel_sev = algo.burnpixel_masking(burn_cube_result, "Severe")
 
     wofs_moderate = wofs_mask * burnpixel_mod
     wofs_severe = wofs_mask * burnpixel_sev
@@ -211,14 +213,14 @@ def apply_post_processing_by_wo_summary(
     )
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def generate_reference_result(ard, geomed):
-    dis = utils.distances(ard, geomed)
-    outliers_result = utils.outliers(ard, dis)
+    dis = algo.distances(ard, geomed)
+    outliers_result = algo.outliers(ard, dis)
     return outliers_result
 
 
-@utils.log_execution_time
+@task.log_execution_time
 def generate_bc_result(
     odc_dc: datacube.Datacube,
     hnrs_dc: datacube.Datacube,
@@ -292,7 +294,7 @@ def generate_bc_result(
         gpgon,
     )
 
-    mapping_dis = utils.distances(mapping_ard, geomed)
+    mapping_dis = algo.distances(mapping_ard, geomed)
 
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
@@ -301,7 +303,7 @@ def generate_bc_result(
 
     logger.info("Load hotspot information from:  %s", hotspotfile)
 
-    severitymapping_result = utils.severitymapping(
+    severitymapping_result = algo.severitymapping(
         mapping_dis,
         outliers_result,
         mappingperiod,
@@ -494,7 +496,7 @@ def update_hotspot_data(
     logging_setup(verbose)
 
     # use task_id to get the mappingperiod information to filter hotspot
-    bc_running_task = utils.generate_task(task_id, task_table)
+    bc_running_task = task.generate_task(task_id, task_table)
 
     mappingperiod = (
         bc_running_task["Mapping Period Start"],
@@ -629,7 +631,7 @@ def burn_cube_run(
 
     logging_setup(verbose)
 
-    bc_running_task = utils.generate_task(task_id, task_table)
+    bc_running_task = task.generate_task(task_id, task_table)
 
     # geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]
     geomed_bands = ["green", "nir", "swir2"]
@@ -690,7 +692,7 @@ def burn_cube_run(
     else:
         # check the input product detail
         try:
-            gpgon = bc_data_loading.check_input_datasets(
+            gpgon, input_dataset_list = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
                 period,
@@ -709,6 +711,26 @@ def burn_cube_run(
 
         logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
         logger.info("Will upload NetCDF file to: %s", target_file_path)
+
+        # After the check_input_datasets pass, we can use input information to generate
+        # processing log
+        processing_log = task.generate_processing_log(
+            task_id,
+            period,
+            mappingperiod,
+            geomed_product_name,
+            wofs_summary_product_name,
+            ard_product_names,
+            region_id,
+            output,
+            task_table,
+            input_dataset_list,
+        )
+
+        # No matter upload successful or not, should not block the main processing
+        io.upload_dict_to_s3(
+            processing_log, o.netloc, target_file_path[1:].replace(".nc", ".json")
+        )
 
         burn_cube_result = generate_bc_result(
             odc_dc,
