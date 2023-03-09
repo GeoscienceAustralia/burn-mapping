@@ -23,7 +23,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 from skimage import measure
 
-import dea_burn_cube.task as task
+from dea_burn_cube import task
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

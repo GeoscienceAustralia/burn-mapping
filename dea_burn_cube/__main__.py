@@ -15,17 +15,17 @@ import click
 import datacube
 import geopandas as gpd
 import pandas as pd
+import pyproj
+import rasterio.features
 import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
+from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
-import dea_burn_cube.algo as algo
-import dea_burn_cube.bc_data_loading as bc_data_loading
-import dea_burn_cube.io as io
-import dea_burn_cube.task as task
+from dea_burn_cube import algo, bc_data_loading, io, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -57,7 +57,24 @@ def check_file_exists(bucket_name, file_key):
         return True
 
 
-def generate_output_filenames(output, task_id, region_id):
+def generate_output_filenames(
+    output: str, task_id: str, region_id: str
+) -> Tuple[str, str]:
+    """
+    Generate local and target file paths for output file.
+
+    Args:
+        output: A string representing the S3 bucket and prefix where the output file will be stored.
+        task_id: A string representing the ID of the task.
+        region_id: A string representing the ID of the region.
+
+    Returns:
+        A tuple of strings representing the local file path and target file path.
+
+    Example:
+        >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
+        ('/tmp/BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
+    """
     s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
     local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
 
@@ -70,8 +87,33 @@ def generate_output_filenames(output, task_id, region_id):
 
 @task.log_execution_time
 def result_file_saving_and_uploading(
-    burn_cube_result_apply_wofs, local_file_path, target_file_path, bucket_name
-):
+    burn_cube_result_apply_wofs: xr.Dataset,
+    local_file_path: str,
+    target_file_path: str,
+    bucket_name: str,
+) -> None:
+    """
+    Saves burn cube result as netCDF file, converts each band to a GeoTIFF and uploads the files to an S3 bucket.
+
+    Args:
+        burn_cube_result_apply_wofs: An XArray Dataset object representing the result of the burn cube analysis.
+        local_file_path: A string representing the path to save the local netCDF file.
+        target_file_path: A string representing the target S3 bucket and prefix where the files will be uploaded.
+        bucket_name: A string representing the name of the S3 bucket.
+
+    Returns:
+        None.
+
+    Raises:
+        IOError: If there was an error reading or writing the files.
+
+    Example:
+        >>> result_file_saving_and_uploading(burn_cube_result,
+                                            '/tmp/burn_cube_result.nc',
+                                            's3://my-bucket/output',
+                                            'my-bucket')
+    """
+
     comp = dict(zlib=True, complevel=5)
     encoding = {
         var: comp for var in burn_cube_result_apply_wofs.data_vars
@@ -89,6 +131,7 @@ def result_file_saving_and_uploading(
     for band, _ in burn_cube_result_apply_wofs.data_vars.items():
         ds_output = burn_cube_result_apply_wofs[band].to_dataset(name=band)
         ds_output.attrs["crs"] = geometry.CRS("EPSG:3577")
+
         da_output = ds_output.to_array()
 
         local_tiff_file = local_file_path.replace(".nc", f"-{band.lower()}.tif")
@@ -109,16 +152,34 @@ def result_file_saving_and_uploading(
 
 
 @task.log_execution_time
-def generate_ocean_mask(ds, region_id):
-    au_grid = gpd.read_file(
+def generate_ocean_mask(ds: xr.Dataset, region_id: str) -> xr.DataArray:
+    """
+    Generate a mask for non-ocean areas within a given region.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        A dataset containing geospatial data for the given region.
+    region_id : str
+        A string representing the region ID to use when selecting the grid cells
+        for the given region.
+
+    Returns
+    -------
+    xr.DataArray
+        A 2D array of boolean values indicating whether each cell is not part of the
+        ocean (True) or is part of the ocean (False).
+    """
+    # Load the grid for the given region
+    au_grid: gpd.GeoDataFrame = gpd.read_file(
         "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
     )
-
     au_grid = au_grid.to_crs(epsg="3577")
     au_grid = au_grid[au_grid["region_code"] == region_id]
 
-    ancillary_folder = "s3://dea-public-data-dev/projects/burn_cube/configs"
-    ocean_mask_path = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
+    # Load the coastline shapefile for masking the ocean
+    ancillary_folder: str = "s3://dea-public-data-dev/projects/burn_cube/configs"
+    ocean_mask_path: str = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
 
     ocean_df = gpd.read_file(ocean_mask_path)
     ocean_mask = unary_union(list(ocean_df.geometry))
@@ -130,8 +191,6 @@ def generate_ocean_mask(ds, region_id):
     dims = ds.geobox.dims
 
     xy_coords = [ds[dims[0]], ds[dims[1]]]
-
-    import rasterio.features
 
     arr = rasterio.features.rasterize(
         shapes=[land_area], out_shape=(y, x), transform=transform
@@ -150,8 +209,29 @@ def generate_ocean_mask(ds, region_id):
 def apply_post_processing_by_wo_summary(
     odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
 ):
+    """
+    Applies post-processing to the given burn cube result dataset based on water observations from space (WOfS)
+    summary data.
 
-    # TODO: we dont use Dask to walkaround the loading issue here cause the WOfS result size is small
+    Parameters:
+    -----------
+    odc_dc : datacube.Datacube
+        An instance of `datacube.Datacube`.
+    burn_cube_result : xarray.Dataset
+        The burn cube result dataset.
+    gpgon : str
+        The geographic area of interest, as a string. Example: "Global".
+    mappingperiod : str
+        The mapping period, as a string. Example: "20200301-20200430".
+    wofs_summary_product_name : str
+        The name of the WOfS summary product.
+
+    Returns:
+    --------
+    xarray.Dataset
+            The burn cube result dataset with post-processing applied based on WOfS summary data.
+    """
+
     wofs_summary = bc_data_loading.load_wofs_summary_ds(
         odc_dc, gpgon, mappingperiod, wofs_summary_product_name
     )
@@ -214,7 +294,26 @@ def apply_post_processing_by_wo_summary(
 
 
 @task.log_execution_time
-def generate_reference_result(ard, geomed):
+def generate_reference_result(ard: xr.Dataset, geomed: xr.Dataset) -> xr.Dataset:
+    """
+    Generates a reference result by computing the outliers between the input
+    `ard` and `geomed` datasets using the `distances` and `outliers` functions
+    from the `algo` module.
+
+    Parameters
+    ----------
+    ard : xr.Dataset
+        The input dataset that represents the acquired data.
+    geomed : xr.Dataset
+        The input dataset that represents the geometric median of the
+        acquired data.
+
+    Returns
+    -------
+    xr.Dataset
+        The output dataset that represents the outliers between the input
+        `ard` and `geomed` datasets.
+    """
     dis = algo.distances(ard, geomed)
     outliers_result = algo.outliers(ard, dis)
     return outliers_result
@@ -234,7 +333,6 @@ def generate_bc_result(
     task_id: str,
     output: str,
 ) -> xr.Dataset:
-
     """
     Generate burnt area severity mapping result for a given period of time.
 
@@ -412,11 +510,6 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder):
     logger.info("Filter regions by Hot Spot %s", hotspot_file)
 
     hotspot_df = pd.read_csv(hotspot_file)
-
-    import pyproj
-    from shapely.geometry import Point
-    from shapely.ops import unary_union
-
     latitude = hotspot_df.latitude.values
     longitude = hotspot_df.longitude.values
 
