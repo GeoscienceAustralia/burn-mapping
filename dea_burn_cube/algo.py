@@ -1,3 +1,12 @@
+"""
+This module contains functions and classes for burn mapping using data from Digital Earth
+Australia (DEA).
+
+The module also provides some utility functions for plotting, masking, and saving burn
+mapping results.
+
+"""
+
 import ctypes
 import logging
 import multiprocessing as mp
@@ -8,9 +17,11 @@ import pandas as pd
 import pyproj
 import s3fs
 import xarray as xr
+from scipy import ndimage
 from shapely import geometry
 from shapely.geometry import Point
 from shapely.ops import unary_union
+from skimage import measure
 
 import dea_burn_cube.task as task
 
@@ -37,8 +48,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref ** 2))
-        / np.sqrt(np.nansum(obs ** 2, axis=0))
+        / np.sqrt(np.sum(ref**2))
+        / np.sqrt(np.nansum(obs**2, axis=0))
     )
     return cosdist
 
@@ -61,7 +72,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist ** 2)
+    euc_norm = np.sqrt(euc_dist**2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -267,7 +278,6 @@ def post_filtering(sev, hotspots_filtering=True, date_filtering=True):
         filtered_burnscar = np.zeros(burn_pixel.data.shape).astype("f4")
 
         if hotspots_filtering:
-            from skimage import measure
 
             all_labels = measure.label(burn_pixel.data, background=0)
 
@@ -440,7 +450,6 @@ def distances(ard, geomed):
     t_dim = _x.time.data
     if len(t_dim) < 1:
         logger.warning(f"--- {len(t_dim)} observations")
-        logger.warning("no enough data for the calculation of distances")
         return
 
     # nir = _x[3, :, :, :].data.astype("float32")
@@ -604,9 +613,6 @@ def region_growing(severity, dists, outlrs):
     change_dates = np.unique(start_date)
     z_distance = 2 / 3  # times outlier distance (eq. 3 stdev)
 
-    from scipy import ndimage
-    from skimage import measure
-
     # see http://www.scipy-lectures.org/packages/scikit-image/index.html#binary-segmentation-foreground-background
     fraction_seedmap = 0.25  # this much of region must already have been mapped as burnt to be included
     seed_map = (severity.Severe.data > 0).astype(
@@ -652,7 +658,6 @@ def _create_geospatial_attributes(dataset):
     Returns: lat_max, lat_min, lon_max, lon_min, poly
     which are the corners of the polygon and the polygon to use
     """
-    import pyproj
 
     y_max, y_min, x_max, x_min = (
         np.max(dataset.y),
@@ -743,7 +748,6 @@ def _create_variable_attributes(dataset):
 
 def create_attributes(dataset, product_name, version, method, res=30):
     """creates attributes for the dataset so that it will have information when output"""
-    import datetime
 
     dataset = _create_variable_attributes(dataset)
     lat_max, lat_min, lon_max, lon_min, poly = _create_geospatial_attributes(dataset)
@@ -751,32 +755,7 @@ def create_attributes(dataset, product_name, version, method, res=30):
         "name": product_name,
         "description": "Description for " + product_name,
         "mapping_Method": method,  # NBR or NBRdist
-        "data_source": "Landsat 5/8",
-        "resolution": str(res) + " m",
-        "cdm_data_type": "Grid",
-        "cmi_id": "BAM_25_1.0",
-        "Conventions": "CF-1.6, ACDD-1.3",
-        "geospatial_bounds": str(poly),
-        "geospatial_bounds_crs": "EPSG:4326",
-        "geospatial_lat_max": lat_max,
-        "geospatial_lat_min": lat_min,
-        "geospatial_lat_units": "degree_north",
-        "geospatial_lon_max": lon_max,
-        "geospatial_lon_min": lon_min,
-        "geospatial_lon_units": "degree_east",
-        "date_created": datetime.datetime.today().isoformat(),
-        "history": "NetCDF-CF file created by datacube version '1.6rc2+108.g096a26d5' at 20180914",
         "institution": "Commonwealth of Australia (Geoscience Australia)",
-        "keywords": "AU/GA,NASA/GSFC/SED/ESD/LANDSAT,ETM+,TM,OLI,EARTH SCIENCE, BURNED AREA",
-        "keywords_vocabulary": "GCMD",
-        "license": "CC BY Attribution 4.0 International License",
-        "product_version": version,
-        "publisher_email": "earth.observation@ga.gov.au",
-        "publisher_url": "http://www.ga.gov.au",
-        "references": "Renzullo et al (2019)",
-        "source": "Burned Area Map Algorithm v1.0",
-        "summary": "",
-        "title": "Burned Area Map Annual 1.0",
     }
     for key, value in product_definition.items():
         dataset.attrs[key] = value

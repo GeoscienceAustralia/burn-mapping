@@ -1,3 +1,11 @@
+"""
+This module contains functions and classes for burn mapping using data from Digital Earth
+Australia (DEA).
+
+This module contains functions and variables for loading data from a burn cube.
+
+"""
+
 import logging
 from typing import List, Tuple
 
@@ -14,10 +22,29 @@ logger = logging.getLogger(__name__)
 
 
 class IncorrectInputDataError(Exception):
+    """
+    Exception raised when the input data provided to a function or method is incorrect.
+
+    Attributes:
+    - message (str): the error message associated with the exception.
+
+    Methods:
+    - log_error(): logs the error message to a logger object.
+
+    Usage example:
+    >>> try:
+    ...     # some code that might raise an IncorrectInputDataError
+    ... except IncorrectInputDataError as e:
+    ...     e.log_error()
+    """
+
     def __init__(self, message):
         super().__init__(message)
 
     def log_error(self):
+        """
+        Logs the error message to a logger object.
+        """
         logger.error(str(self))
 
 

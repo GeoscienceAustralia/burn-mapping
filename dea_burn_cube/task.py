@@ -1,3 +1,9 @@
+"""
+This module is used to create and manage tasks for burn mapping
+using the DEA Burn Cube.
+
+"""
+
 import calendar
 import datetime
 import logging
@@ -211,7 +217,7 @@ def generate_processing_log(
         "wofs_summary_product_name": wofs_summary_product_name,
         "ard_product_names": ard_product_names,
         "region_id": region_id,
-        "output": region_id,
+        "output": output,
         "task_table": task_table,
         "DEA Burn Cube": version,
         "input_dataset_list": input_dataset_list,
