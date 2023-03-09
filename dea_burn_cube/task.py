@@ -8,8 +8,11 @@ import calendar
 import datetime
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse
 
+import boto3
+import botocore
 import pandas as pd
 import s3fs
 
@@ -49,6 +52,55 @@ def log_execution_time(func):
         return result
 
     return wrapper
+
+
+def generate_output_filenames(
+    output: str, task_id: str, region_id: str
+) -> Tuple[str, str]:
+    """
+    Generate local and target file paths for output file.
+
+    Args:
+        output: A string representing the S3 bucket and prefix where the output file will be stored.
+        task_id: A string representing the ID of the task.
+        region_id: A string representing the ID of the region.
+
+    Returns:
+        A tuple of strings representing the local file path and target file path.
+
+    Example:
+        >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
+        ('/tmp/BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
+    """
+    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
+    local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
+
+    o = urlparse(output)
+
+    target_file_path = f"{o.path}/{s3_file_path}"
+
+    return local_file_path, target_file_path
+
+
+def check_file_exists(bucket_name, file_key):
+    """
+    Checks if a file exists in an S3 bucket.
+
+    :param bucket_name: The name of the S3 bucket.
+    :param file_key: The key of the file in the bucket.
+    :return: True if the file exists, False otherwise.
+    """
+    s3 = boto3.client("s3")
+
+    try:
+        s3.head_object(Bucket=bucket_name, Key=file_key)
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            return False
+        else:
+            raise
+    else:
+        return True
 
 
 def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:

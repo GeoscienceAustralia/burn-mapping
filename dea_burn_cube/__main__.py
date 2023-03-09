@@ -5,18 +5,19 @@ Geoscience Australia
 
 import logging
 import os
+import shutil
 import sys
-from typing import List, Tuple
+import zipfile
 from urllib.parse import urlparse
 
 import boto3
-import botocore
 import click
 import datacube
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pyproj
-import rasterio.features
+import requests
 import s3fs
 import xarray as xr
 from datacube.utils import geometry
@@ -25,7 +26,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
-from dea_burn_cube import algo, bc_data_loading, io, task
+from dea_burn_cube import bc_data_loading, bc_data_processing, io, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -34,55 +35,6 @@ logger = logging.getLogger(__name__)
 BUCKET_NAME = "dea-public-data-dev"
 
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
-
-
-def check_file_exists(bucket_name, file_key):
-    """
-    Checks if a file exists in an S3 bucket.
-
-    :param bucket_name: The name of the S3 bucket.
-    :param file_key: The key of the file in the bucket.
-    :return: True if the file exists, False otherwise.
-    """
-    s3 = boto3.client("s3")
-
-    try:
-        s3.head_object(Bucket=bucket_name, Key=file_key)
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            return False
-        else:
-            raise
-    else:
-        return True
-
-
-def generate_output_filenames(
-    output: str, task_id: str, region_id: str
-) -> Tuple[str, str]:
-    """
-    Generate local and target file paths for output file.
-
-    Args:
-        output: A string representing the S3 bucket and prefix where the output file will be stored.
-        task_id: A string representing the ID of the task.
-        region_id: A string representing the ID of the region.
-
-    Returns:
-        A tuple of strings representing the local file path and target file path.
-
-    Example:
-        >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
-        ('/tmp/BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
-    """
-    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
-    local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
-
-    o = urlparse(output)
-
-    target_file_path = f"{o.path}/{s3_file_path}"
-
-    return local_file_path, target_file_path
 
 
 @task.log_execution_time
@@ -149,268 +101,6 @@ def result_file_saving_and_uploading(
                 "Upload GeoTiff file: %s",
                 target_file_path.replace(".nc", f"-{band.lower()}.tif"),
             )
-
-
-@task.log_execution_time
-def generate_ocean_mask(ds: xr.Dataset, region_id: str) -> xr.DataArray:
-    """
-    Generate a mask for non-ocean areas within a given region.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        A dataset containing geospatial data for the given region.
-    region_id : str
-        A string representing the region ID to use when selecting the grid cells
-        for the given region.
-
-    Returns
-    -------
-    xr.DataArray
-        A 2D array of boolean values indicating whether each cell is not part of the
-        ocean (True) or is part of the ocean (False).
-    """
-    # Load the grid for the given region
-    au_grid: gpd.GeoDataFrame = gpd.read_file(
-        "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
-    )
-    au_grid = au_grid.to_crs(epsg="3577")
-    au_grid = au_grid[au_grid["region_code"] == region_id]
-
-    # Load the coastline shapefile for masking the ocean
-    ancillary_folder: str = "s3://dea-public-data-dev/projects/burn_cube/configs"
-    ocean_mask_path: str = f"{ancillary_folder}/ITEMCoastlineCleaned.shp"
-
-    ocean_df = gpd.read_file(ocean_mask_path)
-    ocean_mask = unary_union(list(ocean_df.geometry))
-
-    land_area = au_grid.geometry[au_grid.index[0]].intersection(ocean_mask)
-
-    y, x = ds.geobox.shape
-    transform = ds.geobox.transform
-    dims = ds.geobox.dims
-
-    xy_coords = [ds[dims[0]], ds[dims[1]]]
-
-    arr = rasterio.features.rasterize(
-        shapes=[land_area], out_shape=(y, x), transform=transform
-    )
-
-    not_ocean_layer = xr.DataArray(
-        arr, coords=xy_coords, dims=dims, name="not_ocean_layer"
-    )
-    data = xr.combine_by_coords(
-        [ds, not_ocean_layer], coords=["x", "y"], join="inner", combine_attrs="override"
-    )
-    return data.not_ocean_layer
-
-
-@task.log_execution_time
-def apply_post_processing_by_wo_summary(
-    odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
-):
-    """
-    Applies post-processing to the given burn cube result dataset based on water observations from space (WOfS)
-    summary data.
-
-    Parameters:
-    -----------
-    odc_dc : datacube.Datacube
-        An instance of `datacube.Datacube`.
-    burn_cube_result : xarray.Dataset
-        The burn cube result dataset.
-    gpgon : str
-        The geographic area of interest, as a string. Example: "Global".
-    mappingperiod : str
-        The mapping period, as a string. Example: "20200301-20200430".
-    wofs_summary_product_name : str
-        The name of the WOfS summary product.
-
-    Returns:
-    --------
-    xarray.Dataset
-            The burn cube result dataset with post-processing applied based on WOfS summary data.
-    """
-
-    wofs_summary = bc_data_loading.load_wofs_summary_ds(
-        odc_dc, gpgon, mappingperiod, wofs_summary_product_name
-    )
-
-    wofs_summary_frequency = wofs_summary.frequency
-
-    wofs_summary_frequency = wofs_summary_frequency.load()
-
-    wofs_mask = (wofs_summary_frequency[0, :, :].values < 0.2).astype(float)
-
-    # ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
-
-    burnpixel_mod = algo.burnpixel_masking(
-        burn_cube_result, "Moderate"
-    )  # mask the burnt area with "Medium" burnt area
-    burnpixel_sev = algo.burnpixel_masking(burn_cube_result, "Severe")
-
-    wofs_moderate = wofs_mask * burnpixel_mod
-    wofs_severe = wofs_mask * burnpixel_sev
-    wofs_severity = wofs_mask * burn_cube_result["Severity"]
-    wofs_startdate = wofs_mask * burn_cube_result["StartDate"]
-    wofs_duration = wofs_mask * burn_cube_result["Duration"]
-    wofs_corroborate = wofs_mask * burn_cube_result["Corroborate"]
-    wofs_cleaned = wofs_mask * burn_cube_result["Cleaned"]
-
-    # ocean_moderate = ocean_mask * wofs_moderate
-    # ocean_severe = ocean_mask * wofs_severe
-    # ocean_severity = ocean_mask * wofs_severity
-    # ocean_startdate = ocean_mask * wofs_startdate
-    # ocean_duration = ocean_mask * wofs_duration
-    # ocean_corroborate = ocean_mask * wofs_corroborate
-    # ocean_cleaned = ocean_mask * wofs_cleaned
-
-    return xr.Dataset(
-        {
-            "StartDate": burn_cube_result["StartDate"],
-            "Duration": burn_cube_result["Duration"],
-            "Severity": burn_cube_result["Severity"],
-            "Severe": burn_cube_result["Severe"],
-            "Moderate": burn_cube_result["Moderate"],
-            "Corroborate": burn_cube_result["Corroborate"],
-            "Cleaned": burn_cube_result["Cleaned"],
-            "Count": burn_cube_result["Count"],
-            "WOfSModerate": wofs_moderate,
-            "WOfSSevere": wofs_severe,
-            "WOfSSeverity": wofs_severity,
-            "WOfSStartDate": wofs_startdate,
-            "WOfSDuration": wofs_duration,
-            "WOfSCorroborate": wofs_corroborate,
-            "WOfSCleaned": wofs_cleaned,
-            # "OceanModerate": ocean_moderate,
-            # "OceanSevere": ocean_severe,
-            # "OceanSeverity": ocean_severity,
-            # "OceanStartDate": ocean_startdate,
-            # "OceanDuration": ocean_duration,
-            # "OceanCorroborate": ocean_corroborate,
-            # "OceanCleaned": ocean_cleaned,
-        }
-    )
-
-
-@task.log_execution_time
-def generate_reference_result(ard: xr.Dataset, geomed: xr.Dataset) -> xr.Dataset:
-    """
-    Generates a reference result by computing the outliers between the input
-    `ard` and `geomed` datasets using the `distances` and `outliers` functions
-    from the `algo` module.
-
-    Parameters
-    ----------
-    ard : xr.Dataset
-        The input dataset that represents the acquired data.
-    geomed : xr.Dataset
-        The input dataset that represents the geometric median of the
-        acquired data.
-
-    Returns
-    -------
-    xr.Dataset
-        The output dataset that represents the outliers between the input
-        `ard` and `geomed` datasets.
-    """
-    dis = algo.distances(ard, geomed)
-    outliers_result = algo.outliers(ard, dis)
-    return outliers_result
-
-
-@task.log_execution_time
-def generate_bc_result(
-    odc_dc: datacube.Datacube,
-    hnrs_dc: datacube.Datacube,
-    ard_product_names: List[str],
-    geomed_product_name: str,
-    ard_bands: List[str],
-    geomed_bands: List[str],
-    period: Tuple[str, str],
-    mappingperiod: Tuple[str, str],
-    gpgon: datacube.utils.geometry.Geometry,
-    task_id: str,
-    output: str,
-) -> xr.Dataset:
-    """
-    Generate burnt area severity mapping result for a given period of time.
-
-    Parameters
-    ----------
-    odc_dc : datacube.Datacube
-        Datacube object for loading mapping data.
-    hnrs_dc : datacube.Datacube
-        Datacube object for loading reference data.
-    ard_product_names : list of str
-        List of names of Analysis Ready Data (ARD) products.
-    geomed_product_name : str
-        Name of geomedian product.
-    ard_bands : list of str
-        List of measurement names to load for ARD products.
-    geomed_bands : list of str
-        List of measurement names to load for geomedian product.
-    period : tuple of str
-        Start and end dates of the reference data period in the format "YYYY-MM-DD".
-    mappingperiod : tuple of str
-        Start and end dates of the mapping data period in the format "YYYY-MM-DD".
-    gpgon : datacube.utils.geometry.Geometry
-        Geopolygon to load data for.
-    task_id : str
-        Identifier for the task being executed.
-    output : str
-        Path to the output directory.
-
-    Returns
-    -------
-    xr.Dataset
-        Burnt area severity mapping result.
-    """
-
-    logger.info("Begin to load reference data")
-    ard, geomed = bc_data_loading.load_reference_data(
-        odc_dc,
-        hnrs_dc,
-        ard_product_names,
-        geomed_product_name,
-        ard_bands,
-        geomed_bands,
-        period,
-        gpgon,
-    )
-
-    outliers_result = generate_reference_result(ard, geomed)
-
-    del ard
-
-    logger.info("Begin to load mapping data")
-    mapping_ard = bc_data_loading.load_mapping_data(
-        odc_dc,
-        ard_product_names,
-        ard_bands,
-        mappingperiod,
-        gpgon,
-    )
-
-    mapping_dis = algo.distances(mapping_ard, geomed)
-
-    hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
-
-    # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"{output}/ancillary_file/{hotspot_csv_file}"
-
-    logger.info("Load hotspot information from:  %s", hotspotfile)
-
-    severitymapping_result = algo.severitymapping(
-        mapping_dis,
-        outliers_result,
-        mappingperiod,
-        hotspotfile,
-        method="NBRdist",
-        growing=True,
-    )
-
-    return severitymapping_result
 
 
 def logging_setup():
@@ -589,34 +279,24 @@ def update_hotspot_data(
 
     logger.info("Use mappingperiod: %s to filter hotspot file", str(mappingperiod))
 
-    import numpy as np
-
     start = (
         np.datetime64(mappingperiod[0]).astype("datetime64[ns]") - np.datetime64(2, "M")
     ).astype("datetime64[ns]")
     stop = np.datetime64(mappingperiod[1])
 
     # the current (10/01/2023) zip file size is 430MB. It is safe to download it to local file system
-    import shutil
-
-    import requests
 
     hotspot_product_url = (
         "https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip"
     )
     filename = "all-data-csv.zip"
     csv_filename = "hotspot_historic.csv"
-
     r = requests.get(hotspot_product_url, stream=True)
     r.raw.decode_content = True
     with open(filename, "wb") as f:
         shutil.copyfileobj(r.raw, f)
 
     # load the CSV file from zip file
-    import zipfile
-
-    import pandas as pd
-
     with zipfile.ZipFile(filename) as z:
         # TODO: find a way to check the actual CSV file from zip file
         with z.open(csv_filename) as f:
@@ -755,13 +435,13 @@ def burn_cube_run(
 
     # TODO: only check the NetCDF is not enough
 
-    local_file_path, target_file_path = generate_output_filenames(
+    local_file_path, target_file_path = task.generate_output_filenames(
         output, task_id, region_id
     )
 
     o = urlparse(output)
 
-    if check_file_exists(o.netloc, target_file_path[1:]) and not overwrite:
+    if task.check_file_exists(o.netloc, target_file_path[1:]) and not overwrite:
         logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
     else:
         # check the input product detail
@@ -806,7 +486,7 @@ def burn_cube_run(
             processing_log, o.netloc, target_file_path[1:].replace(".nc", ".json")
         )
 
-        burn_cube_result = generate_bc_result(
+        burn_cube_result = bc_data_processing.generate_bc_result(
             odc_dc,
             hnrs_dc,
             ard_product_names,
@@ -821,12 +501,14 @@ def burn_cube_run(
         )
 
         if burn_cube_result:
-            burn_cube_result_apply_wofs = apply_post_processing_by_wo_summary(
-                odc_dc,
-                burn_cube_result,
-                gpgon,
-                mappingperiod,
-                wofs_summary_product_name,
+            burn_cube_result_apply_wofs = (
+                bc_data_processing.apply_post_processing_by_wo_summary(
+                    odc_dc,
+                    burn_cube_result,
+                    gpgon,
+                    mappingperiod,
+                    wofs_summary_product_name,
+                )
             )
 
             # TODO: should use Try-Catch to know IO is OK or not
