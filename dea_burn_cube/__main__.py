@@ -349,41 +349,31 @@ def update_hotspot_data(
     help="REQUIRED. Region id AU-30 Grid.",
 )
 @click.option(
-    "--output",
-    "-o",
-    type=click.Path(),
+    "--process-cfg-url",
+    "-p",
+    type=str,
     default=None,
-    # Don't mandate existence since this might be s3://.
-    help="REQUIRED. Path to the output directory.",
-)
-@click.option(
-    "--geomed-product-name",
-    "-g",
-    type=str,
-    help="The 4-year period GeoMED product name, e.g. ga_ls8c_nbart_gm_4cyear_3 or ga_ls8c_nbart_gm_4fyear_3.",
-)
-@click.option(
-    "--task-table",
-    "-b",
-    type=str,
-    default="10-year-historical-processing-4year-geomad.csv",
-    help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
-)
-@click.option(
-    "--overwrite/--no-overwrite",
-    default=False,
-    help="Rerun region that have already been processed.",
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
 def burn_cube_run(
     task_id,
     region_id,
-    output,
-    geomed_product_name,
-    task_table,
-    overwrite,
+    process_cfg_url,
 ):
+    """
+    The main method to run Burn Cube processing based on task id and region ID.
+    """
 
     logging_setup()
+
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+
+    task_table = process_cfg["task_table"]
+    geomed_product_name = process_cfg["geomed"]
+    wofs_summary_product_name = process_cfg["wofs_summary"]
+    ard_product_names = process_cfg["ard_product_names"]
+    output = process_cfg["output_folder"]
+    overwrite = process_cfg["overwrite"]
 
     bc_running_task = task.generate_task(task_id, task_table)
 
@@ -430,9 +420,6 @@ def burn_cube_run(
         app=f"Burn Cube K8s processing - {region_id}", config=hnrs_config
     )
 
-    wofs_summary_product_name = "ga_ls_wo_fq_cyear_3"
-    ard_product_names = ["ga_ls8c_ard_3"]
-
     # TODO: only check the NetCDF is not enough
 
     local_file_path, target_file_path = task.generate_output_filenames(
@@ -445,6 +432,7 @@ def burn_cube_run(
         logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
     else:
         # check the input product detail
+        # TODO: can add dry-run, and it will stop after input dataset list check
         try:
             gpgon, input_dataset_list = bc_data_loading.check_input_datasets(
                 hnrs_dc,
