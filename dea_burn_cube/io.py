@@ -1,3 +1,10 @@
+"""
+This module contains functions for input/output operations related to burn mapping using
+the DEA Burn Cube and AWS S3.
+
+"""
+
+
 import json
 import logging
 from typing import Dict
