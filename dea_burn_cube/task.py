@@ -13,13 +13,27 @@ from urllib.parse import urlparse
 
 import boto3
 import botocore
+import fsspec
 import pandas as pd
 import s3fs
+import yaml
 
 import dea_burn_cube.__version__ as version
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+
+
+def load_yaml_remote(yaml_url: str) -> Dict[str, Any]:
+    """
+    Open a yaml file remotely and return the parsed yaml document
+    """
+    try:
+        with fsspec.open(yaml_url, mode="r") as f:
+            return next(yaml.safe_load_all(f))
+    except Exception:
+        logger.error(f"Cannot load {yaml_url}")
+        raise
 
 
 def log_execution_time(func):
@@ -48,7 +62,7 @@ def log_execution_time(func):
         result = func(*args, **kwargs)
         end_time = time.time()
         duration = end_time - start_time
-        logging.info(f"{func.__name__} took {duration:.2f} seconds to execute.")
+        logger.info(f"{func.__name__} took {duration:.2f} seconds to execute.")
         return result
 
     return wrapper
