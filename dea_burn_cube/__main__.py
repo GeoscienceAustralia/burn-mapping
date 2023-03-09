@@ -369,9 +369,9 @@ def burn_cube_run(
     process_cfg = task.load_yaml_remote(process_cfg_url)
 
     task_table = process_cfg["task_table"]
-    geomed_product_name = process_cfg["geomed"]
-    wofs_summary_product_name = process_cfg["wofs_summary"]
-    ard_product_names = process_cfg["ard_product_names"]
+    geomed_product_name = process_cfg["input_products"]["geomed"]
+    wofs_summary_product_name = process_cfg["input_products"]["wofs_summary"]
+    ard_product_names = process_cfg["input_products"]["ard_product_names"]
     output = process_cfg["output_folder"]
     overwrite = process_cfg["overwrite"]
 
