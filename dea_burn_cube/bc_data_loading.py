@@ -15,7 +15,7 @@ import geopandas as gpd
 import s3fs
 import xarray as xr
 
-import dea_burn_cube.task as task
+from dea_burn_cube import task
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
