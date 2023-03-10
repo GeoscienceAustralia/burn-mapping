@@ -41,7 +41,7 @@ os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs: xr.Dataset,
     local_file_path: str,
-    target_file_path: str,
+    object_key: str,
     bucket_name: str,
 ) -> None:
     """
@@ -50,7 +50,7 @@ def result_file_saving_and_uploading(
     Args:
         burn_cube_result_apply_wofs: An XArray Dataset object representing the result of the burn cube analysis.
         local_file_path: A string representing the path to save the local netCDF file.
-        target_file_path: A string representing the target S3 bucket and prefix where the files will be uploaded.
+        object_key: A string representing the target S3 bucket and prefix where the files will be uploaded.
         bucket_name: A string representing the name of the S3 bucket.
 
     Returns:
@@ -77,7 +77,7 @@ def result_file_saving_and_uploading(
     s3 = boto3.client("s3")
 
     with open(local_file_path, "rb") as f:
-        s3.upload_fileobj(f, bucket_name, target_file_path[1:])
+        s3.upload_fileobj(f, bucket_name, object_key)
 
     # use to_cog feature to convert each band from XArray.Dataset to COG
     for band, _ in burn_cube_result_apply_wofs.data_vars.items():
@@ -94,12 +94,12 @@ def result_file_saving_and_uploading(
             s3.upload_fileobj(
                 f,
                 bucket_name,
-                target_file_path[1:].replace(".nc", f"-{band.lower()}.tif"),
+                object_key.replace(".nc", f"-{band.lower()}.tif"),
             )
 
             logger.info(
                 "Upload GeoTiff file: %s",
-                target_file_path.replace(".nc", f"-{band.lower()}.tif"),
+                object_key.replace(".nc", f"-{band.lower()}.tif"),
             )
 
 
@@ -428,7 +428,10 @@ def burn_cube_run(
 
     o = urlparse(output)
 
-    if task.check_file_exists(o.netloc, target_file_path[1:]) and not overwrite:
+    bucket_name = o.netloc
+    object_key = target_file_path[1:]
+
+    if task.check_file_exists(bucket_name, object_key) and not overwrite:
         logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
     else:
         # check the input product detail
@@ -471,7 +474,7 @@ def burn_cube_run(
 
         # No matter upload successful or not, should not block the main processing
         io.upload_dict_to_s3(
-            processing_log, o.netloc, target_file_path[1:].replace(".nc", ".json")
+            processing_log, bucket_name, object_key.replace(".nc", ".json")
         )
 
         burn_cube_result = bc_data_processing.generate_bc_result(
@@ -503,8 +506,8 @@ def burn_cube_run(
             result_file_saving_and_uploading(
                 burn_cube_result_apply_wofs,
                 local_file_path,
-                target_file_path,
-                o.netloc,
+                object_key,
+                bucket_name,
             )
 
 
