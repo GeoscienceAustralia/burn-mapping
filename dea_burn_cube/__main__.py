@@ -258,7 +258,6 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-@click.opti
 def update_hotspot_data(
     task_id,
     process_cfg_url,
