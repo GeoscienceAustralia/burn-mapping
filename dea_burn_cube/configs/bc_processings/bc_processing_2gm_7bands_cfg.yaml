@@ -1,0 +1,10 @@
+output_folder: s3://dea-public-data-dev/projects/burn_cube/argo-run/development/2gm-7bands
+
+input_products:
+  geomed: ga_ls8c_nbart_gm_2fyear_3
+  wofs_summary: ga_ls_wo_fq_cyear_3
+  ard_product_names:
+    - ga_ls8c_ard_3
+
+task_table: 10-year-historical-processing-2year-geomad.csv
+overwrite: True
