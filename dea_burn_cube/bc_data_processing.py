@@ -291,7 +291,7 @@ def generate_bc_result(
         hotspotfile,
         method="NBRdist",
         growing=True,
-        process=n_procs,
+        n_procs=n_procs,
     )
 
     return severitymapping_result
