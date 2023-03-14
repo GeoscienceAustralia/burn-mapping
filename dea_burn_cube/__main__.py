@@ -355,10 +355,18 @@ def update_hotspot_data(
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
+@click.option(
+    "--n-procs",
+    "-n",
+    type=int,
+    default=8,
+    help="The size of process pool.",
+)
 def burn_cube_run(
     task_id,
     region_id,
     process_cfg_url,
+    n_procs,
 ):
     """
     The main method to run Burn Cube processing based on task id and region ID.
@@ -491,6 +499,7 @@ def burn_cube_run(
             gpgon,
             task_id,
             output,
+            n_procs,
         )
 
         if burn_cube_result:

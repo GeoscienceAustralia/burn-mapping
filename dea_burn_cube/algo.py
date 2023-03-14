@@ -433,7 +433,7 @@ def dist_severity(params):
 
 
 @task.log_execution_time
-def distances(ard, geomed):
+def distances(ard, geomed, n_procs=8):
     """
     Calculates the cosine distance between observation and reference.
     The calculation is point based, easily adaptable to any dimension.
@@ -515,7 +515,6 @@ def distances(ard, geomed):
         shared_out_arr2 = shared_out_arr2_
         shared_out_arr3 = shared_out_arr3_
 
-    # processes = 8
     with closing(
         mp.Pool(
             initializer=init,
@@ -526,7 +525,7 @@ def distances(ard, geomed):
                 out_arr2,
                 out_arr3,
             ),
-            processes=8,
+            processes=n_procs,
         )
     ) as p:
         chunk = 1
@@ -845,7 +844,14 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
 
 @task.log_execution_time
 def severitymapping(
-    dists, outlrs, period, hotspotfile, method="NBR", growing=True, hotspots_period=None
+    dists,
+    outlrs,
+    period,
+    hotspotfile,
+    method="NBR",
+    growing=True,
+    hotspots_period=None,
+    n_procs=8,
 ):
     """Calculates burnt area for a given period
     Args:
@@ -993,7 +999,7 @@ def severitymapping(
                 out_arr2,
                 out_arr3,
             ),
-            processes=8,
+            processes=n_procs,
         )
     ) as p:
         chunk = 1

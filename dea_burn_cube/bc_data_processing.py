@@ -170,7 +170,9 @@ def apply_post_processing_by_wo_summary(
 
 
 @task.log_execution_time
-def generate_reference_result(ard: xr.Dataset, geomed: xr.Dataset) -> xr.Dataset:
+def generate_reference_result(
+    ard: xr.Dataset, geomed: xr.Dataset, n_procs: int
+) -> xr.Dataset:
     """
     Generates a reference result by computing the outliers between the input
     `ard` and `geomed` datasets using the `distances` and `outliers` functions
@@ -183,6 +185,8 @@ def generate_reference_result(ard: xr.Dataset, geomed: xr.Dataset) -> xr.Dataset
     geomed : xr.Dataset
         The input dataset that represents the geometric median of the
         acquired data.
+    n_procs : int
+        The size of process pool
 
     Returns
     -------
@@ -190,7 +194,7 @@ def generate_reference_result(ard: xr.Dataset, geomed: xr.Dataset) -> xr.Dataset
         The output dataset that represents the outliers between the input
         `ard` and `geomed` datasets.
     """
-    dis = algo.distances(ard, geomed)
+    dis = algo.distances(ard, geomed, n_procs)
     outliers_result = algo.outliers(ard, dis)
     return outliers_result
 
@@ -208,6 +212,7 @@ def generate_bc_result(
     gpgon: datacube.utils.geometry.Geometry,
     task_id: str,
     output: str,
+    n_procs: int,
 ) -> xr.Dataset:
     """
     Generate burnt area severity mapping result for a given period of time.
@@ -236,6 +241,8 @@ def generate_bc_result(
         Identifier for the task being executed.
     output : str
         Path to the output directory.
+    n_procs : int
+        The size of process pool.
 
     Returns
     -------
@@ -255,7 +262,7 @@ def generate_bc_result(
         gpgon,
     )
 
-    outliers_result = generate_reference_result(ard, geomed)
+    outliers_result = generate_reference_result(ard, geomed, n_procs)
 
     del ard
 
@@ -268,7 +275,7 @@ def generate_bc_result(
         gpgon,
     )
 
-    mapping_dis = algo.distances(mapping_ard, geomed)
+    mapping_dis = algo.distances(mapping_ard, geomed, n_procs)
 
     hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
 
@@ -284,6 +291,7 @@ def generate_bc_result(
         hotspotfile,
         method="NBRdist",
         growing=True,
+        process=n_procs,
     )
 
     return severitymapping_result
