@@ -268,7 +268,7 @@ def update_hotspot_data(
     process_cfg = task.load_yaml_remote(process_cfg_url)
 
     task_table = process_cfg["task_table"]
-    output = process_cfg["output_folder"]
+    output = process_cfg["output_folder"] + "/ancillary_file"
 
     o = urlparse(output)
 
