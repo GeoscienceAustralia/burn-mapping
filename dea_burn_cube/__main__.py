@@ -155,7 +155,7 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
 
     process_cfg = task.load_yaml_remote(process_cfg_url)
 
-    ancillary_folder = process_cfg["output_folder"]
+    ancillary_folder = process_cfg["output_folder"] + "/ancillary_file"
 
     o = urlparse(ancillary_folder)
     ancillary_key = o.path[1:]
