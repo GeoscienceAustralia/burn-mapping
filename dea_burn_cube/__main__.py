@@ -32,8 +32,6 @@ logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
-BUCKET_NAME = "dea-public-data-dev"
-
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
 
 
@@ -139,13 +137,13 @@ def main():
     help="REQUIRED. The AU-30 Region list in GeoJSON format.",
 )
 @click.option(
-    "--output-s3-folder",
-    "-o",
+    "--process-cfg-url",
+    "-p",
     type=str,
-    default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
-    help="The ancillary_file folder which save clean-up region list file.",
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-def filter_regions(task_id, region_list_s3_path, output_s3_folder):
+def filter_regions(task_id, region_list_s3_path, process_cfg_url):
     """
     There are two assumptions on this method:
     1. user always use AU-30 grid standard GeoJSON
@@ -155,6 +153,13 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder):
     """
     logging_setup()
 
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+
+    ancillary_folder = process_cfg["output_folder"]
+
+    o = urlparse(ancillary_folder)
+    ancillary_key = o.path[1:]
+
     _ = s3fs.S3FileSystem(anon=True)
 
     _ = "s3" in gpd.io.file._VALID_URLS
@@ -162,8 +167,6 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder):
 
     region_gdf = gpd.read_file(region_list_s3_path)
     region_gdf = region_gdf.to_crs(epsg="3577")
-
-    ancillary_folder = f"s3://dea-public-data-dev/{output_s3_folder}"
 
     logger.info("Filter  %s  by Ocean Mask", region_list_s3_path)
     ocean_mask_path = (
@@ -235,8 +238,8 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder):
     with open(local_json_file, "rb") as f:
         s3.upload_fileobj(
             f,
-            BUCKET_NAME,
-            f"{output_s3_folder}/{local_json_file}",
+            o.netloc,
+            f"{ancillary_key}/{local_json_file}",
         )
 
 
@@ -249,25 +252,27 @@ def filter_regions(task_id, region_list_s3_path, output_s3_folder):
     help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
 )
 @click.option(
-    "--output-s3-folder",
-    "-o",
+    "--process-cfg-url",
+    "-p",
     type=str,
-    default="projects/burn_cube/airflow-run/burn-cube-app/ancillary_file",
-    help="The ancillary_file folder which save clean-up Hotspot CSV file.",
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-@click.option(
-    "--task-table",
-    "-b",
-    type=str,
-    default="10-year-historical-processing-4year-geomad.csv",
-    help="The task table in configs folder, e.g. 10-year-historical-processing-4year-geomad.csv.",
-)
+@click.opti
 def update_hotspot_data(
     task_id,
-    output_s3_folder,
-    task_table,
+    process_cfg_url,
 ):
     logging_setup()
+
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+
+    task_table = process_cfg["task_table"]
+    output = process_cfg["output_folder"]
+
+    o = urlparse(output)
+
+    output_s3_folder = o.path[1:]
 
     # use task_id to get the mappingperiod information to filter hotspot
     bc_running_task = task.generate_task(task_id, task_table)
@@ -328,7 +333,7 @@ def update_hotspot_data(
             with open(filtered_csv, "rb") as f:
                 s3.upload_fileobj(
                     f,
-                    BUCKET_NAME,
+                    o.netloc,
                     f"{output_s3_folder}/{filtered_csv}",
                 )
 
