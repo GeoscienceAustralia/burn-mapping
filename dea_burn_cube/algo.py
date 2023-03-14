@@ -48,8 +48,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref**2))
-        / np.sqrt(np.nansum(obs**2, axis=0))
+        / np.sqrt(np.sum(ref ** 2))
+        / np.sqrt(np.nansum(obs ** 2, axis=0))
     )
     return cosdist
 
@@ -72,7 +72,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist**2)
+    euc_norm = np.sqrt(euc_dist ** 2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -379,15 +379,18 @@ def dist_distance(params):
     )
 
     for i in range(params[0], params[1]):
-        # ind = np.where(ard[1, :, i] > 0)[0]
-        ind = np.where(ard[0, :, i] > 0)[0]
+        ind = np.where(ard[1, :, i] > 0)[0]  # 7 bands setting
+        # ind = np.where(ard[0, :, i] > 0)[0] # 3 bands setting
 
         if len(ind) > 0:
             cos_dist[ind, i] = cos_distance(gmed[:, i], ard[:, ind, i])
-            # nbrmed = (gmed[3, i] - gmed[5, i]) / (gmed[3, i] + gmed[5, i])
-            nbrmed = (gmed[1, i] - gmed[2, i]) / (gmed[1, i] + gmed[2, i])
-            # nbr = (ard[3, :, i] - ard[5, :, i]) / (ard[3, :, i] + ard[5, :, i])
-            nbr = (ard[1, :, i] - ard[2, :, i]) / (ard[1, :, i] + ard[2, :, i])
+            # 7 bands setting
+            nbrmed = (gmed[3, i] - gmed[5, i]) / (gmed[3, i] + gmed[5, i])
+            nbr = (ard[3, :, i] - ard[5, :, i]) / (ard[3, :, i] + ard[5, :, i])
+
+            # 3 bands setting
+            # nbrmed = (gmed[1, i] - gmed[2, i]) / (gmed[1, i] + gmed[2, i])
+            # nbr = (ard[1, :, i] - ard[2, :, i]) / (ard[1, :, i] + ard[2, :, i])
             nbr_dist[ind, i], direction[ind, i] = nbr_eucdistance(nbrmed, nbr[ind])
 
 
@@ -452,11 +455,13 @@ def distances(ard, geomed):
         logger.warning(f"--- {len(t_dim)} observations")
         return
 
-    # nir = _x[3, :, :, :].data.astype("float32")
-    # swir2 = _x[5, :, :, :].data.astype("float32")
+    # 7 bands setting
+    nir = _x[3, :, :, :].data.astype("float32")
+    swir2 = _x[5, :, :, :].data.astype("float32")
 
-    nir = _x[1, :, :, :].data.astype("float32")
-    swir2 = _x[2, :, :, :].data.astype("float32")
+    # 3 bands setting
+    # nir = _x[1, :, :, :].data.astype("float32")
+    # swir2 = _x[2, :, :, :].data.astype("float32")
 
     nir[nir <= 0] = np.nan
     swir2[swir2 <= 0] = np.nan
