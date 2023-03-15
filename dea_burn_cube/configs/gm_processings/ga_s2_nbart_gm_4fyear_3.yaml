@@ -1,4 +1,8 @@
 plugin: gm-s2 # this can help system find the relative plugin and plugin version
+plugin_config:
+  bands: ["nbart_blue", "nbart_green", "nbart_red", "nbart_red_edge_1", "nbart_red_edge_2","nbart_red_edge_3", "nbart_nir_1", "nbart_nir_2", "nbart_swir_2", "nbart_swir_3"]
+  rgb_bands: ["nbart_red", "nbart_green", "nbart_blue"]
+
 product:
   name: ga_s2_ard_gm_4cyear_3
   short_name: ga_s2_ard_gm_4cyear_3
@@ -11,8 +15,6 @@ product:
   classifier: ard
   maturity: final
   collection_number: 3
-  bands: ["nbart_blue", "nbart_green", "nbart_red", "nbart_red_edge_1", "nbart_red_edge_2","nbart_red_edge_3", "nbart_nir_1", "nbart_nir_2", "nbart_swir_2", "nbart_swir_3"]
-  rgb_bands: ["nbart_red", "nbart_green", "nbart_blue"]
 
 
   inherit_skip_properties:
