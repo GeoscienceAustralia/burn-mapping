@@ -231,6 +231,9 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
 
     region_gdf = region_gdf[region_gdf["region_code"].isin(filter_by_hotspot)].reindex()
 
+    # shuffle the region list to aviod data skew
+    region_gdf = region_gdf.sample(frac=1).reset_index(drop=True)
+
     logger.info(
         "The number of region changes to %s  after Hot Spot filter",
         str(len(region_gdf)),
