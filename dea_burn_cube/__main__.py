@@ -159,6 +159,13 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
 
     o = urlparse(ancillary_folder)
     ancillary_key = o.path[1:]
+    local_json_file = f"{task_id}-regions.json"
+
+    # if we already had the region, skip it
+    # TODO: must change the output name with region_list_s3_path
+
+    if task.check_file_exists(o.netloc, f"{ancillary_key}/{local_json_file}"):
+        sys.exit(0)
 
     _ = s3fs.S3FileSystem(anon=True)
 
@@ -228,8 +235,6 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
         "The number of region changes to %s  after Hot Spot filter",
         str(len(region_gdf)),
     )
-
-    local_json_file = f"{task_id}-regions.json"
 
     region_gdf.to_file(local_json_file, driver="GeoJSON")
 
