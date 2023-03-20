@@ -134,6 +134,87 @@ def main():
     "-r",
     type=str,
     default=None,
+    help="REQUIRED. The AU-30 Region list filter by Ocean Mask and Hotspot in GeoJSON format.",
+)
+@click.option(
+    "--process-cfg-url",
+    "-p",
+    type=str,
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
+)
+def filter_regions_by_output(task_id, region_list_s3_path, process_cfg_url):
+    """
+    There are one assumption about this method:
+        1. we already run filter_regions method to get the region list
+
+    """
+    _ = s3fs.S3FileSystem(anon=True)
+
+    _ = "s3" in gpd.io.file._VALID_URLS
+    gpd.io.file._VALID_URLS.discard("s3")
+
+    region_gdf = gpd.read_file(region_list_s3_path)
+    region_gdf = region_gdf.to_crs(epsg="3577")
+
+    logger.info("Filter %s by output NetCDF files", region_list_s3_path)
+
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+    output = process_cfg["output_folder"]
+    overwrite = process_cfg["overwrite"]
+
+    ancillary_folder = f"{output}/ancillary_file"
+
+    o = urlparse(ancillary_folder)
+    s3_bucket_name = o.netloc
+    ancillary_key = o.path[1:]
+
+    local_json_file = f"{task_id}-cleanup-regions.json"
+
+    # if we run it as overwrite mode, should not use NetCDF to filter region list
+    if overwrite:
+        not_run_geojson = region_gdf
+    else:
+        not_run_regions = []
+        for region_index in region_gdf.index:
+            region_id = region_gdf.region_code[region_index]
+
+            _, target_file_path = task.generate_output_filenames(
+                output, task_id, region_id
+            )
+
+            if not task.check_file_exists(s3_bucket_name, target_file_path[1:]):
+                not_run_regions.append(region_id)
+
+        not_run_geojson = region_gdf[
+            region_gdf["region_code"].isin(not_run_regions)
+        ].reindex()
+
+    not_run_geojson.to_file(local_json_file, driver="GeoJSON")
+
+    s3 = boto3.client("s3")
+
+    with open(local_json_file, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            s3_bucket_name,
+            f"{ancillary_key}/{local_json_file}",
+        )
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
+    "--region-list-s3-path",
+    "-r",
+    type=str,
+    default=None,
     help="REQUIRED. The AU-30 Region list in GeoJSON format.",
 )
 @click.option(
