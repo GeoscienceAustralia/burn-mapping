@@ -73,27 +73,19 @@ measurements:
     dtype: int16
     nodata: -999
     units: '1'
-  - name: SMAD
-    aliases:
-      - smad
+  - name: smad
     dtype: float32
     nodata: .nan
     units: '1'
-  - name: EMAD
-    aliases:
-      - emad
+  - name: emad
     dtype: float32
     nodata: .nan
     units: '1'
-  - name: BCMAD
-    aliases:
-      - bdmad
+  - name: bdmad
     dtype: float32
     nodata: .nan
     units: '1'
-  - name: COUNT
-    aliases:
-      - count
+  - name: count
     dtype: int16
     nodata: -999
     units: '1'
