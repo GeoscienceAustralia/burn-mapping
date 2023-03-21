@@ -73,9 +73,9 @@ measurements:
     dtype: int16
     nodata: -999
     units: '1'
-  - name: count
+  - name: COUNT
     aliases:
-      - COUNT
+      - count
     dtype: int16
     nodata: -999
     units: '1'
