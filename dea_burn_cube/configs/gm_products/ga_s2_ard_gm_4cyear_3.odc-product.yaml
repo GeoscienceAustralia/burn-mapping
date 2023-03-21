@@ -1,0 +1,92 @@
+name: ga_s2_ard_gm_4cyear_3
+description: Geoscience Australia Sentinel 2A MSI Analysis Ready Data Geomedian 4 Calendar Years Collection 3
+license: CC-BY-4.0
+metadata_type: eo3
+
+metadata:
+  properties:
+    odc:file_format: GeoTIFF
+    odc:product_family: geomedian
+    eo:platform: sentinel-2a
+    eo:instrument: MSI
+  product:
+    name: ga_ls8c_nbart_gm_4cyear_3
+
+measurements:
+  - name: nbart_blue
+    aliases:
+      - blue
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_green
+    aliases:
+      - green
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_red
+    aliases:
+      - red
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_red_edge_1
+    aliases:
+      - red_edge_1
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_red_edge_2
+    aliases:
+      - red_edge_2
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_red_edge_3
+    aliases:
+      - red_edge_3
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_nir_1
+    aliases:
+      - nir_1
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_nir_2
+    aliases:
+      - nir_2
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_swir_2
+    aliases:
+      - swir_2
+      - swir2
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: nbart_swir_3
+    aliases:
+      - swir_3
+      - swir3
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: count
+    aliases:
+      - COUNT
+    dtype: int16
+    nodata: -999
+    units: '1'
+
+load:
+  crs: 'epsg:3577'
+  resolution:
+    y: -30
+    x: 30
+  align:
+    y: 0
+    x: 0
