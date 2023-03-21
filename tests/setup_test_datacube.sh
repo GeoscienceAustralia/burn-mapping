@@ -2,7 +2,8 @@
 set -ex
 export METADATA_CATALOG=https://raw.githubusercontent.com/GeoscienceAustralia/dea-config/a4f39b485b33608a016032d9987251881fec4b6f/workspaces/sandbox-metadata.yaml
 export PRODUCT_CATALOG=https://raw.githubusercontent.com/GeoscienceAustralia/dea-config/87ca056fa62900596cbf05612da9033fc763009c/workspaces/sandbox-products.csv
-export GEOMED_PRODUCT=https://raw.githubusercontent.com/GeoscienceAustralia/burn-mapping/feature/Burn_Cube_AWS_app/dea_burn_cube/configs/gm_products/ga_ls8c_nbart_gm_4cyear_3.odc-product.yaml
+export LS_GEOMED_PRODUCT=https://raw.githubusercontent.com/GeoscienceAustralia/burn-mapping/develop/dea_burn_cube/configs/gm_products/ga_ls8c_nbart_gm_4cyear_3.odc-product.yaml
+export S2_GEOMED_PRODUCT=https://raw.githubusercontent.com/GeoscienceAustralia/burn-mapping/develop/dea_burn_cube/configs/gm_products/ga_s2_ard_gm_4cyear_3.odc-product.yaml
 
 # Setup datacube
 docker-compose exec -T public_index datacube system init --no-default-types --no-init-users
@@ -18,7 +19,16 @@ docker-compose exec -T private_index datacube system init --no-default-types --n
 # Setup metadata types
 docker-compose exec -T private_index datacube metadata add "$METADATA_CATALOG"
 # Add the product catalog
-docker-compose exec -T private_index datacube product add "$GEOMED_PRODUCT"
+docker-compose exec -T private_index datacube product add "$LS_GEOMED_PRODUCT"
+docker-compose exec -T private_index datacube product add "$S2_GEOMED_PRODUCT"
+
+# Index test data
+cat > geomed_index_tiles.sh <<EOF
+s3-to-dc s3://dea-public-data-dev/projects/burn_cube/ga_s2_nbart_gm_4fyear_3/3-0-0/*/*/2015-07-01--P4Y/*.stac-item.json --no-sign-request --stac --skip-lineage ga_s2_ard_gm_4cyear_3
+s3-to-dc s3://dea-public-data-dev/projects/burn_cube/ga_ls8c_nbart_gm_4cyear_3/*/x45/y19/2018--P4Y/*.odc-metadata.yaml --no-sign-request --skip-lineage ga_ls8c_nbart_gm_4cyear_3
+EOF
+
+cat geomed_index_tiles.sh | docker-compose exec -T private_index bash
 
 # Index test data
 cat > ard_index_tiles.sh <<EOF
@@ -40,10 +50,3 @@ s3-to-dc s3://dea-public-data/baseline/ga_ls8c_ard_3/091/082/2021/*/*/*.odc-meta
 EOF
 
 cat ard_index_tiles.sh | docker-compose exec -T public_index bash
-
-# Index test data
-cat > geomed_index_tiles.sh <<EOF
-s3-to-dc s3://dea-public-data-dev/projects/burn_cube/ga_ls8c_nbart_gm_4cyear_3/*/x45/y19/2018--P4Y/*.odc-metadata.yaml --no-sign-request --skip-lineage ga_ls8c_nbart_gm_4cyear_3
-EOF
-
-cat geomed_index_tiles.sh | docker-compose exec -T private_index bash
