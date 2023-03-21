@@ -81,7 +81,7 @@ measurements:
     dtype: float32
     nodata: .nan
     units: '1'
-  - name: bdmad
+  - name: bcmad
     dtype: float32
     nodata: .nan
     units: '1'
