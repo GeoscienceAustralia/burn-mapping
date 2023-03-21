@@ -4,8 +4,11 @@ license: CC-BY-4.0
 metadata_type: eo3
 
 metadata:
+  properties:
+    odc:file_format: GeoTIFF
+    odc:product_family: geomedian
   product:
-    name: ga_ls8c_nbart_gm_4cyear_3
+    name: ga_s2_ard_gm_4cyear_3
 
 measurements:
   - name: nbart_blue
