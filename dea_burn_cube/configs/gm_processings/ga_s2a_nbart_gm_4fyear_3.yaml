@@ -8,11 +8,6 @@ plugin_config:
     emad: emad
     bcmad: bcmad
     count: count
-  cloud_filters:
-    cloud:
-      - [dilation, 5]
-    shadow:
-      - [dilation, 10]
 
 product:
   name: ga_s2a_ard_gm_4fyear_3
