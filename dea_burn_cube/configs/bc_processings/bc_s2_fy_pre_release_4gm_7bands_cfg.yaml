@@ -1,11 +1,11 @@
-output_folder: s3://dea-public-data-dev/projects/burn_cube/pre-release/s2/4gm-7bands
+output_folder: s3://dea-public-data-dev/projects/burn_cube/burn-cube-s2/4gm-7bands
 
 input_products:
   platform: s2
-  geomed: ga_s2a_ard_gm_4cyear_2016
+  geomed: ga_s2a_ard_gm_4fyear_3
   wofs_summary: ga_ls_wo_fq_fyear_3
   ard_product_names:
-    - ga_ls8c_ard_3
+    - ga_s2am_ard_3
   input_ard_bands:
     - nbart_red
     - nbart_green
