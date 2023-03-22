@@ -1,0 +1,25 @@
+output_folder: s3://dea-public-data-dev/projects/burn_cube/pre-release/s2/4gm-7bands
+
+input_products:
+  platform: s2
+  geomed: ga_s2a_ard_gm_4cyear_2016
+  wofs_summary: ga_ls_wo_fq_fyear_3
+  ard_product_names:
+    - ga_ls8c_ard_3
+  input_ard_bands:
+    - nbart_red
+    - nbart_green
+    - nbart_blue
+    - nbart_nir
+    - nbart_swir_1
+    - nbart_swir_3
+  input_gm_bands:
+    - red
+    - green
+    - blue
+    - nir
+    - swir1
+    - swir3
+
+task_table: 10-year-historical-processing-4year-geomad.csv
+overwrite: False

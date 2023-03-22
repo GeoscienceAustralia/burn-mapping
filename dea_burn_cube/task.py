@@ -69,7 +69,7 @@ def log_execution_time(func):
 
 
 def generate_output_filenames(
-    output: str, task_id: str, region_id: str
+    output: str, task_id: str, region_id: str, platform: str
 ) -> Tuple[str, str]:
     """
     Generate local and target file paths for output file.
@@ -78,6 +78,7 @@ def generate_output_filenames(
         output: A string representing the S3 bucket and prefix where the output file will be stored.
         task_id: A string representing the ID of the task.
         region_id: A string representing the ID of the region.
+        platform: A string representing the platform, e.g. s2 or ls.
 
     Returns:
         A tuple of strings representing the local file path and target file path.
@@ -86,8 +87,10 @@ def generate_output_filenames(
         >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
         ('/tmp/BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
     """
-    s3_file_path = f"{task_id}/{region_id}/BurnMapping-{task_id}-{region_id}.nc"
-    local_file_path = f"/tmp/BurnMapping-{task_id}-{region_id}.nc"
+    s3_file_path = (
+        f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
+    )
+    local_file_path = f"/tmp/BurnMapping-{platform}-{task_id}-{region_id}.nc"
 
     o = urlparse(output)
 

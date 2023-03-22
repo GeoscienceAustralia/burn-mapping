@@ -279,6 +279,7 @@ def load_ard_ds(
     period: Tuple[str, str],
     ard_product_names: List[str],
     ard_bands: List[str],
+    platform: str,
 ) -> xr.Dataset:
     """
     Load Analysis Ready Data (ARD) for a given time period and spatial extent.
@@ -294,13 +295,22 @@ def load_ard_ds(
             Names of the ARD products to load.
         ard_bands : List[str]
             Names of the measurement bands to load.
+        platform : str
+            The platform of data. E.g. s2 or ls
 
     Returns:
         xr.Dataset: A dataset containing the loaded ARD data.
     """
+
+    if platform == "s2":
+        cloud_mask = "s2cloudless"
+    else:
+        cloud_mask = "fmask"
+
     ard = dea_tools.datahandling.load_ard(
         dc=odc_dc,
         products=ard_product_names,
+        cloud_mask=cloud_mask,
         measurements=ard_bands,
         geopolygon=gpgon,
         output_crs="EPSG:3577",
@@ -363,6 +373,7 @@ def load_reference_data(
     geomed_bands: List[str],
     period: Tuple[str, str],
     gpgon: datacube.utils.geometry.Geometry,
+    platform: str,
 ) -> Tuple[xr.Dataset, xr.Dataset]:
     """
     Load reference data for a given time period and spatial extent.
@@ -385,6 +396,8 @@ def load_reference_data(
             time period of interest.
         gpgon : datacube.utils.geometry.Geometry
             A polygon object defining the spatial extent of interest.
+        platform : str
+            The platform of data. E.g. s2 or ls
 
     Returns:
         Tuple[xr.Dataset, xr.Dataset]: A tuple of two xarray datasets containing the loaded ARD
@@ -398,6 +411,7 @@ def load_reference_data(
         period,
         ard_product_names,
         ard_bands,
+        platform,
     )
 
     ard = ard.ard
@@ -421,6 +435,7 @@ def load_mapping_data(
     ard_bands: List[str],
     mappingperiod: Tuple[str, str],
     gpgon: datacube.utils.geometry.Geometry,
+    platform: str,
 ) -> xr.Dataset:
     """
     Loads and returns mapping data as an xarray.Dataset.
@@ -437,6 +452,8 @@ def load_mapping_data(
         A tuple containing the start and end date of the time period of interest, formatted as "YYYY-MM-DD".
     gpgon : datacube.utils.geometry.Geometry
         A geometry defining the spatial region of interest.
+    platform : str
+        The platform of data. E.g. s2 or ls
 
     Returns
     -------
@@ -449,6 +466,7 @@ def load_mapping_data(
         mappingperiod,
         ard_product_names,
         ard_bands,
+        platform,
     )
 
     mapping_ard = mapping_ard.ard

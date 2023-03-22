@@ -162,6 +162,7 @@ def filter_regions_by_output(task_id, region_list_s3_path, process_cfg_url):
     process_cfg = task.load_yaml_remote(process_cfg_url)
     output = process_cfg["output_folder"]
     overwrite = process_cfg["overwrite"]
+    platform = process_cfg["input_products"]["platform"]
 
     ancillary_folder = f"{output}/ancillary_file"
 
@@ -180,7 +181,7 @@ def filter_regions_by_output(task_id, region_list_s3_path, process_cfg_url):
             region_id = region_gdf.region_code[region_index]
 
             _, target_file_path = task.generate_output_filenames(
-                output, task_id, region_id
+                output, task_id, region_id, platform
             )
 
             if not task.check_file_exists(s3_bucket_name, target_file_path[1:]):
@@ -473,18 +474,22 @@ def burn_cube_run(
     geomed_product_name = process_cfg["input_products"]["geomed"]
     wofs_summary_product_name = process_cfg["input_products"]["wofs_summary"]
     ard_product_names = process_cfg["input_products"]["ard_product_names"]
+    ard_bands = process_cfg["input_products"]["input_ard_bands"]
+    geomed_bands = process_cfg["input_products"]["input_gm_bands"]
+    platform = process_cfg["input_products"]["platform"]
+
     output = process_cfg["output_folder"]
     overwrite = process_cfg["overwrite"]
 
     bc_running_task = task.generate_task(task_id, task_table)
 
-    geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]  # 7 bands setting
+    # geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]  # 7 bands setting
     # geomed_bands = ["green", "nir", "swir2"] # 3 bands setting
 
     # 7 bands setting
-    ard_bands = [
-        f"nbart_{band}" for band in ("red", "green", "blue", "nir", "swir_1", "swir_2")
-    ]
+    # ard_bands = [
+    #    f"nbart_{band}" for band in ("red", "green", "blue", "nir", "swir_1", "swir_2")
+    # ]
 
     # 3 bands setting
     # ard_bands = [f"nbart_{band}" for band in ("green", "nir", "swir_2")]
@@ -526,7 +531,7 @@ def burn_cube_run(
     # TODO: only check the NetCDF is not enough
 
     local_file_path, target_file_path = task.generate_output_filenames(
-        output, task_id, region_id
+        output, task_id, region_id, platform
     )
 
     o = urlparse(output)
