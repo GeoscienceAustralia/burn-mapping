@@ -599,6 +599,7 @@ def burn_cube_run(
             task_id,
             output,
             n_procs,
+            platform,
         )
 
         if burn_cube_result:

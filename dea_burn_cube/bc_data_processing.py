@@ -213,6 +213,7 @@ def generate_bc_result(
     task_id: str,
     output: str,
     n_procs: int,
+    platform: str,
 ) -> xr.Dataset:
     """
     Generate burnt area severity mapping result for a given period of time.
@@ -243,6 +244,8 @@ def generate_bc_result(
         Path to the output directory.
     n_procs : int
         The size of process pool.
+    platform : str
+            The platform of data. E.g. s2 or ls.
 
     Returns
     -------
@@ -260,6 +263,7 @@ def generate_bc_result(
         geomed_bands,
         period,
         gpgon,
+        platform,
     )
 
     outliers_result = generate_reference_result(ard, geomed, n_procs)
@@ -273,6 +277,7 @@ def generate_bc_result(
         ard_bands,
         mappingperiod,
         gpgon,
+        platform,
     )
 
     mapping_dis = algo.distances(mapping_ard, geomed, n_procs)
