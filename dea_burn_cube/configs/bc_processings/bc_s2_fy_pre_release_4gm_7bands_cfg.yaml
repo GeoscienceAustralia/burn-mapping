@@ -10,14 +10,14 @@ input_products:
     - nbart_red
     - nbart_green
     - nbart_blue
-    - nbart_nir
+    - nbart_nir_2
     - nbart_swir_1
     - nbart_swir_3
   input_gm_bands:
     - red
     - green
     - blue
-    - nir
+    - nir2
     - swir1
     - swir3
 
