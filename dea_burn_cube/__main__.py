@@ -554,6 +554,7 @@ def burn_cube_run(
                 wofs_summary_product_name,
                 ard_product_names,
                 region_id,
+                platform,
             )
         except bc_data_loading.IncorrectInputDataError:
             logger.error(
