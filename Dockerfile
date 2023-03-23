@@ -31,6 +31,7 @@ RUN apt-get update \
          nano \
          unzip \
          vim \
+         gcc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp
