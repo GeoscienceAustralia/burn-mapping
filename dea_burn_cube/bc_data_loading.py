@@ -96,7 +96,6 @@ def check_input_datasets(
     wofs_summary_product_name: str,
     ard_product_names: List[str],
     region_id: str,
-    platform: str,
 ) -> Tuple[datacube.utils.geometry.Geometry, List[str]]:
     """Checks and retrieves necessary input datasets for the workflow.
 
@@ -117,8 +116,6 @@ def check_input_datasets(
             The names of the ARD products
         region_id : str
             The ID of the region to get a geometry for. E.g. x30y29
-        platform : str
-            The platform of data. E.g. s2 or ls
 
     Returns:
         Tuple[datacube.utils.geometry.Geometry, List[str]]: A tuple containing the spatial geometry
@@ -162,44 +159,6 @@ def check_input_datasets(
             [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
-    # Use find_datasets to get the reference ARD datasets
-    datasets = odc_dc.find_datasets(
-        product=ard_product_names, geopolygon=gpgon, time=period
-    )
-
-    if len(datasets) == 0:
-        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    elif platform == "ls":
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
-        )
-    elif platform == "s2":
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-        )
-
-    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
-    logger.info("Find %s referance ARD datasets", str(len(datasets)))
-
-    # Use find_datasets to get the mapping ARD dataset datasets
-    datasets = odc_dc.find_datasets(
-        product=ard_product_names, geopolygon=gpgon, time=mapping_period
-    )
-
-    if len(datasets) == 0:
-        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    elif platform == "ls":
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
-        )
-    elif platform == "s2":
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-        )
-
-    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
-    logger.info("Find %s mapping ARD datasets", str(len(datasets)))
-
     # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
     datasets = hnrs_dc.find_datasets(
         product=geomed_product_name, geopolygon=gpgon, time=period[0]
@@ -228,6 +187,36 @@ def check_input_datasets(
         overall_input_datasets.extend(
             [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
+
+    # Use find_datasets to get the reference ARD datasets
+    datasets = odc_dc.find_datasets(
+        product=ard_product_names, geopolygon=gpgon, time=period
+    )
+
+    if len(datasets) == 0:
+        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
+    else:
+        overall_input_datasets.extend(
+            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
+        )
+
+    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
+    logger.info("Find %s referance ARD datasets", str(len(datasets)))
+
+    # Use find_datasets to get the mapping ARD dataset datasets
+    datasets = odc_dc.find_datasets(
+        product=ard_product_names, geopolygon=gpgon, time=mapping_period
+    )
+
+    if len(datasets) == 0:
+        raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
+    else:
+        overall_input_datasets.extend(
+            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
+        )
+
+    logger.info("Load referance ARD from %s", "-".join(ard_product_names))
+    logger.info("Find %s mapping ARD datasets", str(len(datasets)))
 
     # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue
     geometry_list = [datasets[0].extent]
