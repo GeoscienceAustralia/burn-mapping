@@ -11,14 +11,14 @@ input_products:
     - nbart_green
     - nbart_blue
     - nbart_nir_2
-    - nbart_swir_1
+    - nbart_swir_2
     - nbart_swir_3
   input_gm_bands:
     - red
     - green
     - blue
     - nir2
-    - swir1
+    - swir2
     - swir3
 
 task_table: 10-year-historical-processing-4year-geomad.csv
