@@ -131,35 +131,6 @@ def check_input_datasets(
     gpgon = _get_gpgon(region_id)
 
     # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
-    datasets = odc_dc.find_datasets(
-        product=wofs_summary_product_name, geopolygon=gpgon, time=mapping_period[0]
-    )
-
-    logger.info("Load WOfS summary product from %s", geomed_product_name)
-
-    # clean up the dataset by region_code
-    datasets = [
-        e
-        for e in datasets
-        if e.metadata_doc["properties"]["odc:region_code"] == region_id
-    ]
-
-    for dataset in datasets:
-        logger.info(
-            "Find WOfS summary dataset with metadata:  %s",
-            dataset.metadata_doc["label"],
-        )
-
-    if len(datasets) == 0:
-        raise IncorrectInputDataError("Cannot find WOfS summary dataset")
-    elif len(datasets) > 1:
-        raise IncorrectInputDataError("Find one more than WOfS summary dataset")
-    else:
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
-        )
-
-    # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
     datasets = hnrs_dc.find_datasets(
         product=geomed_product_name, geopolygon=gpgon, time=period[0]
     )
@@ -183,6 +154,37 @@ def check_input_datasets(
         raise IncorrectInputDataError("Cannot find GeoMAD dataset")
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than GeoMAD dataset")
+    else:
+        overall_input_datasets.extend(
+            [{str(e.id): e.metadata_doc["label"]} for e in datasets]
+        )
+        # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue
+        geometry_list = [datasets[0].extent]
+
+    # Use find_datasets to get the GeoMAD dataset ID, and display it on LOG
+    datasets = odc_dc.find_datasets(
+        product=wofs_summary_product_name, geopolygon=gpgon, time=mapping_period[0]
+    )
+
+    logger.info("Load WOfS summary product from %s", geomed_product_name)
+
+    # clean up the dataset by region_code
+    datasets = [
+        e
+        for e in datasets
+        if e.metadata_doc["properties"]["odc:region_code"] == region_id
+    ]
+
+    for dataset in datasets:
+        logger.info(
+            "Find WOfS summary dataset with metadata:  %s",
+            dataset.metadata_doc["label"],
+        )
+
+    if len(datasets) == 0:
+        raise IncorrectInputDataError("Cannot find WOfS summary dataset")
+    elif len(datasets) > 1:
+        raise IncorrectInputDataError("Find one more than WOfS summary dataset")
     else:
         overall_input_datasets.extend(
             [{str(e.id): e.metadata_doc["label"]} for e in datasets]
@@ -217,9 +219,6 @@ def check_input_datasets(
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s mapping ARD datasets", str(len(datasets)))
-
-    # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue
-    geometry_list = [datasets[0].extent]
 
     region_polygon = gpd.GeoDataFrame(
         index=range(len(geometry_list)), crs="epsg:3577", geometry=geometry_list
@@ -315,11 +314,7 @@ def load_ard_ds(
         geopolygon=gpgon,
         output_crs="EPSG:3577",
         resolution=(-30, 30),
-        resampling={"fmask": "nearest", "*": "bilinear"},
-        # mask_filters=[("dilation", 10)],
-        # mask_contiguity=True,
         dask_chunks={},
-        # predicate=gqa_predicate,
         time=period,
         group_by="solar_day",
     )
