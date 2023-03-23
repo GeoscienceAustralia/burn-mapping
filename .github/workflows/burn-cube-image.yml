@@ -9,6 +9,7 @@ on:
       - develop
     paths:
       - 'dea_burn_cube/**'
+      - '!dea_burn_cube/configs/*'
       - '.github/workflows/burn-cube-image.yml'
       - 'Dockerfile'
 
