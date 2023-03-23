@@ -361,7 +361,18 @@ def update_hotspot_data(
 
     o = urlparse(output)
 
+    s3_bucket_name = o.netloc
     output_s3_folder = o.path[1:]
+
+    csv_filename = "hotspot_historic.csv"
+
+    filtered_csv = f"{task_id}-{csv_filename}"
+    s3_file_uri = f"{output_s3_folder}/{filtered_csv}"
+
+    # not need to regenerate the hotspot file because it
+    # always same with the same task-id
+    if task.check_file_exists(s3_bucket_name, s3_file_uri):
+        sys.exit(0)
 
     # use task_id to get the mappingperiod information to filter hotspot
     bc_running_task = task.generate_task(task_id, task_table)
@@ -384,7 +395,7 @@ def update_hotspot_data(
         "https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip"
     )
     filename = "all-data-csv.zip"
-    csv_filename = "hotspot_historic.csv"
+
     r = requests.get(hotspot_product_url, stream=True)
     r.raw.decode_content = True
     with open(filename, "wb") as f:
@@ -412,8 +423,6 @@ def update_hotspot_data(
 
             filtered_df = hotspot_df[hotspot_df.index.isin(index)]
 
-            filtered_csv = f"{task_id}-{csv_filename}"
-
             # save the current task hotspot information to its CSV file, and upload to S3 later
             filtered_df.to_csv(filtered_csv, index=False)
 
@@ -422,8 +431,8 @@ def update_hotspot_data(
             with open(filtered_csv, "rb") as f:
                 s3.upload_fileobj(
                     f,
-                    o.netloc,
-                    f"{output_s3_folder}/{filtered_csv}",
+                    s3_bucket_name,
+                    s3_file_uri,
                 )
 
 
