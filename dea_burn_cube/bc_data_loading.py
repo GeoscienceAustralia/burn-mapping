@@ -197,10 +197,10 @@ def check_input_datasets(
 
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    else:
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-        )
+    # else:
+    #    overall_input_datasets.extend(
+    #        [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
+    #    )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s referance ARD datasets", str(len(datasets)))
@@ -212,10 +212,10 @@ def check_input_datasets(
 
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    else:
-        overall_input_datasets.extend(
-            [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-        )
+    # else:
+    #     overall_input_datasets.extend(
+    #         [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
+    #     )
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s mapping ARD datasets", str(len(datasets)))
