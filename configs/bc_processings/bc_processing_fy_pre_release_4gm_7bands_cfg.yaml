@@ -1,0 +1,10 @@
+output_folder: s3://dea-public-data-dev/projects/burn_cube/pre-release/4gm-7bands
+
+input_products:
+  geomed: ga_ls8c_nbart_gm_4fyear_2015
+  wofs_summary: ga_ls_wo_fq_cyear_3
+  ard_product_names:
+    - ga_ls8c_ard_3
+
+task_table: 10-year-historical-processing-4year-geomad.csv
+overwrite: False
