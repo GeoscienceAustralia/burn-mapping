@@ -130,34 +130,18 @@ def main():
     help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
 )
 @click.option(
-    "--region-list-s3-path",
-    "-r",
-    type=str,
-    default=None,
-    help="REQUIRED. The AU-30 Region list filter by Ocean Mask and Hotspot in GeoJSON format.",
-)
-@click.option(
     "--process-cfg-url",
     "-p",
     type=str,
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-def filter_regions_by_output(task_id, region_list_s3_path, process_cfg_url):
+def filter_regions_by_output(task_id, process_cfg_url):
     """
     There are one assumption about this method:
         1. we already run filter_regions method to get the region list
 
     """
-    _ = s3fs.S3FileSystem(anon=True)
-
-    _ = "s3" in gpd.io.file._VALID_URLS
-    gpd.io.file._VALID_URLS.discard("s3")
-
-    region_gdf = gpd.read_file(region_list_s3_path)
-    region_gdf = region_gdf.to_crs(epsg="3577")
-
-    logger.info("Filter %s by output NetCDF files", region_list_s3_path)
 
     process_cfg = task.load_yaml_remote(process_cfg_url)
     output = process_cfg["output_folder"]
@@ -165,6 +149,18 @@ def filter_regions_by_output(task_id, region_list_s3_path, process_cfg_url):
     platform = process_cfg["input_products"]["platform"]
 
     ancillary_folder = f"{output}/ancillary_file"
+
+    _ = s3fs.S3FileSystem(anon=True)
+
+    _ = "s3" in gpd.io.file._VALID_URLS
+    gpd.io.file._VALID_URLS.discard("s3")
+
+    region_list_s3_path = f"{ancillary_folder}/{task_id}-regions.json"
+
+    region_gdf = gpd.read_file(region_list_s3_path)
+    region_gdf = region_gdf.to_crs(epsg="3577")
+
+    logger.info("Filter %s by output NetCDF files", region_list_s3_path)
 
     o = urlparse(ancillary_folder)
     s3_bucket_name = o.netloc
