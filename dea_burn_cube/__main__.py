@@ -246,7 +246,11 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
     # if we already had the region, skip it
     # TODO: must change the output name with region_list_s3_path
 
-    if task.check_file_exists(o.netloc, f"{ancillary_key}/{local_json_file}"):
+    overwrite = process_cfg["overwrite"]
+
+    if not overwrite and task.check_file_exists(
+        o.netloc, f"{ancillary_key}/{local_json_file}"
+    ):
         sys.exit(0)
 
     _ = s3fs.S3FileSystem(anon=True)
@@ -356,6 +360,8 @@ def update_hotspot_data(
 
     process_cfg = task.load_yaml_remote(process_cfg_url)
 
+    overwrite = process_cfg["overwrite"]
+
     task_table = process_cfg["task_table"]
     output = process_cfg["output_folder"] + "/ancillary_file"
 
@@ -371,7 +377,7 @@ def update_hotspot_data(
 
     # not need to regenerate the hotspot file because it
     # always same with the same task-id
-    if task.check_file_exists(s3_bucket_name, s3_file_uri):
+    if not overwrite and task.check_file_exists(s3_bucket_name, s3_file_uri):
         sys.exit(0)
 
     # use task_id to get the mappingperiod information to filter hotspot
@@ -548,7 +554,7 @@ def burn_cube_run(
     bucket_name = o.netloc
     object_key = target_file_path[1:]
 
-    if task.check_file_exists(bucket_name, object_key) and not overwrite:
+    if not overwrite and task.check_file_exists(bucket_name, object_key):
         logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
     else:
         # check the input product detail
