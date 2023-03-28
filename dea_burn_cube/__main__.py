@@ -136,7 +136,12 @@ def main():
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-def filter_regions_by_output(task_id, process_cfg_url):
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
+def filter_regions_by_output(task_id, process_cfg_url, overwrite):
     """
     There are one assumption about this method:
         1. we already run filter_regions method to get the region list
@@ -145,7 +150,6 @@ def filter_regions_by_output(task_id, process_cfg_url):
 
     process_cfg = task.load_yaml_remote(process_cfg_url)
     output = process_cfg["output_folder"]
-    overwrite = process_cfg["overwrite"]
     platform = process_cfg["input_products"]["platform"]
 
     ancillary_folder = f"{output}/ancillary_file"
@@ -221,7 +225,12 @@ def filter_regions_by_output(task_id, process_cfg_url):
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
-def filter_regions(task_id, region_list_s3_path, process_cfg_url):
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
+def filter_regions(task_id, region_list_s3_path, process_cfg_url, overwrite):
     """
     There are two assumptions on this method:
     1. user always use AU-30 grid standard GeoJSON
@@ -241,8 +250,6 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
 
     # if we already had the region, skip it
     # TODO: must change the output name with region_list_s3_path
-
-    overwrite = process_cfg["overwrite"]
 
     if not overwrite and task.check_file_exists(
         o.netloc, f"{ancillary_key}/{local_json_file}"
@@ -348,15 +355,19 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url):
     default=None,
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
 def update_hotspot_data(
     task_id,
     process_cfg_url,
+    overwrite,
 ):
     logging_setup()
 
     process_cfg = task.load_yaml_remote(process_cfg_url)
-
-    overwrite = process_cfg["overwrite"]
 
     task_table = process_cfg["task_table"]
     output = process_cfg["output_folder"] + "/ancillary_file"
@@ -467,11 +478,17 @@ def update_hotspot_data(
     default=8,
     help="The size of process pool.",
 )
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
 def burn_cube_run(
     task_id,
     region_id,
     process_cfg_url,
     n_procs,
+    overwrite,
 ):
     """
     The main method to run Burn Cube processing based on task id and region ID.
@@ -490,7 +507,6 @@ def burn_cube_run(
     platform = process_cfg["input_products"]["platform"]
 
     output = process_cfg["output_folder"]
-    overwrite = process_cfg["overwrite"]
 
     bc_running_task = task.generate_task(task_id, task_table)
 
