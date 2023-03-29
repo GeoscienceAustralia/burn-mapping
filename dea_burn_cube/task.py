@@ -85,12 +85,12 @@ def generate_output_filenames(
 
     Example:
         >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
-        ('/tmp/BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
+        ('BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
     """
     s3_file_path = (
         f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
     )
-    local_file_path = f"/tmp/BurnMapping-{platform}-{task_id}-{region_id}.nc"
+    local_file_path = f"BurnMapping-{platform}-{task_id}-{region_id}.nc"
 
     o = urlparse(output)
 
