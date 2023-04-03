@@ -1,8 +1,8 @@
 plugin: gm-s2-dea # this can help system find the relative plugin and plugin version
 
 product:
-  name: ga_s2ab_ard_gm_4fyear_3
-  short_name: ga_s2ab_ard_gm_4fyear_3
+  name: ga_s2a_debug_gm_4fyear_3
+  short_name: ga_s2a_debug_gm_4fyear_3
   version: 3.0.0
   product_family: geomedian
 
