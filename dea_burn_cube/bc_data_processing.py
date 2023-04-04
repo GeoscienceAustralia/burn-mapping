@@ -116,7 +116,11 @@ def apply_post_processing_by_wo_summary(
 
     wofs_summary_frequency = wofs_summary_frequency.load()
 
-    wofs_mask = (wofs_summary_frequency[0, :, :].values < 0.2).astype(float)
+    # Create a water mask by identifying areas with water frequency greater than or equal to 0.2
+    water_mask = (wofs_summary_frequency[0, :, :].values >= 0.2).astype(float)
+
+    # Create the opposite mask by inverting the boolean values of the water mask
+    not_water_mask = (~water_mask.astype(bool)).astype(float)
 
     # ocean_mask = generate_ocean_mask(wofs_summary_frequency, region_id)
 
@@ -125,13 +129,13 @@ def apply_post_processing_by_wo_summary(
     )  # mask the burnt area with "Medium" burnt area
     burnpixel_sev = algo.burnpixel_masking(burn_cube_result, "Severe")
 
-    wofs_moderate = wofs_mask * burnpixel_mod
-    wofs_severe = wofs_mask * burnpixel_sev
-    wofs_severity = wofs_mask * burn_cube_result["Severity"]
-    wofs_startdate = wofs_mask * burn_cube_result["StartDate"]
-    wofs_duration = wofs_mask * burn_cube_result["Duration"]
-    wofs_corroborate = wofs_mask * burn_cube_result["Corroborate"]
-    wofs_cleaned = wofs_mask * burn_cube_result["Cleaned"]
+    wofs_moderate = not_water_mask * burnpixel_mod
+    wofs_severe = not_water_mask * burnpixel_sev
+    wofs_severity = not_water_mask * burn_cube_result["Severity"]
+    wofs_startdate = not_water_mask * burn_cube_result["StartDate"]
+    wofs_duration = not_water_mask * burn_cube_result["Duration"]
+    wofs_corroborate = not_water_mask * burn_cube_result["Corroborate"]
+    wofs_cleaned = not_water_mask * burn_cube_result["Cleaned"]
 
     # ocean_moderate = ocean_mask * wofs_moderate
     # ocean_severe = ocean_mask * wofs_severe
