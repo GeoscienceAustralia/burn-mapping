@@ -66,7 +66,7 @@ product:
 
 aws_unsigned: True
 
-max_processing_time: 5000
+max_processing_time: 7200
 job_queue_max_lease: 300
 renew_safety_margin: 60
 future_poll_interval: 2
