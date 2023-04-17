@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import zipfile
+from multiprocessing import cpu_count
 from urllib.parse import urlparse
 
 import boto3
@@ -59,7 +60,7 @@ def result_file_saving_and_uploading(
 
     Example:
         >>> result_file_saving_and_uploading(burn_cube_result,
-                                            '/tmp/burn_cube_result.nc',
+                                            'burn_cube_result.nc',
                                             's3://my-bucket/output',
                                             'my-bucket')
     """
@@ -472,13 +473,6 @@ def update_hotspot_data(
     help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
 )
 @click.option(
-    "--n-procs",
-    "-n",
-    type=int,
-    default=8,
-    help="The size of process pool.",
-)
-@click.option(
     "--overwrite/--no-overwrite",
     default=False,
     help="Rerun scenes that have already been processed.",
@@ -487,12 +481,13 @@ def burn_cube_run(
     task_id,
     region_id,
     process_cfg_url,
-    n_procs,
     overwrite,
 ):
     """
     The main method to run Burn Cube processing based on task id and region ID.
     """
+
+    n_procs = cpu_count()
 
     logging_setup()
 
