@@ -1,7 +1,19 @@
-plugin: gm-ls # this can help system find the relative plugin and plugin version
+plugin: gm-s2 # this can help system find the relative plugin and plugin version
+plugin_config:
+  bands: ["nbart_blue", "nbart_green", "nbart_red", "nbart_red_edge_1", "nbart_red_edge_2","nbart_red_edge_3", "nbart_nir_1", "nbart_nir_2", "nbart_swir_2", "nbart_swir_3"]
+  rgb_bands: ["nbart_red", "nbart_green", "nbart_blue"]
+  cloud_filters: {"cloud": [["opening", 0], ["dilation", 0]]}
+  nodata_classes: ["nodata"]
+  mask_band: "oa_s2cloudless_mask"
+  aux_names:
+    smad: smad
+    emad: emad
+    bcmad: bcmad
+    count: count
+
 product:
-  name: ga_ls8c_nbart_gm_2cyear_3
-  short_name: ga_ls8c_nbart_gm_2cyear_3
+  name: ga_s2ab_gm_4fyear_3
+  short_name: ga_s2ab_gm_4fyear_3
   version: 3.0.0
   product_family: geomedian
 
@@ -11,6 +23,7 @@ product:
   classifier: ard
   maturity: final
   collection_number: 3
+
 
   inherit_skip_properties:
     - eo:cloud_cover
@@ -53,18 +66,18 @@ product:
     abstract: Simple true-colour image, using the red, green and blue bands
     components:
       red:
-        red: 1
+        nbart_red: 1
       green:
-        green: 1
+        nbart_green: 1
       blue:
-        blue: 1
+        nbart_blue: 1
     scale_range:
     - 0
     - 3000
 
 aws_unsigned: True
 
-max_processing_time: 2400
+max_processing_time: 7200
 job_queue_max_lease: 300
 renew_safety_margin: 60
 future_poll_interval: 2
