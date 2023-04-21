@@ -1,4 +1,4 @@
-output_folder: s3://dea-public-data-dev/projects/burn_cube/pre-release/ls/4gm-7bands
+output_folder: s3://dea-public-data-dev/projects/burn_cube/pre-release/4gm-7bands
 
 input_products:
   platform: ls
