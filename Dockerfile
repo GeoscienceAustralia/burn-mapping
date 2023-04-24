@@ -1,44 +1,29 @@
-ARG py_env_path=/env
-ARG V_BASE=3.3.0
+FROM osgeo/gdal:ubuntu-small-3.4.1
 
-FROM opendatacube/geobase-builder:${V_BASE} as env_builder
-ENV LC_ALL=C.UTF-8
-
-# Install our Python requirements
-COPY requirements.txt /conf/
-COPY constraints.txt /conf/
-ARG py_env_path
-RUN echo "" > /conf/constraints.txt
-RUN cat /conf/requirements.txt \
-  && env-build-tool new /conf/requirements.txt /conf/constraints.txt ${py_env_path} \
-  && rm -rf /root/.cache/pip \
-  && echo done
-
-# Below is the actual image that does the running
-FROM opendatacube/geobase-runner:${V_BASE}
 ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C.UTF-8 \
     LANG=C.UTF-8
 
-RUN apt-get update \
-    && apt-get install -y \
-         libtiff-tools \
-         git \
-         htop \
-         tmux \
-         wget \
-         curl \
-         nano \
-         unzip \
-         vim \
-         gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Apt installation
+RUN apt-get update && \
+    apt-get install -y \
+      build-essential \
+      fish \
+      git \
+      vim \
+      htop \
+      wget \
+      unzip \
+      python3-pip \
+      libpq-dev python-dev \
+    && apt-get autoclean && \
+    apt-get autoremove && \
+    rm -rf /var/lib/{apt,dpkg,cache,log}
 
-WORKDIR /tmp
-
-ARG py_env_path
-COPY --from=env_builder $py_env_path $py_env_path
-ENV PATH="${py_env_path}/bin:${PATH}"
+# Pip installation
+RUN mkdir -p /conf
+COPY requirements.txt /conf/
+RUN pip install -r /conf/requirements.txt
 
 # Copy source code and install it
 RUN mkdir -p /code
@@ -48,7 +33,7 @@ ADD . /code
 RUN echo "Installing dea-burn-cube through the Dockerfile."
 RUN pip install --extra-index-url="https://packages.dea.ga.gov.au" .
 
-RUN env && echo $PATH && pip freeze && pip check
+RUN pip freeze && pip check
 
 # Make sure it's working
 RUN dea-burn-cube --version
