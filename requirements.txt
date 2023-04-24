@@ -1,9 +1,15 @@
 aiohttp==3.8.3
+boto3
+botocore
+click
 datacube==1.8.9
 dea_tools==0.2.8.dev47
+fiona==1.8.22
+fsspec
+geopandas
 numpy==1.23.5
-psycopg2-binary==2.9.2
+pyarrow
 pyproj==3.2.1
 s3fs==0.4.2
+scipy==1.9.1
 Shapely==1.8.5.post1
-SQLAlchemy==1.4.46
