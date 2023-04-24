@@ -56,7 +56,7 @@ jobs:
       - name: Get git commit hash for push to main
         if: github.event_name != 'release'
         run: |
-          git fetch --all --tags
+          git pull --all --tags
           echo "RELEASE=$(git describe --tags)" >> $GITHUB_ENV
 
       - name: Push image to ECR
