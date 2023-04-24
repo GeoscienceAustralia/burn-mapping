@@ -63,8 +63,8 @@ jobs:
       - name: Get git commit hash for push to main
         if: github.event_name != 'release'
         run: |
-          git fetch --all --tags
-          echo "RELEASE=$(git describe --tags)" >> $GITHUB_ENV
+          echo "TAG=dev$(git rev-parse --short HEAD)" \
+          >> $GITHUB_ENV
 
       - name: Push unstable image to ECR
         uses: whoan/docker-build-with-cache-action@master
@@ -72,4 +72,4 @@ jobs:
         with:
           registry: 538673716275.dkr.ecr.ap-southeast-2.amazonaws.com
           image_name: ${{ env.IMAGE_NAME }}
-          image_tag: latest,${{ env.RELEASE }}
+          image_tag: latest,${{ env.TAG }}
