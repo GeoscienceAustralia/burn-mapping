@@ -22,7 +22,7 @@ permissions:
   contents: read    # This is required for actions/checkout
 
 jobs:
-  test_and_push:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -33,6 +33,13 @@ jobs:
         shell: bash
         run: |
           docker-compose build
+
+  push_ecr:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
