@@ -4,11 +4,15 @@ Geoscience Australia
 """
 
 import logging
+import math
 import os
+import re
 import shutil
 import sys
 import zipfile
+from datetime import datetime, timezone
 from multiprocessing import cpu_count
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 import boto3
@@ -18,11 +22,15 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyproj
+import pystac
 import requests
 import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
+from datacube.utils.dates import normalise_dt
+from odc.dscache.tools.tiling import parse_gridspec_with_name
+from pystac.extensions.projection import ProjectionExtension
 from shapely.geometry import Point
 from shapely.ops import unary_union
 
@@ -34,6 +42,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
+
+
+def format_datetime(dt: datetime, with_tz=True, timespec="microseconds") -> str:
+    dt = normalise_dt(dt)
+    dt = dt.isoformat(timespec=timespec)
+    if with_tz:
+        dt = dt + "Z"
+    return dt
 
 
 @task.log_execution_time
@@ -448,6 +464,159 @@ def update_hotspot_data(
                     s3_bucket_name,
                     s3_file_uri,
                 )
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
+    "--region-id",
+    "-r",
+    type=str,
+    default=None,
+    help="REQUIRED. Region id AU-30 Grid.",
+)
+@click.option(
+    "--process-cfg-url",
+    "-p",
+    type=str,
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
+)
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
+def burn_cube_add_metadata(
+    task_id,
+    region_id,
+    process_cfg_url,
+    overwrite,
+):
+    logging_setup()
+
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+
+    task_table = process_cfg["task_table"]
+
+    # output = process_cfg["output_folder"]
+
+    bc_running_task = task.generate_task(task_id, task_table)
+
+    mappingperiod = (
+        bc_running_task["Mapping Period Start"],
+        bc_running_task["Mapping Period End"],
+    )
+
+    # TODO: only check the NetCDF is not enough
+
+    # local_file_path, target_file_path = task.generate_output_filenames(
+    #    output, task_id, region_id, platform
+    # )
+
+    # o = urlparse(output)
+
+    # bucket_name = o.netloc
+    # object_key = target_file_path[1:]
+
+    processing_dt = datetime.utcnow()
+
+    product_name = "ga_ls8c_bc_4cyear_2020"
+    product_version = "3.0.0"
+
+    properties: Dict[str, Any] = {}
+
+    data_source = process_cfg["input_products"]["platform"]
+
+    properties["title"] = f"BurnMapping-{data_source}-{task_id}-{region_id}"
+    properties["dtr:start_datetime"] = format_datetime(mappingperiod[0])
+    properties["dtr:end_datetime"] = format_datetime(mappingperiod[1])
+    properties["odc:processing_datetime"] = format_datetime(
+        processing_dt, timespec="seconds"
+    )
+    properties["odc:region_code"] = region_id
+    properties["odc:product"] = "ga_ls8c_bc_4cyear_2020"
+    properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
+    properties["gsd"] = 15  # get it from ARD datasets
+    properties["platform"] = "landsat-8"  # get it from ARD datasets
+    properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
+    properties["odc:product_family"] = "burncube"  # get it from ARD datasets
+    properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
+    properties["odc:dataset_version"] = product_version  # get it from ARD datasets
+    properties["dea:dataset_maturity"] = "final"
+    properties["odc:collection_number"] = 3
+
+    _, gridspec = parse_gridspec_with_name("au-30")
+
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
+
+    match = re.match(pattern, region_id)
+
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+        print("x value:", x)
+        print("y value:", y)
+    else:
+        print("No match found.")
+        sys.exit(0)  # cannot extract geobox, stop here
+
+    geobox = gridspec.tile_geobox((x, y))
+
+    geobox_wgs84 = geobox.extent.to_crs(
+        "epsg:4326", resolution=math.inf, wrapdateline=True
+    )
+
+    bbox = geobox_wgs84.boundingbox
+
+    uuid = task.odc_uuid(
+        product_name,
+        product_version,
+        sources=[],
+    )
+
+    item = pystac.Item(
+        id=str(uuid),
+        geometry=geobox_wgs84.json,
+        bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
+        datetime=pd.Timestamp(mappingperiod[0]).replace(tzinfo=timezone.utc),
+        properties=properties,
+    )
+
+    ProjectionExtension.add_to(item)
+    proj_ext = ProjectionExtension.ext(item)
+    proj_ext.apply(
+        geobox.crs.epsg,
+        transform=geobox.transform,
+        shape=geobox.shape,
+    )
+
+    # Add all the assets
+    # for band, path in self.paths(ext=ext).items():
+    #    asset = pystac.Asset(
+    #        href=path,
+    #        media_type="image/tiff; application=geotiff",
+    #        roles=["data"],
+    #        title=band,
+    #    )
+    #    item.add_asset(band, asset)
+
+    stac_metadata = item.to_dict()
+
+    import json
+
+    # Serializing json
+    with open("demo_stac_metadata.json", "w") as outfile:
+        json.dump(stac_metadata, outfile, indent=4)
+
+    return item.to_dict()
 
 
 @main.command(no_args_is_help=True)

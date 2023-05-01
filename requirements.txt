@@ -8,6 +8,7 @@ fiona==1.8.22
 fsspec
 geopandas
 numpy==1.23.5
+odc_dscache>=0.2.2
 pyarrow
 pyproj==3.2.1
 pystac==1.7.3
