@@ -541,7 +541,7 @@ def burn_cube_add_metadata(
         processing_dt, timespec="seconds"
     )
     properties["odc:region_code"] = region_id
-    properties["odc:product"] = "ga_ls8c_bc_4cyear_2020"
+    properties["odc:product"] = product_name
     properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
     properties["gsd"] = 15  # get it from ARD datasets
     properties["platform"] = "landsat-8"  # get it from ARD datasets
@@ -588,6 +588,7 @@ def burn_cube_add_metadata(
         bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
         datetime=pd.Timestamp(mappingperiod[0]).replace(tzinfo=timezone.utc),
         properties=properties,
+        collection=product_name,
     )
 
     ProjectionExtension.add_to(item)
