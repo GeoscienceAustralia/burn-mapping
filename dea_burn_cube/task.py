@@ -250,7 +250,8 @@ def generate_processing_log(
     region_id: str,
     output: str,
     task_table: str,
-    input_dataset_list: List[Dict[str, Any]],
+    summary_datasets: List[Dict[str, Any]],
+    ard_datasets: List[str],
 ) -> Dict[str, Any]:
     """
     Generates a processing log dictionary for the task.
@@ -274,8 +275,10 @@ def generate_processing_log(
         Output folder path
     task_table : str
         Name of the table to store the task
-    input_dataset_list : List[Dict[str, Any]]
-        List of input datasets with metadata
+    summary_datasets : List[Dict[str, Any]]
+        List of summary datasets with UUID and label
+    ard_datasets: List[str]
+        List of input ARD datasets with UUID only
 
     Returns:
     processing_log : Dict[str, Any]): A dictionary containing processing log information
@@ -294,7 +297,8 @@ def generate_processing_log(
         "output": output,
         "task_table": task_table,
         "DEA Burn Cube": version,
-        "input_dataset_list": input_dataset_list,
+        "summary_datasets": summary_datasets,
+        "ard_datasets": ard_datasets,
     }
 
 

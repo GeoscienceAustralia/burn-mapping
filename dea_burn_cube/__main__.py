@@ -514,7 +514,49 @@ def burn_cube_add_metadata(
         bc_running_task["Mapping Period End"],
     )
 
-    # TODO: only check the NetCDF is not enough
+    odc_config = {
+        "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+        "db_password": os.getenv("ODC_DB_PASSWORD"),
+        "db_username": os.getenv("ODC_DB_USERNAME"),
+        "db_port": 5432,
+        "db_database": os.getenv("ODC_DB_DATABASE"),
+    }
+
+    odc_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
+    )
+
+    ard_product_names = process_cfg["input_products"]["ard_product_names"]
+
+    _, gridspec = parse_gridspec_with_name("au-30")
+
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
+
+    match = re.match(pattern, region_id)
+
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+        print("x value:", x)
+        print("y value:", y)
+    else:
+        print("No match found.")
+        # cannot extract geobox, so we stop here.
+        # if we throw exception, it will trigger the Airflow/Argo retry.
+        sys.exit(0)
+
+    geobox = gridspec.tile_geobox((x, y))
+
+    geobox_wgs84 = geobox.extent.to_crs(
+        "epsg:4326", resolution=math.inf, wrapdateline=True
+    )
+
+    bbox = geobox_wgs84.boundingbox
+
+    input_datasets = odc_dc.find_datasets(
+        product=ard_product_names, geopolygon=geobox_wgs84, time=mappingperiod
+    )
 
     # local_file_path, target_file_path = task.generate_output_filenames(
     #    output, task_id, region_id, platform
@@ -552,30 +594,6 @@ def burn_cube_add_metadata(
     properties["dea:dataset_maturity"] = "final"
     properties["odc:collection_number"] = 3
 
-    _, gridspec = parse_gridspec_with_name("au-30")
-
-    # gridspec : au-30
-    pattern = r"x(\d+)y(\d+)"
-
-    match = re.match(pattern, region_id)
-
-    if match:
-        x = int(match.group(1))
-        y = int(match.group(2))
-        print("x value:", x)
-        print("y value:", y)
-    else:
-        print("No match found.")
-        sys.exit(0)  # cannot extract geobox, stop here
-
-    geobox = gridspec.tile_geobox((x, y))
-
-    geobox_wgs84 = geobox.extent.to_crs(
-        "epsg:4326", resolution=math.inf, wrapdateline=True
-    )
-
-    bbox = geobox_wgs84.boundingbox
-
     uuid = task.odc_uuid(
         product_name,
         product_version,
@@ -598,6 +616,9 @@ def burn_cube_add_metadata(
         transform=geobox.transform,
         shape=geobox.shape,
     )
+
+    # Lineage last
+    item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
 
     # Add all the assets
     # for band, path in self.paths(ext=ext).items():
@@ -737,7 +758,11 @@ def burn_cube_run(
         # check the input product detail
         # TODO: can add dry-run, and it will stop after input dataset list check
         try:
-            gpgon, input_dataset_list = bc_data_loading.check_input_datasets(
+            (
+                gpgon,
+                summary_datasets,
+                ard_datasets,
+            ) = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
                 period,
@@ -769,7 +794,8 @@ def burn_cube_run(
             region_id,
             output,
             task_table,
-            input_dataset_list,
+            summary_datasets,
+            ard_datasets,
         )
 
         # No matter upload successful or not, should not block the main processing

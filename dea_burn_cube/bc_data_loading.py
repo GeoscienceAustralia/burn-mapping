@@ -126,7 +126,8 @@ def check_input_datasets(
             dataset is found for any input product.
     """
 
-    overall_input_datasets = []
+    summary_datasets = []
+    ard_datasets = []
 
     gpgon = _get_gpgon(region_id)
 
@@ -155,7 +156,7 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than GeoMAD dataset")
     else:
-        overall_input_datasets.extend(
+        summary_datasets.extend(
             [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
         # Load the geometry from OpenDataCube again, avoid the pixel mismatch issue
@@ -186,7 +187,7 @@ def check_input_datasets(
     elif len(datasets) > 1:
         raise IncorrectInputDataError("Find one more than WOfS summary dataset")
     else:
-        overall_input_datasets.extend(
+        summary_datasets.extend(
             [{str(e.id): e.metadata_doc["label"]} for e in datasets]
         )
 
@@ -197,10 +198,8 @@ def check_input_datasets(
 
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    # else:
-    #    overall_input_datasets.extend(
-    #        [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-    #    )
+    else:  # we only keep UUID for ARD datasets to meet metadata request
+        ard_datasets.extend([str(e.id) for e in datasets])
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s referance ARD datasets", str(len(datasets)))
@@ -212,10 +211,8 @@ def check_input_datasets(
 
     if len(datasets) == 0:
         raise IncorrectInputDataError("Cannot find any mapping ARD dataset")
-    # else:
-    #     overall_input_datasets.extend(
-    #         [{str(e.id): e.metadata_doc["properties"]["title"]} for e in datasets]
-    #     )
+    else:
+        ard_datasets.extend([str(e.id) for e in datasets])
 
     logger.info("Load referance ARD from %s", "-".join(ard_product_names))
     logger.info("Find %s mapping ARD datasets", str(len(datasets)))
@@ -227,7 +224,7 @@ def check_input_datasets(
         region_polygon.geometry[0], crs="epsg:3577"
     )
 
-    return gpgon, overall_input_datasets
+    return gpgon, summary_datasets, ard_datasets
 
 
 @task.log_execution_time
