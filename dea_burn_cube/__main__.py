@@ -654,11 +654,48 @@ def burn_cube_add_metadata(
 
         item.add_asset(band_name, asset=asset)
 
+    stac_metadata_path = (
+        bucket_name + "/" + object_key.replace(".nc", ".stac-item.json")
+    )
+
+    # Add links
+    item.links.append(
+        pystac.Link(
+            rel="product_overview",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/product/{product_name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="collection",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/stac/collections/{product_name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="alternative",
+            media_type="text/html",
+            target=f"https://explorer.dea.ga.gov.au/dataset/{str(uuid)}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="self",
+            media_type="application/json",
+            target=stac_metadata_path,
+        )
+    )
+
     stac_metadata = item.to_dict()
 
     logger.info(
         "Upload STAC metadata file %s in s3.",
-        bucket_name + "/" + object_key.replace(".nc", ".stac-item.json"),
+        stac_metadata_path,
     )
 
     io.upload_dict_to_s3(
