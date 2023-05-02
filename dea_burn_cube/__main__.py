@@ -37,6 +37,9 @@ from shapely.ops import unary_union
 import dea_burn_cube.__version__
 from dea_burn_cube import bc_data_loading, bc_data_processing, io, task
 
+# from pystac.extensions.eo import Band, EOExtension
+
+
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -597,7 +600,7 @@ def burn_cube_add_metadata(
     uuid = task.odc_uuid(
         product_name,
         product_version,
-        sources=[],
+        sources=[str(e.id) for e in input_datasets],
     )
 
     item = pystac.Item(
@@ -620,15 +623,42 @@ def burn_cube_add_metadata(
     # Lineage last
     item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
 
+    bands = [
+        "wofssevere",
+        "wofsseverity",
+        "wofsmoderate",
+        "severe",
+        "severity",
+        "moderate",
+        "count",
+    ]
+
     # Add all the assets
-    # for band, path in self.paths(ext=ext).items():
-    #    asset = pystac.Asset(
-    #        href=path,
-    #        media_type="image/tiff; application=geotiff",
-    #        roles=["data"],
-    #        title=band,
-    #    )
-    #    item.add_asset(band, asset)
+    for band in bands:
+        asset = pystac.Asset(
+            href=f"BurnMapping-{data_source}-{task_id}-{region_id}-{band}.tif",
+            media_type="image/tiff; application=geotiff",
+            roles=["data"],
+            title=band,
+        )
+        item.add_asset(band, asset)
+
+        # eo = EOExtension.ext(asset)
+        # band = Band.create(name)
+        # eo.apply(bands=[band])
+
+        # if dataset.grids:
+        #    proj_fields = _proj_fields(dataset.grids, measurement.grid)
+        #    if proj_fields is not None:
+        #        proj = ProjectionExtension.ext(asset)
+        #        # Not sure how this handles None for an EPSG code
+        #        proj.apply(
+        #            shape=proj_fields["shape"],
+        #            transform=proj_fields["transform"],
+        #            epsg=epsg,
+        #        )
+
+        # item.add_asset(name, asset=asset)
 
     stac_metadata = item.to_dict()
 
