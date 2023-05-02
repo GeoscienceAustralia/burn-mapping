@@ -30,15 +30,13 @@ from datacube.utils import geometry
 from datacube.utils.cog import write_cog
 from datacube.utils.dates import normalise_dt
 from odc.dscache.tools.tiling import parse_gridspec_with_name
+from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.projection import ProjectionExtension
 from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
 from dea_burn_cube import bc_data_loading, bc_data_processing, io, task
-
-# from pystac.extensions.eo import Band, EOExtension
-
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -508,7 +506,7 @@ def burn_cube_add_metadata(
 
     task_table = process_cfg["task_table"]
 
-    # output = process_cfg["output_folder"]
+    output = process_cfg["output_folder"]
 
     bc_running_task = task.generate_task(task_id, task_table)
 
@@ -561,14 +559,16 @@ def burn_cube_add_metadata(
         product=ard_product_names, geopolygon=geobox_wgs84, time=mappingperiod
     )
 
-    # local_file_path, target_file_path = task.generate_output_filenames(
-    #    output, task_id, region_id, platform
-    # )
+    data_source = process_cfg["input_products"]["platform"]
 
-    # o = urlparse(output)
+    local_file_path, target_file_path = task.generate_output_filenames(
+        output, task_id, region_id, data_source
+    )
 
-    # bucket_name = o.netloc
-    # object_key = target_file_path[1:]
+    o = urlparse(output)
+
+    bucket_name = o.netloc
+    object_key = target_file_path[1:]
 
     processing_dt = datetime.utcnow()
 
@@ -576,8 +576,6 @@ def burn_cube_add_metadata(
     product_version = "3.0.0"
 
     properties: Dict[str, Any] = {}
-
-    data_source = process_cfg["input_products"]["platform"]
 
     properties["title"] = f"BurnMapping-{data_source}-{task_id}-{region_id}"
     properties["dtr:start_datetime"] = format_datetime(mappingperiod[0])
@@ -634,41 +632,38 @@ def burn_cube_add_metadata(
     ]
 
     # Add all the assets
-    for band in bands:
+    for band_name in bands:
         asset = pystac.Asset(
-            href=f"BurnMapping-{data_source}-{task_id}-{region_id}-{band}.tif",
+            href=f"BurnMapping-{data_source}-{task_id}-{region_id}-{band_name}.tif",
             media_type="image/tiff; application=geotiff",
             roles=["data"],
-            title=band,
+            title=band_name,
         )
-        item.add_asset(band, asset)
 
-        # eo = EOExtension.ext(asset)
-        # band = Band.create(name)
-        # eo.apply(bands=[band])
+        eo = EOExtension.ext(asset)
+        band = Band.create(band_name)
+        eo.apply(bands=[band])
 
-        # if dataset.grids:
-        #    proj_fields = _proj_fields(dataset.grids, measurement.grid)
-        #    if proj_fields is not None:
-        #        proj = ProjectionExtension.ext(asset)
-        #        # Not sure how this handles None for an EPSG code
-        #        proj.apply(
-        #            shape=proj_fields["shape"],
-        #            transform=proj_fields["transform"],
-        #            epsg=epsg,
-        #        )
+        proj = ProjectionExtension.ext(asset)
 
-        # item.add_asset(name, asset=asset)
+        proj.apply(
+            geobox.crs.epsg,
+            transform=geobox.transform,
+            shape=geobox.shape,
+        )
+
+        item.add_asset(band_name, asset=asset)
 
     stac_metadata = item.to_dict()
 
-    import json
+    logger.info(
+        "Upload STAC metadata file %s in s3.",
+        bucket_name + "/" + object_key.replace(".nc", ".stac-item.json"),
+    )
 
-    # Serializing json
-    with open("demo_stac_metadata.json", "w") as outfile:
-        json.dump(stac_metadata, outfile, indent=4)
-
-    return item.to_dict()
+    io.upload_dict_to_s3(
+        stac_metadata, bucket_name, object_key.replace(".nc", ".stac-item.json")
+    )
 
 
 @main.command(no_args_is_help=True)
