@@ -95,6 +95,7 @@ Pygments==2.14.0
 pyparsing==3.0.9
 pyproj==3.2.1
 pyrsistent==0.19.3
+pystac==1.7.3
 python-dateutil==2.8.2
 pyTMD==1.1.3
 pytz==2023.2

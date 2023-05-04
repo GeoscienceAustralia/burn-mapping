@@ -4,11 +4,15 @@ Geoscience Australia
 """
 
 import logging
+import math
 import os
+import re
 import shutil
 import sys
 import zipfile
+from datetime import datetime, timezone
 from multiprocessing import cpu_count
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 import boto3
@@ -18,11 +22,16 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyproj
+import pystac
 import requests
 import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
+from datacube.utils.dates import normalise_dt
+from odc.dscache.tools.tiling import parse_gridspec_with_name
+from pystac.extensions.eo import Band, EOExtension
+from pystac.extensions.projection import ProjectionExtension
 from shapely.geometry import Point
 from shapely.ops import unary_union
 
@@ -34,6 +43,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
+
+
+def format_datetime(dt: datetime, with_tz=True, timespec="microseconds") -> str:
+    dt = normalise_dt(dt)
+    dt = dt.isoformat(timespec=timespec)
+    if with_tz:
+        dt = dt + "Z"
+    return dt
 
 
 @task.log_execution_time
@@ -477,6 +494,237 @@ def update_hotspot_data(
     default=False,
     help="Rerun scenes that have already been processed.",
 )
+def burn_cube_add_metadata(
+    task_id,
+    region_id,
+    process_cfg_url,
+    overwrite,
+):
+    logging_setup()
+
+    process_cfg = task.load_yaml_remote(process_cfg_url)
+
+    task_table = process_cfg["task_table"]
+
+    output = process_cfg["output_folder"]
+
+    bc_running_task = task.generate_task(task_id, task_table)
+
+    mappingperiod = (
+        bc_running_task["Mapping Period Start"],
+        bc_running_task["Mapping Period End"],
+    )
+
+    odc_config = {
+        "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+        "db_password": os.getenv("ODC_DB_PASSWORD"),
+        "db_username": os.getenv("ODC_DB_USERNAME"),
+        "db_port": 5432,
+        "db_database": os.getenv("ODC_DB_DATABASE"),
+    }
+
+    odc_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
+    )
+
+    ard_product_names = process_cfg["input_products"]["ard_product_names"]
+
+    _, gridspec = parse_gridspec_with_name("au-30")
+
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
+
+    match = re.match(pattern, region_id)
+
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+    else:
+        logger.error(
+            "No match found in region id %s.",
+            region_id,
+        )
+        # cannot extract geobox, so we stop here.
+        # if we throw exception, it will trigger the Airflow/Argo retry.
+        sys.exit(0)
+
+    geobox = gridspec.tile_geobox((x, y))
+
+    geobox_wgs84 = geobox.extent.to_crs(
+        "epsg:4326", resolution=math.inf, wrapdateline=True
+    )
+
+    bbox = geobox_wgs84.boundingbox
+
+    input_datasets = odc_dc.find_datasets(
+        product=ard_product_names, geopolygon=geobox_wgs84, time=mappingperiod
+    )
+
+    data_source = process_cfg["input_products"]["platform"]
+
+    _, target_file_path = task.generate_output_filenames(
+        output, task_id, region_id, data_source
+    )
+
+    o = urlparse(output)
+
+    bucket_name = o.netloc
+    object_key = target_file_path[1:]
+
+    processing_dt = datetime.utcnow()
+
+    product_name = process_cfg["product"]["name"]
+    product_version = process_cfg["product"]["version"]
+
+    properties: Dict[str, Any] = {}
+
+    properties["title"] = f"BurnMapping-{data_source}-{task_id}-{region_id}"
+    properties["dtr:start_datetime"] = format_datetime(mappingperiod[0])
+    properties["dtr:end_datetime"] = format_datetime(mappingperiod[1])
+    properties["odc:processing_datetime"] = format_datetime(
+        processing_dt, timespec="seconds"
+    )
+    properties["odc:region_code"] = region_id
+    properties["odc:product"] = product_name
+    properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
+    properties["gsd"] = 15  # get it from ARD datasets
+    properties["platform"] = "landsat-8"  # get it from ARD datasets
+    properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
+    properties["odc:product_family"] = "burncube"  # get it from ARD datasets
+    properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
+    properties["odc:dataset_version"] = product_version  # get it from ARD datasets
+    properties["dea:dataset_maturity"] = "final"
+    properties["odc:collection_number"] = 3
+
+    uuid = task.odc_uuid(
+        product_name,
+        product_version,
+        sources=[str(e.id) for e in input_datasets],
+        tile=region_id,
+        time=str(mappingperiod),
+    )
+
+    item = pystac.Item(
+        id=str(uuid),
+        geometry=geobox_wgs84.json,
+        bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
+        datetime=pd.Timestamp(mappingperiod[0]).replace(tzinfo=timezone.utc),
+        properties=properties,
+        collection=product_name,
+    )
+
+    ProjectionExtension.add_to(item)
+    proj_ext = ProjectionExtension.ext(item)
+    proj_ext.apply(
+        geobox.crs.epsg,
+        transform=geobox.transform,
+        shape=geobox.shape,
+    )
+
+    # Lineage last
+    item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
+
+    bands = process_cfg["product"]["bands"]
+
+    # Add all the assets
+    for band_name in bands:
+        asset = pystac.Asset(
+            href=f"BurnMapping-{data_source}-{task_id}-{region_id}-{band_name}.tif",
+            media_type="image/tiff; application=geotiff",
+            roles=["data"],
+            title=band_name,
+        )
+
+        eo = EOExtension.ext(asset)
+        band = Band.create(band_name)
+        eo.apply(bands=[band])
+
+        proj = ProjectionExtension.ext(asset)
+
+        proj.apply(
+            geobox.crs.epsg,
+            transform=geobox.transform,
+            shape=geobox.shape,
+        )
+
+        item.add_asset(band_name, asset=asset)
+
+    stac_metadata_path = (
+        bucket_name + "/" + object_key.replace(".nc", ".stac-item.json")
+    )
+
+    # Add links
+    item.links.append(
+        pystac.Link(
+            rel="product_overview",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/product/{product_name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="collection",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/stac/collections/{product_name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="alternative",
+            media_type="text/html",
+            target=f"https://explorer.dea.ga.gov.au/dataset/{str(uuid)}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="self",
+            media_type="application/json",
+            target=stac_metadata_path,
+        )
+    )
+
+    stac_metadata = item.to_dict()
+
+    logger.info(
+        "Upload STAC metadata file %s in s3.",
+        stac_metadata_path,
+    )
+
+    io.upload_dict_to_s3(
+        stac_metadata, bucket_name, object_key.replace(".nc", ".stac-item.json")
+    )
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
+    "--region-id",
+    "-r",
+    type=str,
+    default=None,
+    help="REQUIRED. Region id AU-30 Grid.",
+)
+@click.option(
+    "--process-cfg-url",
+    "-p",
+    type=str,
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
+)
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
 def burn_cube_run(
     task_id,
     region_id,
@@ -567,7 +815,11 @@ def burn_cube_run(
         # check the input product detail
         # TODO: can add dry-run, and it will stop after input dataset list check
         try:
-            gpgon, input_dataset_list = bc_data_loading.check_input_datasets(
+            (
+                gpgon,
+                summary_datasets,
+                ard_datasets,
+            ) = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
                 period,
@@ -599,7 +851,8 @@ def burn_cube_run(
             region_id,
             output,
             task_table,
-            input_dataset_list,
+            summary_datasets,
+            ard_datasets,
         )
 
         # No matter upload successful or not, should not block the main processing

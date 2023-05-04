@@ -21,4 +21,10 @@ input_products:
     - swir1
     - swir2
 
+product:
+  name: ga_ls8c_bc_4fyear_2020
+  short_name: ga_ls8c_bc_4fyear_2020
+  version: 3.0.0
+  product_family: burncube
+
 task_table: 10-year-historical-processing-4year-geomad.csv
