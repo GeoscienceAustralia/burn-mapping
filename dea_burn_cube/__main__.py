@@ -539,10 +539,11 @@ def burn_cube_add_metadata(
     if match:
         x = int(match.group(1))
         y = int(match.group(2))
-        print("x value:", x)
-        print("y value:", y)
     else:
-        print("No match found.")
+        logger.error(
+            "No match found in region id %s.",
+            region_id,
+        )
         # cannot extract geobox, so we stop here.
         # if we throw exception, it will trigger the Airflow/Argo retry.
         sys.exit(0)
@@ -561,7 +562,7 @@ def burn_cube_add_metadata(
 
     data_source = process_cfg["input_products"]["platform"]
 
-    local_file_path, target_file_path = task.generate_output_filenames(
+    _, target_file_path = task.generate_output_filenames(
         output, task_id, region_id, data_source
     )
 
@@ -572,8 +573,8 @@ def burn_cube_add_metadata(
 
     processing_dt = datetime.utcnow()
 
-    product_name = "ga_ls8c_bc_4cyear_2020"
-    product_version = "3.0.0"
+    product_name = process_cfg["product"]["name"]
+    product_version = process_cfg["product"]["version"]
 
     properties: Dict[str, Any] = {}
 
@@ -599,6 +600,8 @@ def burn_cube_add_metadata(
         product_name,
         product_version,
         sources=[str(e.id) for e in input_datasets],
+        tile=region_id,
+        time=str(mappingperiod),
     )
 
     item = pystac.Item(
@@ -621,15 +624,7 @@ def burn_cube_add_metadata(
     # Lineage last
     item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
 
-    bands = [
-        "wofssevere",
-        "wofsseverity",
-        "wofsmoderate",
-        "severe",
-        "severity",
-        "moderate",
-        "count",
-    ]
+    bands = process_cfg["product"]["bands"]
 
     # Add all the assets
     for band_name in bands:

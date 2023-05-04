@@ -21,4 +21,18 @@ input_products:
     - swir1
     - swir2
 
+product:
+  name: bc_ls_cy_debug
+  short_name: bc_ls_cy_debug
+  version: 3.0.0
+  product_family: burncube
+  bands:
+    - wofssevere
+    - wofsseverity
+    - wofsmoderate
+    - severe
+    - severity
+    - moderate
+    - count
+
 task_table: 10-year-historical-processing-4year-geomad.csv
