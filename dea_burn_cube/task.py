@@ -335,63 +335,68 @@ def odc_uuid(
 
 @dataclass
 class BurnCubeInputProducts:
-    # Accepts only 'ls' (Landsat) or 's2' (Sentinel 2)
-    platform: str = field(init=False)
-    geomed: str = field(init=False)
-    wofs_summary: str = field(init=False)
-    ard_product_names: Tuple[str, ...] = field(repr=False)
-    input_ard_bands: Tuple[str, ...] = field(repr=False)
-    input_gm_bands: Tuple[str, ...] = field(repr=False)
-    task_table: str = field(init=False)
+    platform: str
+    geomed: str
+    wofs_summary: str
+    ard_product_names: Tuple[str, ...]
+    input_ard_bands: Tuple[str, ...]
+    input_gm_bands: Tuple[str, ...]
 
 
 @dataclass
 class BurnCubeProduct:
-    name: str = field(init=False, repr=False)
-    short_name: str = field(init=False, repr=False)
-    version: str = field(init=False, repr=False)
-    product_family: str = field(init=False, repr=False)
-    bands: Tuple[str, ...] = field(repr=False)
+    name: str
+    short_name: str
+    version: str
+    product_family: str
+    bands: Tuple[str, ...]
 
 
 @dataclass
 class BurnCubeProcessingTask:
-    output_folder: str = field(init=False)
+    output_folder: str
     input_products: BurnCubeInputProducts
     product: BurnCubeProduct
-    task_id: str = field(init=False)
-    region_id: str = field(init=False)
-    local_file_path: str = field(init=False)
-    target_file_path: str = field(init=False)
-    period_start: str = field(init=False)
-    period_end: str = field(init=False)
-    mapping_period_start: str = field(init=False)
-    mapping_period_end: str = field(init=False)
-
-    def __init__(self, cfg_url: str, task_id: str, region_id: str):
-        # Load configuration from a remote YAML file
-        cfg = load_yaml_remote(cfg_url)
-
-        self.output_folder = cfg["output_folder"]
-        self.task_id = cfg["task_id"]
-        self.region_id = cfg["region_id"]
-
-        self.input_products = BurnCubeInputProducts(**cfg["input_products"])
-        self.product = BurnCubeProduct(**cfg["product"])
+    task_id: str
+    region_id: str
+    task_table: str
+    local_file_path: str = field(init=False, repr=False)
+    target_file_path: str = field(init=False, repr=False)
+    period_start: str = field(init=False, repr=False)
+    period_end: str = field(init=False, repr=False)
+    mapping_period_start: str = field(init=False, repr=False)
+    mapping_period_end: str = field(init=False, repr=False)
 
     def __post_init__(self):
         # Generate output filenames for the task
-        local_file_path, target_file_path = generate_output_filenames(
-            self.output_folder, self.task_id, self.region_id, self.input_products.platform
+        self.local_file_path, self.target_file_path = generate_output_filenames(
+            self.output_folder,
+            self.task_id,
+            self.region_id,
+            self.input_products.platform,
         )
 
-        self.local_file_path = local_file_path
-        self.target_file_path = target_file_path
-
         # Generate task processing periods
-        processing_period = generate_task(self.task_id, self.input_products.task_table)
+        processing_period = generate_task(self.task_id, self.task_table)
 
         self.period_start = processing_period["Period Start"]
         self.period_end = processing_period["Period End"]
         self.mapping_period_start = processing_period["Mapping Period Start"]
         self.mapping_period_end = processing_period["Mapping Period End"]
+
+    @classmethod
+    def from_config(cls, cfg_url: str, task_id: str, region_id: str):
+        # Load configuration from a remote YAML file
+        cfg = load_yaml_remote(cfg_url)
+
+        input_products = BurnCubeInputProducts(**cfg["input_products"])
+        product = BurnCubeProduct(**cfg["product"])
+
+        return cls(
+            output_folder=cfg["output_folder"],
+            task_table=cfg["task_table"],
+            input_products=input_products,
+            product=product,
+            task_id=task_id,
+            region_id=region_id,
+        )
