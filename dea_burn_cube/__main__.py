@@ -54,6 +54,195 @@ def format_datetime(dt: datetime, with_tz=True, timespec="microseconds") -> str:
 
 
 @task.log_execution_time
+def add_metadata(task_id, region_id, process_cfg_url, overwrite):
+    
+    bc_task: task.BurnCubeProcessingTask = task.BurnCubeProcessingTask.from_config(
+        cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
+    )
+
+    odc_config = {
+        "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+        "db_password": os.getenv("ODC_DB_PASSWORD"),
+        "db_username": os.getenv("ODC_DB_USERNAME"),
+        "db_port": 5432,
+        "db_database": os.getenv("ODC_DB_DATABASE"),
+    }
+
+    odc_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
+    )
+
+    # ard_product_names = process_cfg["input_products"]["ard_product_names"]
+
+    _, gridspec = parse_gridspec_with_name("au-30")
+
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
+
+    match = re.match(pattern, region_id)
+
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+    else:
+        logger.error(
+            "No match found in region id %s.",
+            region_id,
+        )
+        # cannot extract geobox, so we stop here.
+        # if we throw exception, it will trigger the Airflow/Argo retry.
+        sys.exit(0)
+
+    geobox = gridspec.tile_geobox((x, y))
+
+    geobox_wgs84 = geobox.extent.to_crs(
+        "epsg:4326", resolution=math.inf, wrapdateline=True
+    )
+
+    bbox = geobox_wgs84.boundingbox
+
+    input_datasets = odc_dc.find_datasets(
+        product=bc_task.input_products.ard_product_names,
+        geopolygon=geobox_wgs84,
+        time=(bc_task.mapping_period_start, bc_task.mapping_period_end),
+    )
+
+    properties: Dict[str, Any] = {}
+
+    properties[
+        "title"
+    ] = f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}"
+    properties["dtr:start_datetime"] = format_datetime(bc_task.mapping_period_start)
+    properties["dtr:end_datetime"] = format_datetime(bc_task.mapping_period_end)
+    properties["odc:processing_datetime"] = format_datetime(
+        datetime.utcnow(), timespec="seconds"
+    )
+    properties["odc:region_code"] = region_id
+    properties["odc:product"] = bc_task.product.name
+    properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
+    properties["gsd"] = 15  # get it from ARD datasets
+    properties["platform"] = "landsat-8"  # get it from ARD datasets
+    properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
+    properties[
+        "odc:product_family"
+    ] = bc_task.product.product_family  # get it from ARD datasets
+    properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
+    properties[
+        "odc:dataset_version"
+    ] = bc_task.product.version  # get it from ARD datasets
+    properties["dea:dataset_maturity"] = "final"
+    properties["odc:collection_number"] = 3
+
+    uuid = task.odc_uuid(
+        bc_task.product.name,
+        bc_task.product.version,
+        sources=[str(e.id) for e in input_datasets],
+        tile=region_id,
+        time=str((bc_task.mapping_period_start, bc_task.mapping_period_end)),
+    )
+
+    item = pystac.Item(
+        id=str(uuid),
+        geometry=geobox_wgs84.json,
+        bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
+        datetime=pd.Timestamp(bc_task.mapping_period_start).replace(
+            tzinfo=timezone.utc
+        ),
+        properties=properties,
+        collection=bc_task.product.name,
+    )
+
+    ProjectionExtension.add_to(item)
+    proj_ext = ProjectionExtension.ext(item)
+    proj_ext.apply(
+        geobox.crs.epsg,
+        transform=geobox.transform,
+        shape=geobox.shape,
+    )
+
+    # Lineage last
+    item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
+
+    # Add all the assets
+    for band_name in bc_task.product.bands:
+        asset = pystac.Asset(
+            href=f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}-{band_name}.tif",
+            media_type="image/tiff; application=geotiff",
+            roles=["data"],
+            title=band_name,
+        )
+
+        eo = EOExtension.ext(asset)
+        band = Band.create(band_name)
+        eo.apply(bands=[band])
+
+        proj = ProjectionExtension.ext(asset)
+
+        proj.apply(
+            geobox.crs.epsg,
+            transform=geobox.transform,
+            shape=geobox.shape,
+        )
+
+        item.add_asset(band_name, asset=asset)
+
+    stac_metadata_path = (
+        "s3://"
+        + bc_task.bucket_name
+        + "/"
+        + bc_task.s3_key_path.replace(".nc", ".stac-item.json")
+    )
+
+    print("stac_metadata_path", stac_metadata_path)
+
+    # Add links
+    item.links.append(
+        pystac.Link(
+            rel="product_overview",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/product/{bc_task.product.name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="collection",
+            media_type="application/json",
+            target=f"https://explorer.dea.ga.gov.au/stac/collections/{bc_task.product.name}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="alternative",
+            media_type="text/html",
+            target=f"https://explorer.dea.ga.gov.au/dataset/{str(uuid)}",
+        )
+    )
+
+    item.links.append(
+        pystac.Link(
+            rel="self",
+            media_type="application/json",
+            target=stac_metadata_path,
+        )
+    )
+
+    stac_metadata = item.to_dict()
+
+    logger.info(
+        "Upload STAC metadata file %s in s3.",
+        stac_metadata_path,
+    )
+
+    io.upload_dict_to_s3(
+        stac_metadata,
+        bc_task.bucket_name,
+        bc_task.s3_key_path.replace(".nc", ".stac-item.json"),
+    )
+
+
+@task.log_execution_time
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs: xr.Dataset,
     local_file_path: str,
@@ -501,191 +690,10 @@ def burn_cube_add_metadata(
     overwrite,
 ):
     logging_setup()
+    
+    add_metadata(task_id, region_id, process_cfg_url)
 
-    bc_task: task.BurnCubeProcessingTask = task.BurnCubeProcessingTask.from_config(
-        cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
-    )
-
-    odc_config = {
-        "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
-        "db_password": os.getenv("ODC_DB_PASSWORD"),
-        "db_username": os.getenv("ODC_DB_USERNAME"),
-        "db_port": 5432,
-        "db_database": os.getenv("ODC_DB_DATABASE"),
-    }
-
-    odc_dc = datacube.Datacube(
-        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
-    )
-
-    # ard_product_names = process_cfg["input_products"]["ard_product_names"]
-
-    _, gridspec = parse_gridspec_with_name("au-30")
-
-    # gridspec : au-30
-    pattern = r"x(\d+)y(\d+)"
-
-    match = re.match(pattern, region_id)
-
-    if match:
-        x = int(match.group(1))
-        y = int(match.group(2))
-    else:
-        logger.error(
-            "No match found in region id %s.",
-            region_id,
-        )
-        # cannot extract geobox, so we stop here.
-        # if we throw exception, it will trigger the Airflow/Argo retry.
-        sys.exit(0)
-
-    geobox = gridspec.tile_geobox((x, y))
-
-    geobox_wgs84 = geobox.extent.to_crs(
-        "epsg:4326", resolution=math.inf, wrapdateline=True
-    )
-
-    bbox = geobox_wgs84.boundingbox
-
-    input_datasets = odc_dc.find_datasets(
-        product=bc_task.input_products.ard_product_names,
-        geopolygon=geobox_wgs84,
-        time=(bc_task.mapping_period_start, bc_task.mapping_period_end),
-    )
-
-    properties: Dict[str, Any] = {}
-
-    properties[
-        "title"
-    ] = f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}"
-    properties["dtr:start_datetime"] = format_datetime(bc_task.mapping_period_start)
-    properties["dtr:end_datetime"] = format_datetime(bc_task.mapping_period_end)
-    properties["odc:processing_datetime"] = format_datetime(
-        datetime.utcnow(), timespec="seconds"
-    )
-    properties["odc:region_code"] = region_id
-    properties["odc:product"] = bc_task.product.name
-    properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
-    properties["gsd"] = 15  # get it from ARD datasets
-    properties["platform"] = "landsat-8"  # get it from ARD datasets
-    properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
-    properties[
-        "odc:product_family"
-    ] = bc_task.product.product_family  # get it from ARD datasets
-    properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
-    properties[
-        "odc:dataset_version"
-    ] = bc_task.product.version  # get it from ARD datasets
-    properties["dea:dataset_maturity"] = "final"
-    properties["odc:collection_number"] = 3
-
-    uuid = task.odc_uuid(
-        bc_task.product.name,
-        bc_task.product.version,
-        sources=[str(e.id) for e in input_datasets],
-        tile=region_id,
-        time=str((bc_task.mapping_period_start, bc_task.mapping_period_end)),
-    )
-
-    item = pystac.Item(
-        id=str(uuid),
-        geometry=geobox_wgs84.json,
-        bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
-        datetime=pd.Timestamp(bc_task.mapping_period_start).replace(
-            tzinfo=timezone.utc
-        ),
-        properties=properties,
-        collection=bc_task.product.name,
-    )
-
-    ProjectionExtension.add_to(item)
-    proj_ext = ProjectionExtension.ext(item)
-    proj_ext.apply(
-        geobox.crs.epsg,
-        transform=geobox.transform,
-        shape=geobox.shape,
-    )
-
-    # Lineage last
-    item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
-
-    # Add all the assets
-    for band_name in bc_task.product.bands:
-        asset = pystac.Asset(
-            href=f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}-{band_name}.tif",
-            media_type="image/tiff; application=geotiff",
-            roles=["data"],
-            title=band_name,
-        )
-
-        eo = EOExtension.ext(asset)
-        band = Band.create(band_name)
-        eo.apply(bands=[band])
-
-        proj = ProjectionExtension.ext(asset)
-
-        proj.apply(
-            geobox.crs.epsg,
-            transform=geobox.transform,
-            shape=geobox.shape,
-        )
-
-        item.add_asset(band_name, asset=asset)
-
-    stac_metadata_path = (
-        "s3://"
-        + bc_task.bucket_name
-        + "/"
-        + bc_task.s3_key_path.replace(".nc", ".stac-item.json")
-    )
-
-    print("stac_metadata_path", stac_metadata_path)
-
-    # Add links
-    item.links.append(
-        pystac.Link(
-            rel="product_overview",
-            media_type="application/json",
-            target=f"https://explorer.dea.ga.gov.au/product/{bc_task.product.name}",
-        )
-    )
-
-    item.links.append(
-        pystac.Link(
-            rel="collection",
-            media_type="application/json",
-            target=f"https://explorer.dea.ga.gov.au/stac/collections/{bc_task.product.name}",
-        )
-    )
-
-    item.links.append(
-        pystac.Link(
-            rel="alternative",
-            media_type="text/html",
-            target=f"https://explorer.dea.ga.gov.au/dataset/{str(uuid)}",
-        )
-    )
-
-    item.links.append(
-        pystac.Link(
-            rel="self",
-            media_type="application/json",
-            target=stac_metadata_path,
-        )
-    )
-
-    stac_metadata = item.to_dict()
-
-    logger.info(
-        "Upload STAC metadata file %s in s3.",
-        stac_metadata_path,
-    )
-
-    io.upload_dict_to_s3(
-        stac_metadata,
-        bc_task.bucket_name,
-        bc_task.s3_key_path.replace(".nc", ".stac-item.json"),
-    )
+    
 
 
 @main.command(no_args_is_help=True)
@@ -857,7 +865,7 @@ def burn_cube_run(
             )
 
             # then add metadata
-            burn_cube_add_metadata(
+            add_metadata(
                 task_id,
                 region_id,
                 process_cfg_url,
