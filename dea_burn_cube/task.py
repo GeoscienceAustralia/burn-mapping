@@ -8,6 +8,7 @@ import calendar
 import datetime
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence, Tuple
 from urllib.parse import urlparse
 from uuid import UUID, uuid5
@@ -330,3 +331,65 @@ def odc_uuid(
 
     srcs_hashes = "\n".join(s.lower() for s in stringified_sources)
     return uuid5(ODC_NS, srcs_hashes)
+
+
+@dataclass
+class BurnCubeInputProducts:
+    # only accept ls (Landsat) or s2 (Sentinel 2)
+    platform: str = field(init=False)
+    geomed: str = field(init=False)
+    wofs_summary: str = field(init=False)
+    ard_product_names: Tuple[str, ...] = field(repr=False)
+    input_ard_bands: Tuple[str, ...] = field(repr=False)
+    input_gm_bands: Tuple[str, ...] = field(repr=False)
+    task_table: str = field(init=False)
+
+
+@dataclass
+class BurnCubeProduct:
+    name: str = field(init=False, repr=False)
+    short_name: str = field(init=False, repr=False)
+    version: str = field(init=False, repr=False)
+    product_family: str = field(init=False, repr=False)
+    bands: Tuple[str, ...] = field(repr=False)
+
+
+@dataclass
+class BurnCubeProcessingTask:
+    output_folder: str = field(init=False)
+
+    input_products: BurnCubeInputProducts
+    product: BurnCubeProduct
+
+    task_id: str = field(init=False)
+    region_id: str = field(init=False)
+
+    local_file_path: str = field(init=False)
+    target_file_path: str = field(init=False)
+
+    period_start: str = field(init=False)
+    period_end: str = field(init=False)
+
+    mapping_period_start: str = field(init=False)
+    mapping_period_end: str = field(init=False)
+
+    def __init__(self, input_products: BurnCubeInputProducts, product: BurnCubeProduct):
+        self.input_products = input_products
+        self.product = product
+
+    def __post_init__(self):
+
+        local_file_path, target_file_path = generate_output_filenames(
+            self.output_folder, self.task_id, self.region_id, self.platform
+        )
+
+        self.local_file_path = local_file_path
+        self.target_file_path = target_file_path
+
+        processing_period = generate_task(self.task_id, self.input_products.task_table)
+
+        self.period_start = processing_period["Period Start"]
+        self.period_end = processing_period["Period End"]
+
+        self.mapping_period_start = processing_period["Mapping Period Start"]
+        self.mapping_period_end = processing_period["Mapping Period End"]
