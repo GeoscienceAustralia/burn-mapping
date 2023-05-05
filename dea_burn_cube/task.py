@@ -8,6 +8,7 @@ import calendar
 import datetime
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence, Tuple
 from urllib.parse import urlparse
 from uuid import UUID, uuid5
@@ -92,16 +93,20 @@ def generate_output_filenames(
         >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
         ('BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
     """
-    s3_file_path = (
+    bc_output_file_path = (
         f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
     )
-    local_file_path = f"BurnMapping-{platform}-{task_id}-{region_id}.nc"
+
+    local_file_path = bc_output_file_path.split("/")[-1]
 
     o = urlparse(output)
 
-    target_file_path = f"{o.path}/{s3_file_path}"
+    s3_bucket_name = o.netloc
+    s3_folder_path = o.path[1:]
 
-    return local_file_path, target_file_path
+    s3_key_path = f"{s3_folder_path}/{bc_output_file_path}"
+
+    return local_file_path, s3_key_path, s3_bucket_name
 
 
 def check_file_exists(bucket_name, file_key):
@@ -330,3 +335,77 @@ def odc_uuid(
 
     srcs_hashes = "\n".join(s.lower() for s in stringified_sources)
     return uuid5(ODC_NS, srcs_hashes)
+
+
+@dataclass
+class BurnCubeInputProducts:
+    platform: str
+    geomed: str
+    wofs_summary: str
+    ard_product_names: Tuple[str, ...]
+    input_ard_bands: Tuple[str, ...]
+    input_gm_bands: Tuple[str, ...]
+
+
+@dataclass
+class BurnCubeProduct:
+    name: str
+    short_name: str
+    version: str
+    product_family: str
+    bands: Tuple[str, ...]
+
+
+@dataclass
+class BurnCubeProcessingTask:
+    output_folder: str
+    input_products: BurnCubeInputProducts
+    product: BurnCubeProduct
+    task_id: str
+    region_id: str
+    task_table: str
+    local_file_path: str = field(init=False, repr=False)
+    s3_key_path: str = field(init=False, repr=False)
+    bucket_name: str = field(init=False, repr=False)
+    period_start: str = field(init=False, repr=False)
+    period_end: str = field(init=False, repr=False)
+    mapping_period_start: str = field(init=False, repr=False)
+    mapping_period_end: str = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # Generate output filenames for the task
+        (
+            self.local_file_path,
+            self.s3_key_path,
+            self.bucket_name,
+        ) = generate_output_filenames(
+            self.output_folder,
+            self.task_id,
+            self.region_id,
+            self.input_products.platform,
+        )
+
+        # Generate task processing periods
+        processing_period = generate_task(self.task_id, self.task_table)
+
+        self.period_start = processing_period["Period Start"]
+        self.period_end = processing_period["Period End"]
+        self.mapping_period_start = processing_period["Mapping Period Start"]
+        self.mapping_period_end = processing_period["Mapping Period End"]
+
+    @classmethod
+    def from_config(cls, cfg_url: str, task_id: str, region_id: str):
+        # Load configuration from a remote YAML file
+        cfg = load_yaml_remote(cfg_url)
+
+        input_products = BurnCubeInputProducts(**cfg["input_products"])
+        product = BurnCubeProduct(**cfg["product"])
+
+        return cls(
+            output_folder=cfg["output_folder"],
+            task_table=cfg["task_table"],
+            input_products=input_products,
+            product=product,
+            task_id=task_id,
+            region_id=region_id,
+        )

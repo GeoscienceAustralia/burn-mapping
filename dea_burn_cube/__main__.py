@@ -198,11 +198,11 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
         for region_index in region_gdf.index:
             region_id = region_gdf.region_code[region_index]
 
-            _, target_file_path = task.generate_output_filenames(
+            _, s3_key_path = task.generate_output_filenames(
                 output, task_id, region_id, platform
             )
 
-            if not task.check_file_exists(s3_bucket_name, target_file_path[1:]):
+            if not task.check_file_exists(s3_bucket_name, s3_key_path):
                 not_run_regions.append(region_id)
 
         not_run_geojson = region_gdf[
@@ -502,17 +502,8 @@ def burn_cube_add_metadata(
 ):
     logging_setup()
 
-    process_cfg = task.load_yaml_remote(process_cfg_url)
-
-    task_table = process_cfg["task_table"]
-
-    output = process_cfg["output_folder"]
-
-    bc_running_task = task.generate_task(task_id, task_table)
-
-    mappingperiod = (
-        bc_running_task["Mapping Period Start"],
-        bc_running_task["Mapping Period End"],
+    bc_task: task.BurnCubeProcessingTask = task.BurnCubeProcessingTask.from_config(
+        cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
     )
 
     odc_config = {
@@ -527,7 +518,7 @@ def burn_cube_add_metadata(
         app=f"Burn Cube K8s processing - {region_id}", config=odc_config
     )
 
-    ard_product_names = process_cfg["input_products"]["ard_product_names"]
+    # ard_product_names = process_cfg["input_products"]["ard_product_names"]
 
     _, gridspec = parse_gridspec_with_name("au-30")
 
@@ -557,60 +548,54 @@ def burn_cube_add_metadata(
     bbox = geobox_wgs84.boundingbox
 
     input_datasets = odc_dc.find_datasets(
-        product=ard_product_names, geopolygon=geobox_wgs84, time=mappingperiod
+        product=bc_task.input_products.ard_product_names,
+        geopolygon=geobox_wgs84,
+        time=(bc_task.mapping_period_start, bc_task.mapping_period_end),
     )
-
-    data_source = process_cfg["input_products"]["platform"]
-
-    _, target_file_path = task.generate_output_filenames(
-        output, task_id, region_id, data_source
-    )
-
-    o = urlparse(output)
-
-    bucket_name = o.netloc
-    object_key = target_file_path[1:]
-
-    processing_dt = datetime.utcnow()
-
-    product_name = process_cfg["product"]["name"]
-    product_version = process_cfg["product"]["version"]
 
     properties: Dict[str, Any] = {}
 
-    properties["title"] = f"BurnMapping-{data_source}-{task_id}-{region_id}"
-    properties["dtr:start_datetime"] = format_datetime(mappingperiod[0])
-    properties["dtr:end_datetime"] = format_datetime(mappingperiod[1])
+    properties[
+        "title"
+    ] = f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}"
+    properties["dtr:start_datetime"] = format_datetime(bc_task.mapping_period_start)
+    properties["dtr:end_datetime"] = format_datetime(bc_task.mapping_period_end)
     properties["odc:processing_datetime"] = format_datetime(
-        processing_dt, timespec="seconds"
+        datetime.utcnow(), timespec="seconds"
     )
     properties["odc:region_code"] = region_id
-    properties["odc:product"] = product_name
+    properties["odc:product"] = bc_task.product.name
     properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
     properties["gsd"] = 15  # get it from ARD datasets
     properties["platform"] = "landsat-8"  # get it from ARD datasets
     properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
-    properties["odc:product_family"] = "burncube"  # get it from ARD datasets
+    properties[
+        "odc:product_family"
+    ] = bc_task.product.product_family  # get it from ARD datasets
     properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
-    properties["odc:dataset_version"] = product_version  # get it from ARD datasets
+    properties[
+        "odc:dataset_version"
+    ] = bc_task.product.version  # get it from ARD datasets
     properties["dea:dataset_maturity"] = "final"
     properties["odc:collection_number"] = 3
 
     uuid = task.odc_uuid(
-        product_name,
-        product_version,
+        bc_task.product.name,
+        bc_task.product.version,
         sources=[str(e.id) for e in input_datasets],
         tile=region_id,
-        time=str(mappingperiod),
+        time=str((bc_task.mapping_period_start, bc_task.mapping_period_end)),
     )
 
     item = pystac.Item(
         id=str(uuid),
         geometry=geobox_wgs84.json,
         bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
-        datetime=pd.Timestamp(mappingperiod[0]).replace(tzinfo=timezone.utc),
+        datetime=pd.Timestamp(bc_task.mapping_period_start).replace(
+            tzinfo=timezone.utc
+        ),
         properties=properties,
-        collection=product_name,
+        collection=bc_task.product.name,
     )
 
     ProjectionExtension.add_to(item)
@@ -624,12 +609,10 @@ def burn_cube_add_metadata(
     # Lineage last
     item.properties["odc:lineage"] = dict(inputs=[str(e.id) for e in input_datasets])
 
-    bands = process_cfg["product"]["bands"]
-
     # Add all the assets
-    for band_name in bands:
+    for band_name in bc_task.product.bands:
         asset = pystac.Asset(
-            href=f"BurnMapping-{data_source}-{task_id}-{region_id}-{band_name}.tif",
+            href=f"BurnMapping-{bc_task.input_products.platform}-{task_id}-{region_id}-{band_name}.tif",
             media_type="image/tiff; application=geotiff",
             roles=["data"],
             title=band_name,
@@ -650,15 +633,20 @@ def burn_cube_add_metadata(
         item.add_asset(band_name, asset=asset)
 
     stac_metadata_path = (
-        bucket_name + "/" + object_key.replace(".nc", ".stac-item.json")
+        "s3://"
+        + bc_task.bucket_name
+        + "/"
+        + bc_task.s3_key_path.replace(".nc", ".stac-item.json")
     )
+
+    print("stac_metadata_path", stac_metadata_path)
 
     # Add links
     item.links.append(
         pystac.Link(
             rel="product_overview",
             media_type="application/json",
-            target=f"https://explorer.dea.ga.gov.au/product/{product_name}",
+            target=f"https://explorer.dea.ga.gov.au/product/{bc_task.product.name}",
         )
     )
 
@@ -666,7 +654,7 @@ def burn_cube_add_metadata(
         pystac.Link(
             rel="collection",
             media_type="application/json",
-            target=f"https://explorer.dea.ga.gov.au/stac/collections/{product_name}",
+            target=f"https://explorer.dea.ga.gov.au/stac/collections/{bc_task.product.name}",
         )
     )
 
@@ -694,7 +682,9 @@ def burn_cube_add_metadata(
     )
 
     io.upload_dict_to_s3(
-        stac_metadata, bucket_name, object_key.replace(".nc", ".stac-item.json")
+        stac_metadata,
+        bc_task.bucket_name,
+        bc_task.s3_key_path.replace(".nc", ".stac-item.json"),
     )
 
 
@@ -739,35 +729,8 @@ def burn_cube_run(
 
     logging_setup()
 
-    process_cfg = task.load_yaml_remote(process_cfg_url)
-
-    task_table = process_cfg["task_table"]
-    geomed_product_name = process_cfg["input_products"]["geomed"]
-    wofs_summary_product_name = process_cfg["input_products"]["wofs_summary"]
-    ard_product_names = process_cfg["input_products"]["ard_product_names"]
-    ard_bands = process_cfg["input_products"]["input_ard_bands"]
-    geomed_bands = process_cfg["input_products"]["input_gm_bands"]
-    platform = process_cfg["input_products"]["platform"]
-
-    output = process_cfg["output_folder"]
-
-    bc_running_task = task.generate_task(task_id, task_table)
-
-    # geomed_bands = ["red", "green", "blue", "nir", "swir1", "swir2"]  # 7 bands setting
-    # geomed_bands = ["green", "nir", "swir2"] # 3 bands setting
-
-    # 7 bands setting
-    # ard_bands = [
-    #    f"nbart_{band}" for band in ("red", "green", "blue", "nir", "swir_1", "swir_2")
-    # ]
-
-    # 3 bands setting
-    # ard_bands = [f"nbart_{band}" for band in ("green", "nir", "swir_2")]
-
-    period = (bc_running_task["Period Start"], bc_running_task["Period End"])
-    mappingperiod = (
-        bc_running_task["Mapping Period Start"],
-        bc_running_task["Mapping Period End"],
+    bc_task: task.BurnCubeProcessingTask = task.BurnCubeProcessingTask.from_config(
+        cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
     )
 
     # The following variables passed by K8s Pod manifest
@@ -787,9 +750,12 @@ def burn_cube_run(
         "db_database": os.getenv("ODC_DB_DATABASE"),
     }
 
-    logger.info("Use period: %s", str(period))
+    logger.info("Use period: %s", str((bc_task.period_start, bc_task.period_end)))
 
-    logger.info("Use mappingperiod: %s", str(mappingperiod))
+    logger.info(
+        "Use mappingperiod: %s",
+        str((bc_task.mapping_period_start, bc_task.mapping_period_end)),
+    )
 
     odc_dc = datacube.Datacube(
         app=f"Burn Cube K8s processing - {region_id}", config=odc_config
@@ -798,19 +764,10 @@ def burn_cube_run(
         app=f"Burn Cube K8s processing - {region_id}", config=hnrs_config
     )
 
-    # TODO: only check the NetCDF is not enough
-
-    local_file_path, target_file_path = task.generate_output_filenames(
-        output, task_id, region_id, platform
-    )
-
-    o = urlparse(output)
-
-    bucket_name = o.netloc
-    object_key = target_file_path[1:]
-
-    if not overwrite and task.check_file_exists(bucket_name, object_key):
-        logger.info("Find NetCDF file %s in s3, skip it.", target_file_path)
+    if not overwrite and task.check_file_exists(
+        bc_task.bucket_name, bc_task.s3_key_path
+    ):
+        logger.info("Find NetCDF file %s in s3, skip it.", bc_task.s3_key_path)
     else:
         # check the input product detail
         # TODO: can add dry-run, and it will stop after input dataset list check
@@ -822,11 +779,11 @@ def burn_cube_run(
             ) = bc_data_loading.check_input_datasets(
                 hnrs_dc,
                 odc_dc,
-                period,
-                mappingperiod,
-                geomed_product_name,
-                wofs_summary_product_name,
-                ard_product_names,
+                (bc_task.period_start, bc_task.period_end),
+                (bc_task.mapping_period_start, bc_task.mapping_period_end),
+                bc_task.input_products.geomed,
+                bc_task.input_products.wofs_summary,
+                bc_task.input_products.ard_product_names,
                 region_id,
             )
         except bc_data_loading.IncorrectInputDataError:
@@ -836,44 +793,48 @@ def burn_cube_run(
             # Not enough data to finish the processing, so stop it here
             sys.exit(0)
 
-        logger.info("Will save NetCDF file as temp file to: %s", local_file_path)
-        logger.info("Will upload NetCDF file to: %s", target_file_path)
+        logger.info(
+            "Will save NetCDF file as temp file to: %s", bc_task.local_file_path
+        )
+        logger.info("Will upload NetCDF file to: %s", bc_task.s3_key_path)
 
         # After the check_input_datasets pass, we can use input information to generate
         # processing log
         processing_log = task.generate_processing_log(
             task_id,
-            period,
-            mappingperiod,
-            geomed_product_name,
-            wofs_summary_product_name,
-            ard_product_names,
+            (bc_task.period_start, bc_task.period_end),
+            (bc_task.mapping_period_start, bc_task.mapping_period_end),
+            bc_task.input_products.geomed,
+            bc_task.input_products.wofs_summary,
+            bc_task.input_products.ard_product_names,
             region_id,
-            output,
-            task_table,
+            bc_task.output_folder,
+            bc_task.task_table,
             summary_datasets,
             ard_datasets,
         )
 
         # No matter upload successful or not, should not block the main processing
         io.upload_dict_to_s3(
-            processing_log, bucket_name, object_key.replace(".nc", ".json")
+            processing_log,
+            bc_task.bucket_name,
+            bc_task.s3_key_path.replace(".nc", ".json"),
         )
 
         burn_cube_result = bc_data_processing.generate_bc_result(
             odc_dc,
             hnrs_dc,
-            ard_product_names,
-            geomed_product_name,
-            ard_bands,
-            geomed_bands,
-            period,
-            mappingperiod,
+            bc_task.input_products.ard_product_names,
+            bc_task.input_products.geomed,
+            bc_task.input_products.input_ard_bands,
+            bc_task.input_products.input_gm_bands,
+            (bc_task.period_start, bc_task.period_end),
+            (bc_task.mapping_period_start, bc_task.mapping_period_end),
             gpgon,
             task_id,
-            output,
+            bc_task.output_folder,
             n_procs,
-            platform,
+            bc_task.input_products.platform,
         )
 
         if burn_cube_result:
@@ -882,17 +843,17 @@ def burn_cube_run(
                     odc_dc,
                     burn_cube_result,
                     gpgon,
-                    mappingperiod,
-                    wofs_summary_product_name,
+                    (bc_task.mapping_period_start, bc_task.mapping_period_end),
+                    bc_task.input_products.wofs_summary,
                 )
             )
 
             # TODO: should use Try-Catch to know IO is OK or not
             result_file_saving_and_uploading(
                 burn_cube_result_apply_wofs,
-                local_file_path,
-                object_key,
-                bucket_name,
+                bc_task.local_file_path,
+                bc_task.s3_key_path,
+                bc_task.bucket_name,
             )
 
 
