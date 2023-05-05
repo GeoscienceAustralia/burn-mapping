@@ -198,7 +198,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
         for region_index in region_gdf.index:
             region_id = region_gdf.region_code[region_index]
 
-            _, s3_key_path = task.generate_output_filenames(
+            _, s3_key_path, _ = task.generate_output_filenames(
                 output, task_id, region_id, platform
             )
 
@@ -854,6 +854,14 @@ def burn_cube_run(
                 bc_task.local_file_path,
                 bc_task.s3_key_path,
                 bc_task.bucket_name,
+            )
+
+            # then add metadata
+            burn_cube_add_metadata(
+                task_id,
+                region_id,
+                process_cfg_url,
+                overwrite,
             )
 
 
