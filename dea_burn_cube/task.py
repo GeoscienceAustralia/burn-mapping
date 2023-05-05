@@ -93,16 +93,20 @@ def generate_output_filenames(
         >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
         ('BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
     """
-    s3_file_path = (
+    bc_output_file_path = (
         f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
     )
-    local_file_path = f"BurnMapping-{platform}-{task_id}-{region_id}.nc"
+
+    local_file_path = bc_output_file_path.split("/")[-1]
 
     o = urlparse(output)
 
-    target_file_path = f"{o.path}/{s3_file_path}"
+    s3_bucket_name = o.netloc
+    s3_folder_path = o.path[1:]
 
-    return local_file_path, target_file_path
+    s3_key_path = f"{s3_folder_path}/{bc_output_file_path}"
+
+    return local_file_path, s3_key_path, s3_bucket_name
 
 
 def check_file_exists(bucket_name, file_key):
@@ -361,7 +365,8 @@ class BurnCubeProcessingTask:
     region_id: str
     task_table: str
     local_file_path: str = field(init=False, repr=False)
-    target_file_path: str = field(init=False, repr=False)
+    s3_key_path: str = field(init=False, repr=False)
+    bucket_name: str = field(init=False, repr=False)
     period_start: str = field(init=False, repr=False)
     period_end: str = field(init=False, repr=False)
     mapping_period_start: str = field(init=False, repr=False)
@@ -369,7 +374,11 @@ class BurnCubeProcessingTask:
 
     def __post_init__(self):
         # Generate output filenames for the task
-        self.local_file_path, self.target_file_path = generate_output_filenames(
+        (
+            self.local_file_path,
+            self.s3_key_path,
+            self.bucket_name,
+        ) = generate_output_filenames(
             self.output_folder,
             self.task_id,
             self.region_id,
