@@ -335,7 +335,7 @@ def odc_uuid(
 
 @dataclass
 class BurnCubeInputProducts:
-    # only accept ls (Landsat) or s2 (Sentinel 2)
+    # Accepts only 'ls' (Landsat) or 's2' (Sentinel 2)
     platform: str = field(init=False)
     geomed: str = field(init=False)
     wofs_summary: str = field(init=False)
@@ -357,39 +357,41 @@ class BurnCubeProduct:
 @dataclass
 class BurnCubeProcessingTask:
     output_folder: str = field(init=False)
-
     input_products: BurnCubeInputProducts
     product: BurnCubeProduct
-
     task_id: str = field(init=False)
     region_id: str = field(init=False)
-
     local_file_path: str = field(init=False)
     target_file_path: str = field(init=False)
-
     period_start: str = field(init=False)
     period_end: str = field(init=False)
-
     mapping_period_start: str = field(init=False)
     mapping_period_end: str = field(init=False)
 
-    def __init__(self, input_products: BurnCubeInputProducts, product: BurnCubeProduct):
-        self.input_products = input_products
-        self.product = product
+    def __init__(self, cfg_url: str, task_id: str, region_id: str):
+        # Load configuration from a remote YAML file
+        cfg = load_yaml_remote(cfg_url)
+
+        self.output_folder = cfg["output_folder"]
+        self.task_id = cfg["task_id"]
+        self.region_id = cfg["region_id"]
+
+        self.input_products = BurnCubeInputProducts(**cfg["input_products"])
+        self.product = BurnCubeProduct(**cfg["product"])
 
     def __post_init__(self):
-
+        # Generate output filenames for the task
         local_file_path, target_file_path = generate_output_filenames(
-            self.output_folder, self.task_id, self.region_id, self.platform
+            self.output_folder, self.task_id, self.region_id, self.input_products.platform
         )
 
         self.local_file_path = local_file_path
         self.target_file_path = target_file_path
 
+        # Generate task processing periods
         processing_period = generate_task(self.task_id, self.input_products.task_table)
 
         self.period_start = processing_period["Period Start"]
         self.period_end = processing_period["Period End"]
-
         self.mapping_period_start = processing_period["Mapping Period Start"]
         self.mapping_period_end = processing_period["Mapping Period End"]
