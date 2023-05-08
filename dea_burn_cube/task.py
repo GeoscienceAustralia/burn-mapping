@@ -531,7 +531,7 @@ class BurnCubeProcessingTask:
             )
 
         self.wofs_datasets = odc_dc.find_datasets(
-            product=self.input_products.wofs_summary_product_name,
+            product=self.input_products.wofs_summary,
             geopolygon=self.gpgon,
             time=self.mapping_period_start,
         )
@@ -570,7 +570,7 @@ class BurnCubeProcessingTask:
             "period": (self.period_start, self.period_end),
             "mappingperiod": (self.mapping_period_start, self.mapping_period_end),
             "geomed_product_name": self.input_products.geomed,
-            "wofs_summary_product_name": self.input_products.wofs_summary_product_name,
+            "wofs_summary_product_name": self.input_products.wofs_summary,
             "ard_product_names": self.input_products.ard_product_names,
             "region_id": self.region_id,
             "output": self.s3_file_path,
