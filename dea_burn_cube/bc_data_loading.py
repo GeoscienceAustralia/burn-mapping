@@ -7,13 +7,15 @@ This module contains functions and variables for loading data from a burn cube.
 """
 
 import logging
+import re
+import sys
 from typing import List, Tuple
 
 import datacube
 import dea_tools.datahandling
 import geopandas as gpd
-import s3fs
 import xarray as xr
+from odc.dscache.tools.tiling import parse_gridspec_with_name
 
 from dea_burn_cube import task
 
@@ -62,28 +64,29 @@ def _get_gpgon(region_id: str) -> datacube.utils.geometry.Geometry:
     gpgon : datacube.utils.geometry.Geometry object
         The geometry object representing the region specified by `region_id`.
     """
-    # Use region_id to query AU-30 grid file, and get its geometry
-    _ = s3fs.S3FileSystem(anon=True)
+    _, gridspec = parse_gridspec_with_name("au-30")
 
-    _ = "s3" in gpd.io.file._VALID_URLS
-    gpd.io.file._VALID_URLS.discard("s3")
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
 
-    # Read in the AU-30 grid file
-    au_grid = gpd.read_file(
-        "s3://dea-public-data-dev/projects/burn_cube/configs/au-grid.geojson"
-    )
+    match = re.match(pattern, region_id)
 
-    # Filter the grid to only include the specified region
-    au_grid = au_grid.to_crs(epsg="3577")
-    au_grid = au_grid[au_grid["region_code"] == region_id]
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+    else:
+        logger.error(
+            "No match found in region id %s.",
+            region_id,
+        )
+        # cannot extract geobox, so we stop here.
+        # if we throw exception, it will trigger the Airflow/Argo retry.
+        sys.exit(0)
 
-    # Create a Geometry object from the selected region
-    gpgon = datacube.utils.geometry.Geometry(
-        au_grid.geometry[au_grid.index[0]], crs="epsg:3577"
-    )
+    geobox = gridspec.tile_geobox((x, y))
 
     # Return the resulting Geometry object
-    return gpgon
+    return datacube.utils.geometry.Geometry(geobox.extent.geom, crs="epsg:3577")
 
 
 @task.log_execution_time

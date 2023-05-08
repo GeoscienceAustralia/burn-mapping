@@ -452,8 +452,6 @@ def add_metadata(task_id, region_id, process_cfg_url, overwrite):
         app=f"Burn Cube K8s processing - {region_id}", config=odc_config
     )
 
-    # ard_product_names = process_cfg["input_products"]["ard_product_names"]
-
     _, gridspec = parse_gridspec_with_name("au-30")
 
     # gridspec : au-30
@@ -500,7 +498,7 @@ def add_metadata(task_id, region_id, process_cfg_url, overwrite):
     properties["odc:region_code"] = region_id
     properties["odc:product"] = bc_task.product.name
     properties["instrument"] = sorted(
-        ({e.metadata.instrument for e in input_datasets}).split("_")
+        ({e.metadata.instrument.split("_") for e in input_datasets})
     )
     properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
     properties["platform"] = sorted({e.metadata.platform for e in input_datasets}).join(
