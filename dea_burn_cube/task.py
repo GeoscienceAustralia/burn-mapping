@@ -637,9 +637,9 @@ class BurnCubeProcessingTask:
             )
         )
         properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
-        properties["platform"] = sorted(
+        properties["platform"] = "_".join(sorted(
             {e.metadata.platform for e in input_datasets}
-        ).join("_")
+        ))
         properties["odc:file_format"] = "GeoTIFF"
         properties["odc:product_family"] = self.product.product_family
         properties["odc:producer"] = "ga.gov.au"
