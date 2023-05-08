@@ -363,9 +363,9 @@ class BurnCubeInputProducts:
     platform: str
     geomed: str
     wofs_summary: str
-    ard_product_names: Tuple[str, ...]
-    input_ard_bands: Tuple[str, ...]
-    input_gm_bands: Tuple[str, ...]
+    ard_product_names: List[str, ...]
+    input_ard_bands: List[str, ...]
+    input_gm_bands: List[str, ...]
 
     def validate(self):
         if not isinstance(self.platform, str):
@@ -374,15 +374,15 @@ class BurnCubeInputProducts:
             raise ValueError("geomed must be a string")
         if not isinstance(self.wofs_summary, str):
             raise ValueError("wofs_summary must be a string")
-        if not isinstance(self.ard_product_names, tuple) or not all(
+        if not isinstance(self.ard_product_names, list) or not all(
             isinstance(name, str) for name in self.ard_product_names
         ):
             raise ValueError("ard_product_names must be a tuple of strings")
-        if not isinstance(self.input_ard_bands, tuple) or not all(
+        if not isinstance(self.input_ard_bands, list) or not all(
             isinstance(band, str) for band in self.input_ard_bands
         ):
             raise ValueError("input_ard_bands must be a tuple of strings")
-        if not isinstance(self.input_gm_bands, tuple) or not all(
+        if not isinstance(self.input_gm_bands, list) or not all(
             isinstance(band, str) for band in self.input_gm_bands
         ):
             raise ValueError("input_gm_bands must be a tuple of strings")
@@ -394,7 +394,7 @@ class BurnCubeProduct:
     short_name: str
     version: str
     product_family: str
-    bands: Tuple[str, ...]
+    bands: List[str, ...]
 
     def validate(self):
         if not isinstance(self.name, str):
@@ -405,7 +405,7 @@ class BurnCubeProduct:
             raise ValueError("version must be a string")
         if not isinstance(self.product_family, str):
             raise ValueError("product_family must be a string")
-        if not isinstance(self.bands, tuple) or not all(
+        if not isinstance(self.bands, list) or not all(
             isinstance(band, str) for band in self.bands
         ):
             raise ValueError("bands must be a tuple of strings")

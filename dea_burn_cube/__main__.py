@@ -416,7 +416,7 @@ def burn_cube_add_metadata(
 ):
     logging_setup()
 
-    task.add_metadata(task_id, region_id, process_cfg_url)
+    task.add_metadata(task_id, region_id, process_cfg_url, overwrite)
 
 
 @main.command(no_args_is_help=True)
