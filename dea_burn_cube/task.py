@@ -582,6 +582,11 @@ class BurnCubeProcessingTask:
             + [str(e.id) for e in self.mapping_ard_datasets],
         }
 
+        logger.info(
+            "Upload processing log file %s in s3.",
+            f"s3://{self.bucket_name}/{self.s3_key_path.replace('.nc', '.json')}",
+        )
+
         io.upload_dict_to_s3(
             processing_log,
             self.bucket_name,
@@ -637,9 +642,9 @@ class BurnCubeProcessingTask:
             )
         )
         properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
-        properties["platform"] = "_".join(sorted(
-            {e.metadata.platform for e in input_datasets}
-        ))
+        properties["platform"] = "_".join(
+            sorted({e.metadata.platform for e in input_datasets})
+        )
         properties["odc:file_format"] = "GeoTIFF"
         properties["odc:product_family"] = self.product.product_family
         properties["odc:producer"] = "ga.gov.au"

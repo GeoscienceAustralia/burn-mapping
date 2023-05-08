@@ -436,6 +436,7 @@ def burn_cube_add_metadata(
         # Not enough data to finish the processing, so stop it here
         sys.exit(0)
 
+    bc_task.upload_processing_log()
     bc_task.add_metadata()
 
 
@@ -568,6 +569,7 @@ def burn_cube_run(
             )
 
             # then add metadata
+            bc_task.upload_processing_log()
             bc_task.add_metadata()
 
 
