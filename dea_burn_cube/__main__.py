@@ -536,41 +536,40 @@ def burn_cube_run(
         bc_task.bucket_name, bc_task.s3_key_path
     ):
         logger.info("Find NetCDF file %s in s3, skip it.", bc_task.s3_key_path)
+        sys.exit(0)
 
-        logger.info(
-            "Will save NetCDF file as temp file to: %s", bc_task.local_file_path
-        )
-        logger.info("Will upload NetCDF file to: %s", bc_task.s3_file_path)
+    logger.info("Will save NetCDF file as temp file to: %s", bc_task.local_file_path)
+    logger.info("Will upload NetCDF file to: %s", bc_task.s3_file_path)
 
-        burn_cube_result = bc_data_processing.generate_bc_result(
-            odc_dc,
-            hnrs_dc,
-            bc_task,
-            n_procs,
-        )
+    burn_cube_result = bc_data_processing.generate_bc_result(
+        odc_dc,
+        hnrs_dc,
+        bc_task,
+        n_procs,
+    )
 
-        if burn_cube_result:
-            burn_cube_result_apply_wofs = (
-                bc_data_processing.apply_post_processing_by_wo_summary(
-                    odc_dc,
-                    burn_cube_result,
-                    bc_task.gpgon,
-                    (bc_task.mapping_period_start, bc_task.mapping_period_end),
-                    bc_task.input_products.wofs_summary,
-                )
+    if burn_cube_result:
+        burn_cube_result_apply_wofs = (
+            bc_data_processing.apply_post_processing_by_wo_summary(
+                odc_dc,
+                burn_cube_result,
+                bc_task.gpgon,
+                (bc_task.mapping_period_start, bc_task.mapping_period_end),
+                bc_task.input_products.wofs_summary,
             )
+        )
 
-            # TODO: should use Try-Catch to know IO is OK or not
-            io.result_file_saving_and_uploading(
-                burn_cube_result_apply_wofs,
-                bc_task.local_file_path,
-                bc_task.s3_key_path,
-                bc_task.bucket_name,
-            )
+        # TODO: should use Try-Catch to know IO is OK or not
+        io.result_file_saving_and_uploading(
+            burn_cube_result_apply_wofs,
+            bc_task.local_file_path,
+            bc_task.s3_key_path,
+            bc_task.bucket_name,
+        )
 
-            # then add metadata
-            bc_task.upload_processing_log()
-            bc_task.add_metadata()
+        # then add metadata
+        bc_task.upload_processing_log()
+        bc_task.add_metadata()
 
 
 if __name__ == "__main__":
