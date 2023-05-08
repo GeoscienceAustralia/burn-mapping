@@ -6,6 +6,7 @@ using the DEA Burn Cube.
 
 import calendar
 import datetime
+import itertools
 import logging
 import math
 import os
@@ -366,6 +367,26 @@ class BurnCubeInputProducts:
     input_ard_bands: Tuple[str, ...]
     input_gm_bands: Tuple[str, ...]
 
+    def validate(self):
+        if not isinstance(self.platform, str):
+            raise ValueError("platform must be a string")
+        if not isinstance(self.geomed, str):
+            raise ValueError("geomed must be a string")
+        if not isinstance(self.wofs_summary, str):
+            raise ValueError("wofs_summary must be a string")
+        if not isinstance(self.ard_product_names, tuple) or not all(
+            isinstance(name, str) for name in self.ard_product_names
+        ):
+            raise ValueError("ard_product_names must be a tuple of strings")
+        if not isinstance(self.input_ard_bands, tuple) or not all(
+            isinstance(band, str) for band in self.input_ard_bands
+        ):
+            raise ValueError("input_ard_bands must be a tuple of strings")
+        if not isinstance(self.input_gm_bands, tuple) or not all(
+            isinstance(band, str) for band in self.input_gm_bands
+        ):
+            raise ValueError("input_gm_bands must be a tuple of strings")
+
 
 @dataclass
 class BurnCubeProduct:
@@ -374,6 +395,20 @@ class BurnCubeProduct:
     version: str
     product_family: str
     bands: Tuple[str, ...]
+
+    def validate(self):
+        if not isinstance(self.name, str):
+            raise ValueError("name must be a string")
+        if not isinstance(self.short_name, str):
+            raise ValueError("short_name must be a string")
+        if not isinstance(self.version, str):
+            raise ValueError("version must be a string")
+        if not isinstance(self.product_family, str):
+            raise ValueError("product_family must be a string")
+        if not isinstance(self.bands, tuple) or not all(
+            isinstance(band, str) for band in self.bands
+        ):
+            raise ValueError("bands must be a tuple of strings")
 
 
 @dataclass
@@ -415,6 +450,36 @@ class BurnCubeProcessingTask:
         self.period_end = processing_period["Period End"]
         self.mapping_period_start = processing_period["Mapping Period Start"]
         self.mapping_period_end = processing_period["Mapping Period End"]
+
+    def validate(self):
+        if not isinstance(self.output_folder, str):
+            raise ValueError("output_folder must be a string")
+        if not isinstance(self.task_table, str):
+            raise ValueError("task_table must be a string")
+        if not isinstance(self.task_id, str):
+            raise ValueError("task_id must be a string")
+        if not isinstance(self.region_id, str):
+            raise ValueError("region_id must be a string")
+
+        if not (
+            len(self.region_id) == 6
+            and self.region_id[0] == "x"
+            and self.region_id[3] == "y"
+            and self.region_id[1:3].isdigit()
+            and self.region_id[4:6].isdigit()
+        ):
+            raise ValueError("region_id must be in the format 'x12y23' or 'x02y10'")
+
+            task_id_pattern = (
+                r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}$"
+            )
+        if not re.match(task_id_pattern, self.task_id):
+            raise ValueError(
+                "task_id must be in the format 'Dec-2019', 'Apr-2020', 'Mar-2019'"
+            )
+
+        self.input_products.validate()
+        self.product.validate()
 
     @classmethod
     def from_config(cls, cfg_url: str, task_id: str, region_id: str):
@@ -497,8 +562,13 @@ def add_metadata(task_id, region_id, process_cfg_url, overwrite):
     )
     properties["odc:region_code"] = region_id
     properties["odc:product"] = bc_task.product.name
-    properties["instrument"] = sorted(
-        ({e.metadata.instrument.split("_") for e in input_datasets})
+    properties["instrument"] = list(
+        itertools.chain(
+            *[
+                v.lower().split("_")
+                for v in {e.metadata.instrument for e in input_datasets}
+            ]
+        )
     )
     properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
     properties["platform"] = sorted({e.metadata.platform for e in input_datasets}).join(

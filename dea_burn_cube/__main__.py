@@ -464,6 +464,8 @@ def burn_cube_run(
         cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
     )
 
+    bc_task.validate()
+
     # The following variables passed by K8s Pod manifest
     hnrs_config = {
         "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
