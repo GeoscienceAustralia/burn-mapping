@@ -22,4 +22,18 @@ input_products:
     - nbart_swir_2
     - nbart_swir_3
 
+product:
+  name: bc_s2ab_fy_debug
+  short_name: bc_s2ab_fy_debug
+  version: 3.0.0
+  product_family: burncube
+  bands:
+    - wofssevere
+    - wofsseverity
+    - wofsmoderate
+    - severe
+    - severity
+    - moderate
+    - count
+
 task_table: 10-year-historical-processing-4year-geomad.csv
