@@ -367,9 +367,9 @@ class BurnCubeInputProducts:
     platform: str
     geomed: str
     wofs_summary: str
-    ard_product_names: list[str]
-    input_ard_bands: list[str]
-    input_gm_bands: list[str]
+    ard_product_names: List[str]
+    input_ard_bands: List[str]
+    input_gm_bands: List[str]
 
     def validate(self):
         if not isinstance(self.platform, str):

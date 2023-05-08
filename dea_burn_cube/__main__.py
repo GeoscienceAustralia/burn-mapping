@@ -524,17 +524,8 @@ def burn_cube_run(
         burn_cube_result = bc_data_processing.generate_bc_result(
             odc_dc,
             hnrs_dc,
-            bc_task.input_products.ard_product_names,
-            bc_task.input_products.geomed,
-            bc_task.input_products.input_ard_bands,
-            bc_task.input_products.input_gm_bands,
-            (bc_task.period_start, bc_task.period_end),
-            (bc_task.mapping_period_start, bc_task.mapping_period_end),
-            bc_task.gpgon,
-            task_id,
-            bc_task.output_folder,
+            bc_task,
             n_procs,
-            bc_task.input_products.platform,
         )
 
         if burn_cube_result:

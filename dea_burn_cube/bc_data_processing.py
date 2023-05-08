@@ -9,7 +9,6 @@ This module contains functions and variables for processing data from a burn cub
 
 import logging
 import os
-from typing import List, Tuple
 
 import datacube
 import geopandas as gpd
@@ -207,17 +206,8 @@ def generate_reference_result(
 def generate_bc_result(
     odc_dc: datacube.Datacube,
     hnrs_dc: datacube.Datacube,
-    ard_product_names: List[str],
-    geomed_product_name: str,
-    ard_bands: List[str],
-    geomed_bands: List[str],
-    period: Tuple[str, str],
-    mappingperiod: Tuple[str, str],
-    gpgon: datacube.utils.geometry.Geometry,
-    task_id: str,
-    output: str,
+    bc_task: task.BurnCubeProcessingTask,
     n_procs: int,
-    platform: str,
 ) -> xr.Dataset:
     """
     Generate burnt area severity mapping result for a given period of time.
@@ -228,28 +218,11 @@ def generate_bc_result(
         Datacube object for loading mapping data.
     hnrs_dc : datacube.Datacube
         Datacube object for loading reference data.
-    ard_product_names : list of str
-        List of names of Analysis Ready Data (ARD) products.
-    geomed_product_name : str
-        Name of geomedian product.
-    ard_bands : list of str
-        List of measurement names to load for ARD products.
-    geomed_bands : list of str
-        List of measurement names to load for geomedian product.
-    period : tuple of str
-        Start and end dates of the reference data period in the format "YYYY-MM-DD".
-    mappingperiod : tuple of str
-        Start and end dates of the mapping data period in the format "YYYY-MM-DD".
-    gpgon : datacube.utils.geometry.Geometry
-        Geopolygon to load data for.
-    task_id : str
-        Identifier for the task being executed.
-    output : str
-        Path to the output directory.
+    bc_task: task.BurnCubeProcessingTask
+        Burn Cube task object which includes processing detail
     n_procs : int
         The size of process pool.
-    platform : str
-            The platform of data. E.g. s2 or ls.
+
 
     Returns
     -------
@@ -261,13 +234,13 @@ def generate_bc_result(
     ard, geomed = bc_data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
-        ard_product_names,
-        geomed_product_name,
-        ard_bands,
-        geomed_bands,
-        period,
-        gpgon,
-        platform,
+        bc_task.input_products.ard_product_names,
+        bc_task.input_products.geomed,
+        bc_task.input_products.input_ard_bands,
+        bc_task.input_products.input_gm_bands,
+        (bc_task.period_start, bc_task.period_end),
+        bc_task.gpgon,
+        bc_task.input_products.platform,
     )
 
     outliers_result = generate_reference_result(ard, geomed, n_procs)
@@ -277,26 +250,26 @@ def generate_bc_result(
     logger.info("Begin to load mapping data")
     mapping_ard = bc_data_loading.load_mapping_data(
         odc_dc,
-        ard_product_names,
-        ard_bands,
-        mappingperiod,
-        gpgon,
-        platform,
+        bc_task.input_products.ard_product_names,
+        bc_task.input_products.input_ard_bands,
+        (bc_task.mapping_period_start, bc_task.mapping_period_end),
+        bc_task.gpgon,
+        bc_task.input_products.platform,
     )
 
     mapping_dis = algo.distances(mapping_ard, geomed, n_procs)
 
-    hotspot_csv_file = f"{task_id}-hotspot_historic.csv"
+    hotspot_csv_file = f"{bc_task.task_id}-hotspot_historic.csv"
 
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"{output}/ancillary_file/{hotspot_csv_file}"
+    hotspotfile = f"{bc_task.output_folder}/ancillary_file/{hotspot_csv_file}"
 
     logger.info("Load hotspot information from:  %s", hotspotfile)
 
     severitymapping_result = algo.severitymapping(
         mapping_dis,
         outliers_result,
-        mappingperiod,
+        (bc_task.mapping_period_start, bc_task.mapping_period_end),
         hotspotfile,
         method="NBRdist",
         growing=True,
