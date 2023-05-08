@@ -499,17 +499,17 @@ def add_metadata(task_id, region_id, process_cfg_url, overwrite):
     )
     properties["odc:region_code"] = region_id
     properties["odc:product"] = bc_task.product.name
-    properties["instruments"] = ["oli", "tirs"]  # get it from ARD datasets
-    properties["gsd"] = 15  # get it from ARD datasets
-    properties["platform"] = "landsat-8"  # get it from ARD datasets
-    properties["odc:file_format"] = "GeoTIFF"  # get it from ARD datasets
-    properties[
-        "odc:product_family"
-    ] = bc_task.product.product_family  # get it from ARD datasets
-    properties["odc:producer"] = "ga.gov.au"  # get it from ARD datasets
-    properties[
-        "odc:dataset_version"
-    ] = bc_task.product.version  # get it from ARD datasets
+    properties["instrument"] = sorted(
+        ({e.metadata.instrument for e in input_datasets}).split("_")
+    )
+    properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
+    properties["platform"] = sorted({e.metadata.platform for e in input_datasets}).join(
+        "_"
+    )
+    properties["odc:file_format"] = "GeoTIFF"
+    properties["odc:product_family"] = bc_task.product.product_family
+    properties["odc:producer"] = "ga.gov.au"
+    properties["odc:dataset_version"] = bc_task.product.version
     properties["dea:dataset_maturity"] = "final"
     properties["odc:collection_number"] = 3
 
