@@ -416,7 +416,27 @@ def burn_cube_add_metadata(
 ):
     logging_setup()
 
-    task.add_metadata(task_id, region_id, process_cfg_url, overwrite)
+    bc_task: task.BurnCubeProcessingTask = task.BurnCubeProcessingTask.from_config(
+        cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
+    )
+
+    try:
+        bc_task.validate_cfg()
+        bc_task.validate_data()
+    except ValueError:
+        logger.error(
+            "The setting values in cfg have problem. finish the processing %s",
+            region_id,
+        )
+        sys.exit(0)
+    except task.IncorrectInputDataError:
+        logger.error(
+            "The input datasets have problem. finish the processing %s", region_id
+        )
+        # Not enough data to finish the processing, so stop it here
+        sys.exit(0)
+
+    bc_task.add_metadata()
 
 
 @main.command(no_args_is_help=True)
@@ -548,12 +568,7 @@ def burn_cube_run(
             )
 
             # then add metadata
-            task.add_metadata(
-                task_id,
-                region_id,
-                process_cfg_url,
-                overwrite,
-            )
+            bc_task.add_metadata()
 
 
 if __name__ == "__main__":
