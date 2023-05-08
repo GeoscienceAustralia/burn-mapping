@@ -235,6 +235,33 @@ def dynamic_task_to_ranges(dtime: datetime.datetime) -> Dict[str, str]:
     return result_dict
 
 
+class IncorrectInputDataError(Exception):
+    """
+    Exception raised when the input data provided to a function or method is incorrect.
+
+    Attributes:
+    - message (str): the error message associated with the exception.
+
+    Methods:
+    - log_error(): logs the error message to a logger object.
+
+    Usage example:
+    >>> try:
+    ...     # some code that might raise an IncorrectInputDataError
+    ... except IncorrectInputDataError as e:
+    ...     e.log_error()
+    """
+
+    def __init__(self, message):
+        super().__init__(message)
+
+    def log_error(self):
+        """
+        Logs the error message to a logger object.
+        """
+        logger.error(str(self))
+
+
 def generate_task(task_id: str, task_table: str) -> Dict[str, str]:
     """
     Generate a dictionary of time ranges based on a given task ID and task table.
@@ -264,68 +291,6 @@ def generate_task(task_id: str, task_table: str) -> Dict[str, str]:
         result_dict = task_to_ranges(task_id, task_table)
 
     return result_dict
-
-
-def generate_processing_log(
-    task_id: str,
-    period: List[str],
-    mappingperiod: List[str],
-    geomed_product_name: str,
-    wofs_summary_product_name: str,
-    ard_product_names: List[str],
-    region_id: str,
-    output: str,
-    task_table: str,
-    summary_datasets: List[Dict[str, Any]],
-    ard_datasets: List[str],
-) -> Dict[str, Any]:
-    """
-    Generates a processing log dictionary for the task.
-
-    Args:
-    task_id : str
-        ID of the task being processed
-    period : List[str]
-        Period to process data for
-    mappingperiod : List[str])
-        Mapping period to process data for
-    geomed_product_name : str)
-        Name of the GeoMAD product
-    wofs_summary_product_name : str
-        Name of the WOfS summary product
-    ard_product_names : List[str]
-        List of reference ARD products
-    region_id : str
-        Region ID to process data for
-    output : str
-        Output folder path
-    task_table : str
-        Name of the table to store the task
-    summary_datasets : List[Dict[str, Any]]
-        List of summary datasets with UUID and label
-    ard_datasets: List[str]
-        List of input ARD datasets with UUID only
-
-    Returns:
-    processing_log : Dict[str, Any]): A dictionary containing processing log information
-    """
-
-    # We can change it to EODatasets3 format in the future
-
-    return {
-        "task_id": task_id,
-        "period": period,
-        "mappingperiod": mappingperiod,
-        "geomed_product_name": geomed_product_name,
-        "wofs_summary_product_name": wofs_summary_product_name,
-        "ard_product_names": ard_product_names,
-        "region_id": region_id,
-        "output": output,
-        "task_table": task_table,
-        "DEA Burn Cube": version,
-        "summary_datasets": summary_datasets,
-        "ard_datasets": ard_datasets,
-    }
 
 
 def odc_uuid(
@@ -358,14 +323,53 @@ def odc_uuid(
     return uuid5(ODC_NS, srcs_hashes)
 
 
+def _get_gpgon(region_id: str) -> datacube.utils.geometry.Geometry:
+    """
+    Get a geometry that covers the specified region for use with datacube.load().
+
+    Parameters
+    ----------
+    region_id : str
+        The ID of the region to get a geometry for. E.g. x30y29
+
+    Returns
+    -------
+    gpgon : datacube.utils.geometry.Geometry object
+        The geometry object representing the region specified by `region_id`.
+    """
+    _, gridspec = parse_gridspec_with_name("au-30")
+
+    # gridspec : au-30
+    pattern = r"x(\d+)y(\d+)"
+
+    match = re.match(pattern, region_id)
+
+    if match:
+        x = int(match.group(1))
+        y = int(match.group(2))
+    else:
+        logger.error(
+            "No match found in region id %s.",
+            region_id,
+        )
+        # cannot extract geobox, so we stop here.
+        # if we throw exception, it will trigger the Airflow/Argo retry.
+        sys.exit(0)
+
+    geobox = gridspec.tile_geobox((x, y))
+
+    # Return the resulting Geometry object
+    return datacube.utils.geometry.Geometry(geobox.extent.geom, crs="epsg:3577")
+
+
 @dataclass
 class BurnCubeInputProducts:
     platform: str
     geomed: str
     wofs_summary: str
-    ard_product_names: List[str, ...]
-    input_ard_bands: List[str, ...]
-    input_gm_bands: List[str, ...]
+    ard_product_names: list[str]
+    input_ard_bands: list[str]
+    input_gm_bands: list[str]
 
     def validate(self):
         if not isinstance(self.platform, str):
@@ -394,7 +398,7 @@ class BurnCubeProduct:
     short_name: str
     version: str
     product_family: str
-    bands: List[str, ...]
+    bands: List[str]
 
     def validate(self):
         if not isinstance(self.name, str):
@@ -427,6 +431,13 @@ class BurnCubeProcessingTask:
     period_end: str = field(init=False, repr=False)
     mapping_period_start: str = field(init=False, repr=False)
     mapping_period_end: str = field(init=False, repr=False)
+    gpgon: datacube.utils.geometry.Geometry = field(init=False, repr=False)
+
+    # get the following information by HNRD-DC and ODC
+    geomed_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
+    wofs_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
+    ref_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
+    mapping_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
 
     def __post_init__(self):
         # Generate output filenames for the task
@@ -451,7 +462,9 @@ class BurnCubeProcessingTask:
         self.mapping_period_start = processing_period["Mapping Period Start"]
         self.mapping_period_end = processing_period["Mapping Period End"]
 
-    def validate(self):
+        self.gpgon = _get_gpgon(self.region_id)
+
+    def validate_cfg(self):
         if not isinstance(self.output_folder, str):
             raise ValueError("output_folder must be a string")
         if not isinstance(self.task_table, str):
@@ -478,6 +491,98 @@ class BurnCubeProcessingTask:
 
         self.input_products.validate()
         self.product.validate()
+
+    def validate_data(self):
+        # The following variables passed by K8s Pod manifest
+        odc_dc = datacube.Datacube(
+            app=f"Burn Cube K8s processing - {self.region_id}",
+            config={
+                "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+                "db_password": os.getenv("ODC_DB_PASSWORD"),
+                "db_username": os.getenv("ODC_DB_USERNAME"),
+                "db_port": 5432,
+                "db_database": os.getenv("ODC_DB_DATABASE"),
+            },
+        )
+        hnrs_dc = datacube.Datacube(
+            app=f"Burn Cube K8s processing - {self.region_id}",
+            config={
+                "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
+                "db_password": os.getenv("HNRS_DC_DB_PASSWORD"),
+                "db_username": os.getenv("HNRS_DC_DB_USERNAME"),
+                "db_port": 5432,
+                "db_database": os.getenv("HNRS_DC_DB_DATABASE"),
+            },
+        )
+
+        self.geomed_datasets = hnrs_dc.find_datasets(
+            product=self.input_products.geomed_product_name,
+            geopolygon=self.gpgon,
+            time=self.period_start,
+        )
+
+        if len(self.geomed_datasets) != 1:
+            raise IncorrectInputDataError(
+                "Found " + len(self.geomed_datasets) + " GeoMAD dataset"
+            )
+
+        self.wofs_datasets = odc_dc.find_datasets(
+            product=self.input_products.wofs_summary_product_name,
+            geopolygon=self.gpgon,
+            time=self.mapping_period_start,
+        )
+
+        if len(self.wofs_datasets) != 1:
+            raise IncorrectInputDataError(
+                "Found " + len(self.wofs_datasets) + " WOfS dataset"
+            )
+
+        self.ref_ard_datasets = odc_dc.find_datasets(
+            product=self.input_products.ard_product_names,
+            geopolygon=self.gpgon,
+            time=(self.period_start, self.period_end),
+        )
+
+        if len(self.ref_ard_datasets) < 1:
+            raise IncorrectInputDataError(
+                "Found Any ARD dataset in " + str(self.period_start, self.period_end)
+            )
+
+        self.mapping_ard_datasets = odc_dc.find_datasets(
+            product=self.input_products.ard_product_names,
+            geopolygon=self.gpgon,
+            time=(self.mapping_period_start, self.mapping_period_end),
+        )
+
+        if len(self.mapping_ard_datasets) < 1:
+            raise IncorrectInputDataError(
+                "Found Any ARD dataset in "
+                + str(self.mapping_period_start, self.mapping_period_end)
+            )
+
+    def upload_processing_log(self):
+        processing_log = {
+            "task_id": self.task_id,
+            "period": (self.period_start, self.period_end),
+            "mappingperiod": (self.mapping_period_start, self.mapping_period_end),
+            "geomed_product_name": self.input_products.geomed_product_name,
+            "wofs_summary_product_name": self.input_products.wofs_summary_product_name,
+            "ard_product_names": self.input_products.ard_product_names,
+            "region_id": self.region_id,
+            "output": self.s3_file_path,
+            "task_table": self.task_table,
+            "DEA Burn Cube": version,
+            "summary_datasets": [e.metadata_doc["label"] for e in self.geomed_datasets]
+            + [e.metadata_doc["label"] for e in self.wofs_datasets],
+            "ard_datasets": [str(e.id) for e in self.ref_ard_datasets]
+            + [str(e.id) for e in self.mapping_ard_datasets],
+        }
+
+        io.upload_dict_to_s3(
+            processing_log,
+            self.bucket_name,
+            self.s3_key_path.replace(".nc", ".json"),
+        )
 
     @classmethod
     def from_config(cls, cfg_url: str, task_id: str, region_id: str):

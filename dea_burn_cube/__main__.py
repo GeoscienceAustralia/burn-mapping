@@ -24,7 +24,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
-from dea_burn_cube import bc_data_loading, bc_data_processing, io, task
+from dea_burn_cube import bc_data_processing, io, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -464,7 +464,21 @@ def burn_cube_run(
         cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
     )
 
-    bc_task.validate()
+    try:
+        bc_task.validate_cfg()
+        bc_task.validate_data()
+    except ValueError:
+        logger.error(
+            "The setting values in cfg have problem. finish the processing %s",
+            region_id,
+        )
+        sys.exit(0)
+    except task.IncorrectInputDataError:
+        logger.error(
+            "The input datasets have problem. finish the processing %s", region_id
+        )
+        # Not enough data to finish the processing, so stop it here
+        sys.exit(0)
 
     # The following variables passed by K8s Pod manifest
     hnrs_config = {
@@ -501,58 +515,11 @@ def burn_cube_run(
         bc_task.bucket_name, bc_task.s3_key_path
     ):
         logger.info("Find NetCDF file %s in s3, skip it.", bc_task.s3_key_path)
-    else:
-        # check the input product detail
-        # TODO: can add dry-run, and it will stop after input dataset list check
-        try:
-            (
-                gpgon,
-                summary_datasets,
-                ard_datasets,
-            ) = bc_data_loading.check_input_datasets(
-                hnrs_dc,
-                odc_dc,
-                (bc_task.period_start, bc_task.period_end),
-                (bc_task.mapping_period_start, bc_task.mapping_period_end),
-                bc_task.input_products.geomed,
-                bc_task.input_products.wofs_summary,
-                bc_task.input_products.ard_product_names,
-                region_id,
-            )
-        except bc_data_loading.IncorrectInputDataError:
-            logger.error(
-                "The input datasets have problem. finish the processing %s", region_id
-            )
-            # Not enough data to finish the processing, so stop it here
-            sys.exit(0)
 
         logger.info(
             "Will save NetCDF file as temp file to: %s", bc_task.local_file_path
         )
         logger.info("Will upload NetCDF file to: %s", bc_task.s3_file_path)
-
-        # After the check_input_datasets pass, we can use input information to generate
-        # processing log
-        processing_log = task.generate_processing_log(
-            task_id,
-            (bc_task.period_start, bc_task.period_end),
-            (bc_task.mapping_period_start, bc_task.mapping_period_end),
-            bc_task.input_products.geomed,
-            bc_task.input_products.wofs_summary,
-            bc_task.input_products.ard_product_names,
-            region_id,
-            bc_task.output_folder,
-            bc_task.task_table,
-            summary_datasets,
-            ard_datasets,
-        )
-
-        # No matter upload successful or not, should not block the main processing
-        io.upload_dict_to_s3(
-            processing_log,
-            bc_task.bucket_name,
-            bc_task.s3_key_path.replace(".nc", ".json"),
-        )
 
         burn_cube_result = bc_data_processing.generate_bc_result(
             odc_dc,
@@ -563,7 +530,7 @@ def burn_cube_run(
             bc_task.input_products.input_gm_bands,
             (bc_task.period_start, bc_task.period_end),
             (bc_task.mapping_period_start, bc_task.mapping_period_end),
-            gpgon,
+            bc_task.gpgon,
             task_id,
             bc_task.output_folder,
             n_procs,
@@ -575,7 +542,7 @@ def burn_cube_run(
                 bc_data_processing.apply_post_processing_by_wo_summary(
                     odc_dc,
                     burn_cube_result,
-                    gpgon,
+                    bc_task.gpgon,
                     (bc_task.mapping_period_start, bc_task.mapping_period_end),
                     bc_task.input_products.wofs_summary,
                 )
