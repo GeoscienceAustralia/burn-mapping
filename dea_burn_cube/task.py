@@ -470,10 +470,10 @@ class BurnCubeProcessingTask:
         ):
             raise ValueError("region_id must be in the format 'x12y23' or 'x02y10'")
 
-        task_id_pattern = r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}$"
+        task_id_pattern = r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}$"
         if not re.match(task_id_pattern, self.task_id):
             raise ValueError(
-                "task_id must be in the format 'Dec-2019', 'Apr-2020', 'Mar-2019'"
+                "task_id must be in the format 'Dec-19', 'Apr-20', 'Mar-19'"
             )
 
         self.input_products.validate()
