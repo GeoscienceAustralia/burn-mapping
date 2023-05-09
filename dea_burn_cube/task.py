@@ -352,15 +352,16 @@ class BurnCubeProcessingTask:
     Data class representing a Burn Cube filter task.
     """
 
-    title: str
+    title: str = field(init=False, repr=False)
     output_folder: str
-    ancillary_folder: str  # always under self.output_folder
+    # always under self.output_folder
+    ancillary_folder: str = field(init=False, repr=False)
     input_products: BurnCubeInputProducts
     output_product: BurnCubeOutputProduct
     task_id: str
     region_id: str
     task_table: str
-    stac_metadata_path: str
+    stac_metadata_path: str = field(init=False, repr=False)
 
     # local_file_name: burn cube output file name, end with .nc
     local_file_name: str = field(init=False, repr=False)
@@ -927,7 +928,7 @@ class BurnCubeFilterTask:
                 self.output_folder, self.task_id, region_id, self.platform
             )
 
-            if not helper.check_s3_file_exists(f"{s3_bucket_name}/{s3_object_key}"):
+            if not helper.check_s3_file_exists(f"s3://{s3_bucket_name}/{s3_object_key}"):
                 not_run_regions.append(region_id)
 
         not_run_geojson = region_gdf[

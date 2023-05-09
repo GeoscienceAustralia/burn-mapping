@@ -180,6 +180,10 @@ def update_hotspot_data(
     # not need to regenerate the hotspot file because it
     # always same with the same task-id
     if not overwrite and helper.check_s3_file_exists(bc_filter_task.hotspot_csv_s3_uri):
+        logger.info(
+            "Find Hotspot file %s in s3, skip it.",
+            bc_filter_task.hotspot_csv_s3_uri,
+        )
         sys.exit(0)
 
     filtered_df = bc_filter_task.filter_by_hotspot()
