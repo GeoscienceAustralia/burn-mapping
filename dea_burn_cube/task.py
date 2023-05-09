@@ -798,7 +798,7 @@ class BurnCubeFilterTask:
 
         # load the CSV file from zip file
         with zipfile.ZipFile(self.local_hotspot_file_path) as z:
-            with z.open(self.local_hotspot_file_path) as f:
+            with z.open(self.csv_filename) as f:
 
                 # only load these 4 columns from hotspot to save RAM
                 column_names = ["datetime", "sensor", "latitude", "longitude"]
