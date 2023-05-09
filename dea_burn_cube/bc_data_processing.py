@@ -310,7 +310,7 @@ def generate_bc_result(
                 bc_processing_task.mapping_period_start,
                 bc_processing_task.mapping_period_end,
             ),
-            bc_processing_task.input_products.wofs_summary,
+            bc_processing_task.input_products.wofs_summary_name,
         )
         return bc_result
     else:
