@@ -11,19 +11,27 @@ import logging
 import math
 import os
 import re
+import shutil
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from datetime import timezone
 from typing import Any, Dict, List, Sequence, Tuple
 from uuid import UUID, uuid5
 
 import datacube
+import geopandas as gpd
+import numpy as np
 import pandas as pd
+import pyproj
 import pystac
+import requests
 import s3fs
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.projection import ProjectionExtension
+from shapely.geometry import Point
+from shapely.ops import unary_union
 
 import dea_burn_cube.__version__ as version
 from dea_burn_cube import helper, io
@@ -680,3 +688,233 @@ class BurnCubeProcessingTask:
             self.bucket_name,
             self.s3_key_path.replace(".nc", ".stac-item.json"),
         )
+
+
+@dataclass
+class BurnCubeFilterTask:
+    """
+    Data class representing a Burn Cube filter task.
+    """
+
+    output_folder: str
+    ancillary_folder: str
+    task_id: str
+    region_list: str
+    platform: str
+    task_table: str
+
+    region_list_local_uri: str
+    region_list_s3_uri: str
+
+    hotspot_csv_local_uri: str
+    hotspot_csv_s3_uri: str
+
+    csv_filename = "hotspot_historic.csv"
+    hotspot_product_url = (
+        "https://ga-sentinel.s3-ap-southeast-2.amazonaws.com/historic/all-data-csv.zip"
+    )
+    local_hotspot_file_path = "all-data-csv.zip"
+
+    ocean_mask_path = (
+        "s3://dea-public-data-dev/projects/burn_cube/configs/ITEMCoastlineCleaned.shp"
+    )
+
+    def __init__(self, process_cfg_url: str, task_id: str):
+        """
+        Initialize BurnCubeFilterTask instance.
+
+        Args:
+            process_cfg_url: The URL of the process configuration file.
+            task_id: The ID of the task.
+
+        Raises:
+            IOError: If there is an error loading the process configuration file.
+        """
+        # Load pr
+        process_cfg = helper.load_yaml_remote(process_cfg_url)
+
+        self.task_id = task_id
+        self.output_folder = process_cfg["output_folder"]
+        self.platform = process_cfg["input_products"]["platform"]
+        self.ancillary_folder = f"{self.output_folder}/ancillary_file"
+
+        self.region_list_local_uri = f"{self.task_id}-region.json"
+        self.region_list_s3_uri = (
+            f"{self.ancillary_folder}/{self.region_list_local_uri}"
+        )
+
+        self.hotspot_csv_local_uri = f"{self.task_id}-{self.csv_filename}"
+        self.hotspot_csv_s3_uri = (
+            f"{self.ancillary_folder}/{self.hotspot_csv_local_uri}"
+        )
+
+    def filter_by_hotspot(self) -> pd.DataFrame:
+        """
+        Filter hotspot data based on the mapping period and sensor information.
+
+        Returns:
+            A Pandas DataFrame containing the filtered hotspot data.
+
+        Raises:
+            IOError: If there is an error downloading or extracting the hotspot file.
+        """
+        bc_running_task = generate_task(self.task_id, self.task_table)
+
+        mappingperiod = (
+            bc_running_task["Mapping Period Start"],
+            bc_running_task["Mapping Period End"],
+        )
+
+        logger.info("Use mappingperiod: %s to filter hotspot file", str(mappingperiod))
+
+        start = (
+            np.datetime64(mappingperiod[0]).astype("datetime64[ns]")
+            - np.datetime64(2, "M")
+        ).astype("datetime64[ns]")
+        stop = np.datetime64(mappingperiod[1])
+
+        # the current (10/01/2023) zip file size is 430MB. It is safe to download it to local file system
+        r = requests.get(self.hotspot_product_url, stream=True)
+        r.raw.decode_content = True
+        with open(self.local_hotspot_file_path, "wb") as f:
+            shutil.copyfileobj(r.raw, f)
+
+        # load the CSV file from zip file
+        with zipfile.ZipFile(self.local_hotspot_file_path) as z:
+            with z.open(self.local_hotspot_file_path) as f:
+
+                # only load these 4 columns from hotspot to save RAM
+                column_names = ["datetime", "sensor", "latitude", "longitude"]
+
+                # read the hotspot data as Pandas.DataFrame
+                hotspot_df = pd.read_csv(f, usecols=column_names, low_memory=False)
+
+                dates = pd.to_datetime(
+                    hotspot_df.datetime.apply(lambda x: x.split("+")[0]).values
+                )
+
+                # filter the dataframe: just filter by period and sensor information
+                index = np.where(
+                    (hotspot_df.sensor == "MODIS") & (dates >= start) & (dates <= stop)
+                )[0]
+
+        return hotspot_df[hotspot_df.index.isin(index)]
+
+    def filter_by_region(self, region_list_s3_path: str) -> gpd.GeoDataFrame:
+        """
+        Filter regions by ocean mask and hot spot.
+
+        Args:
+            region_list_s3_path: The S3 path of the region list file.
+
+        Returns:
+            A GeoDataFrame containing the filtered regions.
+
+        Raises:
+            IOError: If there is an error reading the region list file or hot spot CSV file.
+        """
+        _ = s3fs.S3FileSystem(anon=True)
+        _ = "s3" in gpd.io.file._VALID_URLS
+        gpd.io.file._VALID_URLS.discard("s3")
+
+        region_gdf = gpd.read_file(region_list_s3_path)
+        region_gdf = region_gdf.to_crs(epsg="3577")
+
+        logger.info("Filter  %s  by Ocean Mask", region_list_s3_path)
+
+        ocean_mask = gpd.read_file(self.ocean_mask_path)
+
+        # the Ocean Mask CRS should be: EPSG:3577
+        filter_by_ocean_mask = []
+
+        for region_index in region_gdf.index:
+            region_id = region_gdf.region_code[region_index]
+            region_geometry = region_gdf.geometry[region_index]
+
+            for ocean_index in ocean_mask.index:
+                if region_geometry.intersects(ocean_mask.geometry[ocean_index]):
+                    filter_by_ocean_mask.append(region_id)
+                    break
+
+            region_gdf = region_gdf[
+                region_gdf["region_code"].isin(filter_by_ocean_mask)
+            ].reindex()
+
+            logger.info(
+                "The number of region changes to %s after Ocean Mask filter",
+                str(len(region_gdf)),
+            )
+
+            # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
+            # also the geometry are always Polygon
+            logger.info("Filter regions by Hot Spot %s", self.hotspot_csv_s3_uri)
+
+            hotspot_df = pd.read_csv(self.hotspot_csv_s3_uri)
+            latitude = hotspot_df.latitude.values
+            longitude = hotspot_df.longitude.values
+
+            reverse_transformer = pyproj.Transformer.from_crs("EPSG:4283", "EPSG:3577")
+            easting, northing = reverse_transformer.transform(latitude, longitude)
+
+            patch = [
+                Point(easting[i], northing[i]).buffer(4000)
+                for i in range(0, len(hotspot_df))
+            ]
+            hotspot_polygons = unary_union(patch)
+
+            filter_by_hotspot = []
+
+            for region_index in region_gdf.index:
+                region_id = region_gdf.region_code[region_index]
+                region_geometry = region_gdf.geometry[region_index]
+                if region_geometry.intersects(hotspot_polygons):
+                    filter_by_hotspot.append(region_id)
+
+            region_gdf = region_gdf[
+                region_gdf["region_code"].isin(filter_by_hotspot)
+            ].reindex()
+
+            # shuffle the region list to aviod data skew
+            region_gdf = region_gdf.sample(frac=1).reset_index(drop=True)
+
+            logger.info(
+                "The number of region changes to %s  after Hot Spot filter",
+                str(len(region_gdf)),
+            )
+
+        return region_gdf
+
+    def filter_by_output(self) -> gpd.GeoDataFrame:
+        """
+        Filter regions by output NetCDF files.
+
+        Returns:
+            A GeoDataFrame containing the regions that do not have corresponding NetCDF files in S3.
+        """
+
+        _ = s3fs.S3FileSystem(anon=True)
+
+        _ = "s3" in gpd.io.file._VALID_URLS
+        gpd.io.file._VALID_URLS.discard("s3")
+
+        region_gdf = gpd.read_file(self.region_list_s3_uri)
+        region_gdf = region_gdf.to_crs(epsg="3577")
+
+        logger.info("Filter %s by output NetCDF files", self.region_list_s3_uri)
+
+        not_run_regions: List[str] = []
+        for region_index in region_gdf.index:
+            region_id = region_gdf.region_code[region_index]
+
+            _, s3_key_path, bucket_name = generate_output_filenames(
+                self.output_folder, self.task_id, region_id, self.platform
+            )
+
+            if not helper.check_s3_file_exists(f"{bucket_name}/{s3_key_path}"):
+                not_run_regions.append(region_id)
+
+        not_run_geojson = region_gdf[
+            region_gdf["region_code"].isin(not_run_regions)
+        ].reindex()
+
+        return not_run_geojson

@@ -205,7 +205,7 @@ def generate_reference_result(
 
 @helper.log_execution_time
 def generate_bc_result(
-    bc_task: task.BurnCubeProcessingTask,
+    bc_processing_task: task.BurnCubeProcessingTask,
     n_procs: int,
 ) -> xr.Dataset:
     """
@@ -213,7 +213,7 @@ def generate_bc_result(
 
     Parameters
     ----------
-    bc_task: task.BurnCubeProcessingTask
+    bc_processing_task: task.BurnCubeProcessingTask
         Burn Cube task object which includes processing detail
     n_procs : int
         The size of process pool.
@@ -227,7 +227,7 @@ def generate_bc_result(
 
     # The following variables passed by K8s Pod manifest
     odc_dc = datacube.Datacube(
-        app=f"Burn Cube K8s processing - {bc_task.region_id}",
+        app=f"Burn Cube K8s processing - {bc_processing_task.region_id}",
         config={
             "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
             "db_password": os.getenv("ODC_DB_PASSWORD"),
@@ -237,7 +237,7 @@ def generate_bc_result(
         },
     )
     hnrs_dc = datacube.Datacube(
-        app=f"Burn Cube K8s processing - {bc_task.region_id}",
+        app=f"Burn Cube K8s processing - {bc_processing_task.region_id}",
         config={
             "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
             "db_password": os.getenv("HNRS_DC_DB_PASSWORD"),
@@ -251,13 +251,13 @@ def generate_bc_result(
     ard, geomed = bc_data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
-        bc_task.input_products.ard_product_names,
-        bc_task.input_products.geomed,
-        bc_task.input_products.input_ard_bands,
-        bc_task.input_products.input_gm_bands,
-        (bc_task.period_start, bc_task.period_end),
-        bc_task.gpgon,
-        bc_task.input_products.platform,
+        bc_processing_task.input_products.ard_product_names,
+        bc_processing_task.input_products.geomed,
+        bc_processing_task.input_products.input_ard_bands,
+        bc_processing_task.input_products.input_gm_bands,
+        (bc_processing_task.period_start, bc_processing_task.period_end),
+        bc_processing_task.gpgon,
+        bc_processing_task.input_products.platform,
     )
 
     outliers_result = generate_reference_result(ard, geomed, n_procs)
@@ -267,26 +267,34 @@ def generate_bc_result(
     logger.info("Begin to load mapping data")
     mapping_ard = bc_data_loading.load_mapping_data(
         odc_dc,
-        bc_task.input_products.ard_product_names,
-        bc_task.input_products.input_ard_bands,
-        (bc_task.mapping_period_start, bc_task.mapping_period_end),
-        bc_task.gpgon,
-        bc_task.input_products.platform,
+        bc_processing_task.input_products.ard_product_names,
+        bc_processing_task.input_products.input_ard_bands,
+        (
+            bc_processing_task.mapping_period_start,
+            bc_processing_task.mapping_period_end,
+        ),
+        bc_processing_task.gpgon,
+        bc_processing_task.input_products.platform,
     )
 
     mapping_dis = algo.distances(mapping_ard, geomed, n_procs)
 
-    hotspot_csv_file = f"{bc_task.task_id}-hotspot_historic.csv"
+    hotspot_csv_file = f"{bc_processing_task.task_id}-hotspot_historic.csv"
 
     # the hotspotfile setup will be finished by step: update_hotspot_data
-    hotspotfile = f"{bc_task.output_folder}/ancillary_file/{hotspot_csv_file}"
+    hotspotfile = (
+        f"{bc_processing_task.output_folder}/ancillary_file/{hotspot_csv_file}"
+    )
 
     logger.info("Load hotspot information from:  %s", hotspotfile)
 
     severitymapping_result = algo.severitymapping(
         mapping_dis,
         outliers_result,
-        (bc_task.mapping_period_start, bc_task.mapping_period_end),
+        (
+            bc_processing_task.mapping_period_start,
+            bc_processing_task.mapping_period_end,
+        ),
         hotspotfile,
         method="NBRdist",
         growing=True,
@@ -297,12 +305,17 @@ def generate_bc_result(
         bc_result = apply_post_processing_by_wo_summary(
             odc_dc,
             severitymapping_result,
-            bc_task.gpgon,
-            (bc_task.mapping_period_start, bc_task.mapping_period_end),
-            bc_task.input_products.wofs_summary,
+            bc_processing_task.gpgon,
+            (
+                bc_processing_task.mapping_period_start,
+                bc_processing_task.mapping_period_end,
+            ),
+            bc_processing_task.input_products.wofs_summary,
         )
         return bc_result
     else:
-        logger.error("Cannot generate any Burn Cube result at: %s", bc_task.region_id)
+        logger.error(
+            "Cannot generate any Burn Cube result at: %s", bc_processing_task.region_id
+        )
         # stop the processing immediately
         sys.exit(0)

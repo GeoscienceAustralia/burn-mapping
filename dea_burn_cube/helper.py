@@ -1,7 +1,7 @@
 import datetime
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -66,7 +66,7 @@ def load_yaml_remote(yaml_url: str) -> Dict[str, Any]:
         raise
 
 
-def extract_s3_details(uri: str) -> tuple[str, str]:
+def extract_s3_details(uri: str) -> Tuple[str, str, str]:
     """
     Extracts the S3 bucket and object key from an S3 URI.
 
