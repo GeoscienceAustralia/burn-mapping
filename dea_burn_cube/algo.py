@@ -23,7 +23,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 from skimage import measure
 
-from dea_burn_cube import task
+from dea_burn_cube import helper
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -48,8 +48,8 @@ def cos_distance(ref, obs):
     cosdist = np.transpose(
         1
         - np.nansum(ref * obs, axis=0)
-        / np.sqrt(np.sum(ref**2))
-        / np.sqrt(np.nansum(obs**2, axis=0))
+        / np.sqrt(np.sum(ref ** 2))
+        / np.sqrt(np.nansum(obs ** 2, axis=0))
     )
     return cosdist
 
@@ -72,7 +72,7 @@ def nbr_eucdistance(ref, obs):
     nbr_dist.fill(np.nan)
     index = np.where(~np.isnan(obs))[0]
     euc_dist = obs[index] - ref
-    euc_norm = np.sqrt(euc_dist**2)
+    euc_norm = np.sqrt(euc_dist ** 2)
     nbr_dist[index] = euc_norm
     direction[index[euc_dist < -0.05]] = 1
 
@@ -432,7 +432,7 @@ def dist_severity(params):
         )
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def distances(ard, geomed, n_procs=8):
     """
     Calculates the cosine distance between observation and reference.
@@ -580,7 +580,7 @@ def distances(ard, geomed, n_procs=8):
     return ds
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def outliers(dataset, distances):
     """
     Calculate the outliers for distances for change detection
@@ -767,7 +767,7 @@ def create_attributes(dataset, product_name, version, method, res=30):
     return dataset
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def hotspot_polygon(period, extent, buffersize, hotspotfile):
     """Create polygons for the hotspot with a buffer
     year: given year for hotspots data
@@ -842,7 +842,7 @@ def hotspot_polygon(period, extent, buffersize, hotspotfile):
     return polygons
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def severitymapping(
     dists,
     outlrs,

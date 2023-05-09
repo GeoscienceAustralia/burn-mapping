@@ -14,6 +14,8 @@ import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
 
+from dea_burn_cube import helper
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,30 @@ def upload_dict_to_s3(dictionary: Dict, bucket_name: str, file_name: str):
         s3.Object(bucket_name, file_name).put(Body=json_string)
     except Exception:
         logger.warning("Cannot upload the file to: %s", file_name)
+
+
+def upload_object_to_s3(local_file_path: str, s3_uri: str) -> None:
+    """
+    Uploads a local file to an S3 bucket.
+
+    Args:
+        local_file_path: The path of the local file to upload.
+        s3_uri: The S3 URI where the file will be uploaded.
+
+    Returns:
+        None.
+    """
+
+    s3 = boto3.client("s3")
+
+    s3_bucket_name, s3_object_key = helper.extract_s3_details(s3_uri)
+
+    with open(local_file_path, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            s3_bucket_name,
+            s3_object_key,
+        )
 
 
 def result_file_saving_and_uploading(

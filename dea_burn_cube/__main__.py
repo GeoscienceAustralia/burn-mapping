@@ -9,11 +9,8 @@ import shutil
 import sys
 import zipfile
 from multiprocessing import cpu_count
-from urllib.parse import urlparse
 
-import boto3
 import click
-import datacube
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -24,7 +21,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__
-from dea_burn_cube import bc_data_processing, io, task
+from dea_burn_cube import bc_data_processing, helper, io, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -80,7 +77,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
 
     """
 
-    process_cfg = task.load_yaml_remote(process_cfg_url)
+    process_cfg = helper.load_yaml_remote(process_cfg_url)
     output = process_cfg["output_folder"]
     platform = process_cfg["input_products"]["platform"]
 
@@ -98,10 +95,6 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
 
     logger.info("Filter %s by output NetCDF files", region_list_s3_path)
 
-    o = urlparse(ancillary_folder)
-    s3_bucket_name = o.netloc
-    ancillary_key = o.path[1:]
-
     local_json_file = f"{task_id}-cleanup-regions.json"
 
     # if we run it as overwrite mode, should not use NetCDF to filter region list
@@ -116,7 +109,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
                 output, task_id, region_id, platform
             )
 
-            if not task.check_file_exists(s3_bucket_name, s3_key_path):
+            if not helper.check_s3_file_exists(region_list_s3_path):
                 not_run_regions.append(region_id)
 
         not_run_geojson = region_gdf[
@@ -125,14 +118,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
 
     not_run_geojson.to_file(local_json_file, driver="GeoJSON")
 
-    s3 = boto3.client("s3")
-
-    with open(local_json_file, "rb") as f:
-        s3.upload_fileobj(
-            f,
-            s3_bucket_name,
-            f"{ancillary_key}/{local_json_file}",
-        )
+    io.upload_object_to_s3(local_json_file, region_list_s3_path)
 
 
 @main.command(no_args_is_help=True)
@@ -172,20 +158,17 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url, overwrite):
     """
     logging_setup()
 
-    process_cfg = task.load_yaml_remote(process_cfg_url)
+    process_cfg = helper.load_yaml_remote(process_cfg_url)
+
+    local_json_file = f"{task_id}-regions.json"
 
     ancillary_folder = process_cfg["output_folder"] + "/ancillary_file"
-
-    o = urlparse(ancillary_folder)
-    ancillary_key = o.path[1:]
-    local_json_file = f"{task_id}-regions.json"
+    region_s3_uri = f"{ancillary_folder}/{local_json_file}"
 
     # if we already had the region, skip it
     # TODO: must change the output name with region_list_s3_path
 
-    if not overwrite and task.check_file_exists(
-        o.netloc, f"{ancillary_key}/{local_json_file}"
-    ):
+    if not overwrite and helper.check_s3_file_exists(region_s3_uri):
         sys.exit(0)
 
     _ = s3fs.S3FileSystem(anon=True)
@@ -262,14 +245,7 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url, overwrite):
 
     region_gdf.to_file(local_json_file, driver="GeoJSON")
 
-    s3 = boto3.client("s3")
-
-    with open(local_json_file, "rb") as f:
-        s3.upload_fileobj(
-            f,
-            o.netloc,
-            f"{ancillary_key}/{local_json_file}",
-        )
+    io.upload_object_to_s3(local_json_file, region_s3_uri)
 
 
 @main.command(no_args_is_help=True)
@@ -299,24 +275,19 @@ def update_hotspot_data(
 ):
     logging_setup()
 
-    process_cfg = task.load_yaml_remote(process_cfg_url)
+    process_cfg = helper.load_yaml_remote(process_cfg_url)
 
     task_table = process_cfg["task_table"]
     output = process_cfg["output_folder"] + "/ancillary_file"
 
-    o = urlparse(output)
-
-    s3_bucket_name = o.netloc
-    output_s3_folder = o.path[1:]
-
     csv_filename = "hotspot_historic.csv"
 
     filtered_csv = f"{task_id}-{csv_filename}"
-    s3_file_uri = f"{output_s3_folder}/{filtered_csv}"
+    s3_file_uri = f"{output}/{filtered_csv}"
 
     # not need to regenerate the hotspot file because it
     # always same with the same task-id
-    if not overwrite and task.check_file_exists(s3_bucket_name, s3_file_uri):
+    if not overwrite and helper.check_s3_file_exists(s3_file_uri):
         sys.exit(0)
 
     # use task_id to get the mappingperiod information to filter hotspot
@@ -371,14 +342,7 @@ def update_hotspot_data(
             # save the current task hotspot information to its CSV file, and upload to S3 later
             filtered_df.to_csv(filtered_csv, index=False)
 
-            s3 = boto3.client("s3")
-
-            with open(filtered_csv, "rb") as f:
-                s3.upload_fileobj(
-                    f,
-                    s3_bucket_name,
-                    s3_file_uri,
-                )
+            io.upload_object_to_s3(filtered_csv, s3_file_uri)
 
 
 @main.command(no_args_is_help=True)
@@ -501,75 +465,34 @@ def burn_cube_run(
         # Not enough data to finish the processing, so stop it here
         sys.exit(0)
 
-    # The following variables passed by K8s Pod manifest
-    hnrs_config = {
-        "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
-        "db_password": os.getenv("HNRS_DC_DB_PASSWORD"),
-        "db_username": os.getenv("HNRS_DC_DB_USERNAME"),
-        "db_port": 5432,
-        "db_database": os.getenv("HNRS_DC_DB_DATABASE"),
-    }
-
-    odc_config = {
-        "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
-        "db_password": os.getenv("ODC_DB_PASSWORD"),
-        "db_username": os.getenv("ODC_DB_USERNAME"),
-        "db_port": 5432,
-        "db_database": os.getenv("ODC_DB_DATABASE"),
-    }
-
-    logger.info("Use period: %s", str((bc_task.period_start, bc_task.period_end)))
-
-    logger.info(
-        "Use mappingperiod: %s",
-        str((bc_task.mapping_period_start, bc_task.mapping_period_end)),
-    )
-
-    odc_dc = datacube.Datacube(
-        app=f"Burn Cube K8s processing - {region_id}", config=odc_config
-    )
-    hnrs_dc = datacube.Datacube(
-        app=f"Burn Cube K8s processing - {region_id}", config=hnrs_config
-    )
-
-    if not overwrite and task.check_file_exists(
-        bc_task.bucket_name, bc_task.s3_key_path
-    ):
+    if not overwrite and helper.check_s3_file_exists(bc_task.s3_file_path):
         logger.info("Find NetCDF file %s in s3, skip it.", bc_task.s3_key_path)
         sys.exit(0)
 
     logger.info("Will save NetCDF file as temp file to: %s", bc_task.local_file_path)
     logger.info("Will upload NetCDF file to: %s", bc_task.s3_file_path)
 
-    burn_cube_result = bc_data_processing.generate_bc_result(
-        odc_dc,
-        hnrs_dc,
-        bc_task,
-        n_procs,
-    )
-
-    if burn_cube_result:
-        burn_cube_result_apply_wofs = (
-            bc_data_processing.apply_post_processing_by_wo_summary(
-                odc_dc,
-                burn_cube_result,
-                bc_task.gpgon,
-                (bc_task.mapping_period_start, bc_task.mapping_period_end),
-                bc_task.input_products.wofs_summary,
-            )
+    try:
+        burn_cube_result = bc_data_processing.generate_bc_result(
+            bc_task,
+            n_procs,
         )
 
-        # TODO: should use Try-Catch to know IO is OK or not
         io.result_file_saving_and_uploading(
-            burn_cube_result_apply_wofs,
+            burn_cube_result,
             bc_task.local_file_path,
             bc_task.s3_key_path,
             bc_task.bucket_name,
         )
+    except Exception as e:
+        logger.error(
+            f"Generate and upload Burn Cube result to S3 object {bc_task.s3_file_path} failed: {str(e)}"
+        )
+        sys.exit(0)
 
-        # then add metadata
-        bc_task.upload_processing_log()
-        bc_task.add_metadata()
+    # then add metadata
+    bc_task.upload_processing_log()
+    bc_task.add_metadata()
 
 
 if __name__ == "__main__":

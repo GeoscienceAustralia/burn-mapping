@@ -9,6 +9,7 @@ This module contains functions and variables for processing data from a burn cub
 
 import logging
 import os
+import sys
 
 import datacube
 import geopandas as gpd
@@ -16,7 +17,7 @@ import rasterio.features
 import xarray as xr
 from shapely.ops import unary_union
 
-from dea_burn_cube import algo, bc_data_loading, task
+from dea_burn_cube import algo, bc_data_loading, helper, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def generate_ocean_mask(ds: xr.Dataset, region_id: str) -> xr.DataArray:
     """
     Generate a mask for non-ocean areas within a given region.
@@ -80,7 +81,7 @@ def generate_ocean_mask(ds: xr.Dataset, region_id: str) -> xr.DataArray:
     return data.not_ocean_layer
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def apply_post_processing_by_wo_summary(
     odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
 ):
@@ -172,7 +173,7 @@ def apply_post_processing_by_wo_summary(
     )
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def generate_reference_result(
     ard: xr.Dataset, geomed: xr.Dataset, n_procs: int
 ) -> xr.Dataset:
@@ -202,10 +203,8 @@ def generate_reference_result(
     return outliers_result
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def generate_bc_result(
-    odc_dc: datacube.Datacube,
-    hnrs_dc: datacube.Datacube,
     bc_task: task.BurnCubeProcessingTask,
     n_procs: int,
 ) -> xr.Dataset:
@@ -214,10 +213,6 @@ def generate_bc_result(
 
     Parameters
     ----------
-    odc_dc : datacube.Datacube
-        Datacube object for loading mapping data.
-    hnrs_dc : datacube.Datacube
-        Datacube object for loading reference data.
     bc_task: task.BurnCubeProcessingTask
         Burn Cube task object which includes processing detail
     n_procs : int
@@ -229,6 +224,28 @@ def generate_bc_result(
     xr.Dataset
         Burnt area severity mapping result.
     """
+
+    # The following variables passed by K8s Pod manifest
+    odc_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {bc_task.region_id}",
+        config={
+            "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+            "db_password": os.getenv("ODC_DB_PASSWORD"),
+            "db_username": os.getenv("ODC_DB_USERNAME"),
+            "db_port": 5432,
+            "db_database": os.getenv("ODC_DB_DATABASE"),
+        },
+    )
+    hnrs_dc = datacube.Datacube(
+        app=f"Burn Cube K8s processing - {bc_task.region_id}",
+        config={
+            "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
+            "db_password": os.getenv("HNRS_DC_DB_PASSWORD"),
+            "db_username": os.getenv("HNRS_DC_DB_USERNAME"),
+            "db_port": 5432,
+            "db_database": os.getenv("HNRS_DC_DB_DATABASE"),
+        },
+    )
 
     logger.info("Begin to load reference data")
     ard, geomed = bc_data_loading.load_reference_data(
@@ -276,4 +293,16 @@ def generate_bc_result(
         n_procs=n_procs,
     )
 
-    return severitymapping_result
+    if severitymapping_result:
+        bc_result = apply_post_processing_by_wo_summary(
+            odc_dc,
+            severitymapping_result,
+            bc_task.gpgon,
+            (bc_task.mapping_period_start, bc_task.mapping_period_end),
+            bc_task.input_products.wofs_summary,
+        )
+        return bc_result
+    else:
+        logger.error("Cannot generate any Burn Cube result at: %s", bc_task.region_id)
+        # stop the processing immediately
+        sys.exit(0)

@@ -12,28 +12,21 @@ import math
 import os
 import re
 import sys
-import time
 from dataclasses import dataclass, field
 from datetime import timezone
 from typing import Any, Dict, List, Sequence, Tuple
-from urllib.parse import urlparse
 from uuid import UUID, uuid5
 
-import boto3
-import botocore
 import datacube
-import fsspec
 import pandas as pd
 import pystac
 import s3fs
-import yaml
-from datacube.utils.dates import normalise_dt
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.projection import ProjectionExtension
 
 import dea_burn_cube.__version__ as version
-from dea_burn_cube import io
+from dea_burn_cube import helper, io
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -43,61 +36,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 ODC_NS = UUID("6f34c6f4-13d6-43c0-8e4e-42b6c13203af")
 
 
-def format_datetime(dt: datetime, with_tz=True, timespec="microseconds") -> str:
-    dt = normalise_dt(dt)
-    dt = dt.isoformat(timespec=timespec)
-    if with_tz:
-        dt = dt + "Z"
-    return dt
-
-
-def load_yaml_remote(yaml_url: str) -> Dict[str, Any]:
-    """
-    Open a yaml file remotely and return the parsed yaml document
-    """
-    try:
-        with fsspec.open(yaml_url, mode="r") as f:
-            return next(yaml.safe_load_all(f))
-    except Exception:
-        logger.error(f"Cannot load {yaml_url}")
-        raise
-
-
-def log_execution_time(func):
-    """
-    Decorator function that logs the execution time of the decorated function.
-
-    Args:
-        func (function): The function to be decorated.
-
-    Returns:
-        function: The decorated function that logs the execution time.
-    """
-
-    def wrapper(*args, **kwargs):
-        """
-        Wrapper function that logs the execution time of the decorated function.
-
-        Args:
-            *args: Variable length argument list.
-            **kwargs: Arbitrary keyword arguments.
-
-        Returns:
-            object: Result of the decorated function.
-        """
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        end_time = time.time()
-        duration = end_time - start_time
-        logger.info(f"{func.__name__} took {duration:.2f} seconds to execute.")
-        return result
-
-    return wrapper
-
-
 def generate_output_filenames(
     output: str, task_id: str, region_id: str, platform: str
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     """
     Generate local and target file paths for output file.
 
@@ -119,36 +60,9 @@ def generate_output_filenames(
     )
 
     local_file_path = bc_output_file_path.split("/")[-1]
+    bucket_name, file_key = helper.extract_s3_details(f"{output}/{bc_output_file_path}")
 
-    o = urlparse(output)
-
-    s3_bucket_name = o.netloc
-    s3_folder_path = o.path[1:]
-
-    s3_key_path = f"{s3_folder_path}/{bc_output_file_path}"
-
-    return local_file_path, s3_key_path, s3_bucket_name
-
-
-def check_file_exists(bucket_name, file_key):
-    """
-    Checks if a file exists in an S3 bucket.
-
-    :param bucket_name: The name of the S3 bucket.
-    :param file_key: The key of the file in the bucket.
-    :return: True if the file exists, False otherwise.
-    """
-    s3 = boto3.client("s3")
-
-    try:
-        s3.head_object(Bucket=bucket_name, Key=file_key)
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            return False
-        else:
-            raise
-    else:
-        return True
+    return local_file_path, file_key, bucket_name
 
 
 def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
@@ -421,6 +335,7 @@ class BurnCubeProduct:
 @dataclass
 class BurnCubeProcessingTask:
     output_folder: str
+    ancillary_folder: str
     input_products: BurnCubeInputProducts
     product: BurnCubeProduct
     task_id: str
@@ -455,6 +370,8 @@ class BurnCubeProcessingTask:
             self.region_id,
             self.input_products.platform,
         )
+
+        self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
         self.s3_file_path = f"{self.bucket_name}/{self.s3_key_path}"
 
@@ -499,7 +416,7 @@ class BurnCubeProcessingTask:
     def validate_data(self):
         # The following variables passed by K8s Pod manifest
         odc_dc = datacube.Datacube(
-            app=f"Burn Cube K8s processing - {self.region_id}",
+            app=f"Burn Cube K8s load metadata - {self.region_id}",
             config={
                 "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
                 "db_password": os.getenv("ODC_DB_PASSWORD"),
@@ -509,7 +426,7 @@ class BurnCubeProcessingTask:
             },
         )
         hnrs_dc = datacube.Datacube(
-            app=f"Burn Cube K8s processing - {self.region_id}",
+            app=f"Burn Cube K8s load metadata - {self.region_id}",
             config={
                 "db_hostname": os.getenv("HNRS_DB_HOSTNAME"),
                 "db_password": os.getenv("HNRS_DC_DB_PASSWORD"),
@@ -596,7 +513,7 @@ class BurnCubeProcessingTask:
     @classmethod
     def from_config(cls, cfg_url: str, task_id: str, region_id: str):
         # Load configuration from a remote YAML file
-        cfg = load_yaml_remote(cfg_url)
+        cfg = helper.load_yaml_remote(cfg_url)
 
         input_products = BurnCubeInputProducts(**cfg["input_products"])
         product = BurnCubeProduct(**cfg["product"])
@@ -626,9 +543,11 @@ class BurnCubeProcessingTask:
         properties[
             "title"
         ] = f"BurnMapping-{self.input_products.platform}-{self.task_id}-{self.region_id}"
-        properties["dtr:start_datetime"] = format_datetime(self.mapping_period_start)
-        properties["dtr:end_datetime"] = format_datetime(self.mapping_period_end)
-        properties["odc:processing_datetime"] = format_datetime(
+        properties["dtr:start_datetime"] = helper.format_datetime(
+            self.mapping_period_start
+        )
+        properties["dtr:end_datetime"] = helper.format_datetime(self.mapping_period_end)
+        properties["odc:processing_datetime"] = helper.format_datetime(
             datetime.datetime.utcnow(), timespec="seconds"
         )
         properties["odc:region_code"] = self.region_id

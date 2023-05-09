@@ -13,13 +13,13 @@ import datacube
 import dea_tools.datahandling
 import xarray as xr
 
-from dea_burn_cube import task
+from dea_burn_cube import helper
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def load_geomed_ds(
     hnrs_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
@@ -113,7 +113,7 @@ def load_ard_ds(
     return ard
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def load_wofs_summary_ds(
     odc_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
@@ -147,7 +147,7 @@ def load_wofs_summary_ds(
     return wofs_summary
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def load_reference_data(
     odc_dc: datacube.Datacube,
     hnrs_dc: datacube.Datacube,
@@ -212,7 +212,7 @@ def load_reference_data(
     return ard, geomed
 
 
-@task.log_execution_time
+@helper.log_execution_time
 def load_mapping_data(
     odc_dc: datacube.Datacube,
     ard_product_names: List[str],
