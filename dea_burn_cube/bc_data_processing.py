@@ -83,7 +83,7 @@ def generate_ocean_mask(ds: xr.Dataset, region_id: str) -> xr.DataArray:
 
 @helper.log_execution_time
 def apply_post_processing_by_wo_summary(
-    odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_product_name
+    odc_dc, burn_cube_result, gpgon, mappingperiod, wofs_summary_name
 ):
     """
     Applies post-processing to the given burn cube result dataset based on water observations from space (WOfS)
@@ -99,7 +99,7 @@ def apply_post_processing_by_wo_summary(
         The geographic area of interest, as a string. Example: "Global".
     mappingperiod : str
         The mapping period, as a string. Example: "20200301-20200430".
-    wofs_summary_product_name : str
+    wofs_summary_name : str
         The name of the WOfS summary product.
 
     Returns:
@@ -109,7 +109,7 @@ def apply_post_processing_by_wo_summary(
     """
 
     wofs_summary = bc_data_loading.load_wofs_summary_ds(
-        odc_dc, gpgon, mappingperiod, wofs_summary_product_name
+        odc_dc, gpgon, mappingperiod, wofs_summary_name
     )
 
     wofs_summary_frequency = wofs_summary.frequency
@@ -251,8 +251,8 @@ def generate_bc_result(
     ard, geomed = bc_data_loading.load_reference_data(
         odc_dc,
         hnrs_dc,
-        bc_processing_task.input_products.ard_product_names,
-        bc_processing_task.input_products.geomed,
+        bc_processing_task.input_products.ard_names,
+        bc_processing_task.input_products.geomed_name,
         bc_processing_task.input_products.input_ard_bands,
         bc_processing_task.input_products.input_gm_bands,
         (bc_processing_task.period_start, bc_processing_task.period_end),
@@ -267,7 +267,7 @@ def generate_bc_result(
     logger.info("Begin to load mapping data")
     mapping_ard = bc_data_loading.load_mapping_data(
         odc_dc,
-        bc_processing_task.input_products.ard_product_names,
+        bc_processing_task.input_products.ard_names,
         bc_processing_task.input_products.input_ard_bands,
         (
             bc_processing_task.mapping_period_start,

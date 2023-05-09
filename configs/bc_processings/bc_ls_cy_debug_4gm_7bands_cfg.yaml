@@ -2,9 +2,9 @@ output_folder: s3://dea-public-data-dev/projects/burn_cube/debug/4gm-7bands
 
 input_products:
   platform: ls
-  geomed: ga_ls8c_nbart_gm_4cyear_2016
-  wofs_summary: ga_ls_wo_fq_cyear_3
-  ard_product_names:
+  geomed_name: ga_ls8c_nbart_gm_4cyear_2016
+  wofs_summary_name: ga_ls_wo_fq_cyear_3
+  ard_names:
     - ga_ls8c_ard_3
   input_ard_bands:
     - nbart_red

@@ -24,7 +24,7 @@ def load_geomed_ds(
     hnrs_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
     period: Tuple[str, str],
-    geomed_product_name: str,
+    geomed_name: str,
     geomed_bands: List[str],
 ) -> xr.Dataset:
     """
@@ -37,7 +37,7 @@ def load_geomed_ds(
             A geometry that represents the region of interest.
         period : tuple of str
             A tuple of two strings representing the start and end date of the time period.
-        geomed_product_name : str
+        geomed_name : str
             The name of the GeoMAD product to be loaded.
         geomed_bands : list of str
             A list of strings representing the names of the bands to be loaded.
@@ -48,7 +48,7 @@ def load_geomed_ds(
 
     """
     geomed = hnrs_dc.load(
-        geomed_product_name,
+        geomed_name,
         time=period[0],
         geopolygon=gpgon,
         output_crs="EPSG:3577",
@@ -65,7 +65,7 @@ def load_ard_ds(
     odc_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
     period: Tuple[str, str],
-    ard_product_names: List[str],
+    ard_names: List[str],
     ard_bands: List[str],
     platform: str,
 ) -> xr.Dataset:
@@ -79,7 +79,7 @@ def load_ard_ds(
             Spatial extent for loading data.
         period : Tuple[str, str]
             Start and end dates for the data, in "YYYY-MM-DD" format.
-        ard_product_names : List[str]
+        ard_names : List[str]
             Names of the ARD products to load.
         ard_bands : List[str]
             Names of the measurement bands to load.
@@ -97,7 +97,7 @@ def load_ard_ds(
 
     ard = dea_tools.datahandling.load_ard(
         dc=odc_dc,
-        products=ard_product_names,
+        products=ard_names,
         cloud_mask=cloud_mask,
         measurements=ard_bands,
         geopolygon=gpgon,
@@ -118,7 +118,7 @@ def load_wofs_summary_ds(
     odc_dc: datacube.Datacube,
     gpgon: datacube.utils.geometry.Geometry,
     mappingperiod: Tuple[str, str],
-    wofs_summary_product_name: str,
+    wofs_summary_name: str,
 ) -> xr.Dataset:
     """
     Load the WOfS summary data for a given region and time period.
@@ -130,14 +130,14 @@ def load_wofs_summary_ds(
             Polygon of region of interest.
         mappingperiod : Tuple[str, str]
             Time period to load data for.
-        wofs_summary_product_name : str
+        wofs_summary_name : str
             Name of the WOfS summary product to load.
 
     Returns:
         xr.Dataset: The loaded WOfS summary data.
     """
     wofs_summary = odc_dc.load(
-        wofs_summary_product_name,
+        wofs_summary_name,
         time=mappingperiod[0],
         geopolygon=gpgon,
         resolution=(-30, 30),
@@ -151,8 +151,8 @@ def load_wofs_summary_ds(
 def load_reference_data(
     odc_dc: datacube.Datacube,
     hnrs_dc: datacube.Datacube,
-    ard_product_names: List[str],
-    geomed_product_name: str,
+    ard_names: List[str],
+    geomed_name: str,
     ard_bands: List[str],
     geomed_bands: List[str],
     period: Tuple[str, str],
@@ -167,9 +167,9 @@ def load_reference_data(
             Datacube object for loading ARD data.
         hnrs_dc : datacube.Datacube
             Datacube object for loading geomedian data.
-        ard_product_names : List[str]
+        ard_names : List[str]
             List of product names to use for loading ARD data.
-        geomed_product_name : str
+        geomed_name : str
             Name of the product to use for loading geomedian data.
         ard_bands : List[str]
             List of band names to load from ARD data.
@@ -193,7 +193,7 @@ def load_reference_data(
         odc_dc,
         gpgon,
         period,
-        ard_product_names,
+        ard_names,
         ard_bands,
         platform,
     )
@@ -201,7 +201,7 @@ def load_reference_data(
     ard = ard.ard
 
     # Load geomedian data
-    geomed = load_geomed_ds(hnrs_dc, gpgon, period, geomed_product_name, geomed_bands)
+    geomed = load_geomed_ds(hnrs_dc, gpgon, period, geomed_name, geomed_bands)
 
     geomed = geomed.geomedian
 
@@ -215,7 +215,7 @@ def load_reference_data(
 @helper.log_execution_time
 def load_mapping_data(
     odc_dc: datacube.Datacube,
-    ard_product_names: List[str],
+    ard_names: List[str],
     ard_bands: List[str],
     mappingperiod: Tuple[str, str],
     gpgon: datacube.utils.geometry.Geometry,
@@ -228,7 +228,7 @@ def load_mapping_data(
     ----------
     odc_dc : datacube.Datacube
         Datacube object for loading data.
-    ard_product_names : List[str]
+    ard_names : List[str]
         A list of product names to load as ARD.
     ard_bands : List[str]
         A list of band names to load.
@@ -248,7 +248,7 @@ def load_mapping_data(
         odc_dc,
         gpgon,
         mappingperiod,
-        ard_product_names,
+        ard_names,
         ard_bands,
         platform,
     )

@@ -100,9 +100,9 @@ def check_s3_file_exists(s3_file_uri: str) -> bool:
         True if the file exists, False otherwise.
     """
 
-    bucket_name, file_key = extract_s3_details(s3_file_uri)
+    s3_bucket_name, s3_object_key = extract_s3_details(s3_file_uri)
 
-    if bucket_name is None or file_key is None:
+    if s3_bucket_name is None or s3_object_key is None:
         error_message = f"Illegal S3 URI: {s3_file_uri}"
         logger.error(error_message)
         return False
@@ -110,7 +110,7 @@ def check_s3_file_exists(s3_file_uri: str) -> bool:
     s3 = boto3.client("s3")
 
     try:
-        s3.head_object(Bucket=bucket_name, Key=file_key)
+        s3.head_object(Bucket=s3_bucket_name, Key=s3_object_key)
     except botocore.exceptions.ClientError as e:
         if e.response["Error"]["Code"] == "404":
             return False

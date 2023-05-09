@@ -67,10 +67,12 @@ def generate_output_filenames(
         f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
     )
 
-    local_file_path = bc_output_file_path.split("/")[-1]
-    bucket_name, file_key = helper.extract_s3_details(f"{output}/{bc_output_file_path}")
+    local_file_name = bc_output_file_path.split("/")[-1]
+    s3_bucket_name, s3_object_key = helper.extract_s3_details(
+        f"{output}/{bc_output_file_path}"
+    )
 
-    return local_file_path, file_key, bucket_name
+    return local_file_name, s3_object_key, s3_bucket_name
 
 
 def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
@@ -290,23 +292,23 @@ def _get_gpgon(
 @dataclass
 class BurnCubeInputProducts:
     platform: str
-    geomed: str
-    wofs_summary: str
-    ard_product_names: List[str]
+    geomed_name: str
+    wofs_summary_name: str
+    ard_names: List[str]
     input_ard_bands: List[str]
     input_gm_bands: List[str]
 
     def validate(self):
         if not isinstance(self.platform, str):
             raise ValueError("platform must be a string")
-        if not isinstance(self.geomed, str):
+        if not isinstance(self.geomed_name, str):
             raise ValueError("geomed must be a string")
-        if not isinstance(self.wofs_summary, str):
+        if not isinstance(self.wofs_summary_name, str):
             raise ValueError("wofs_summary must be a string")
-        if not isinstance(self.ard_product_names, list) or not all(
-            isinstance(name, str) for name in self.ard_product_names
+        if not isinstance(self.ard_names, list) or not all(
+            isinstance(name, str) for name in self.ard_names
         ):
-            raise ValueError("ard_product_names must be a tuple of strings")
+            raise ValueError("ard_names must be a tuple of strings")
         if not isinstance(self.input_ard_bands, list) or not all(
             isinstance(band, str) for band in self.input_ard_bands
         ):
@@ -318,12 +320,16 @@ class BurnCubeInputProducts:
 
 
 @dataclass
-class BurnCubeProduct:
+class BurnCubeOutputProduct:
     name: str
     short_name: str
     version: str
     product_family: str
     bands: List[str]
+    OUTPUT_EXT: str = "GeoTIFF"
+    PRODUCER: str = "ga.gov.au"
+    MATURITY: str = "final"
+    COLLECTION_NUM: int = 3
 
     def validate(self):
         if not isinstance(self.name, str):
@@ -342,17 +348,27 @@ class BurnCubeProduct:
 
 @dataclass
 class BurnCubeProcessingTask:
+    """
+    Data class representing a Burn Cube filter task.
+    """
+
+    title: str
     output_folder: str
-    ancillary_folder: str
+    ancillary_folder: str  # always under self.output_folder
     input_products: BurnCubeInputProducts
-    product: BurnCubeProduct
+    output_product: BurnCubeOutputProduct
     task_id: str
     region_id: str
     task_table: str
-    local_file_path: str = field(init=False, repr=False)
-    s3_key_path: str = field(init=False, repr=False)
-    s3_file_path: str = field(init=False, repr=False)
-    bucket_name: str = field(init=False, repr=False)
+
+    # local_file_name: burn cube output file name, end with .nc
+    local_file_name: str = field(init=False, repr=False)
+    s3_bucket_name: str = field(init=False, repr=False)
+    s3_object_key: str = field(init=False, repr=False)
+
+    # s3_file_uri: burn cube output file S3 URI
+    s3_file_uri: str = field(init=False, repr=False)
+
     period_start: str = field(init=False, repr=False)
     period_end: str = field(init=False, repr=False)
     mapping_period_start: str = field(init=False, repr=False)
@@ -367,11 +383,18 @@ class BurnCubeProcessingTask:
     mapping_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
 
     def __post_init__(self):
+        """
+        Perform post-initialization tasks.
+
+        This method generates output filenames, sets ancillary folder,
+        and retrieves task processing periods based on task ID and task table.
+        It also retrieves geometric information for the given region ID.
+        """
         # Generate output filenames for the task
         (
-            self.local_file_path,
-            self.s3_key_path,
-            self.bucket_name,
+            self.local_file_name,
+            self.s3_object_key,
+            self.s3_bucket_name,
         ) = generate_output_filenames(
             self.output_folder,
             self.task_id,
@@ -379,9 +402,11 @@ class BurnCubeProcessingTask:
             self.input_products.platform,
         )
 
+        self.title = self.local_file_name.replace(".nc", "")
+
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
-        self.s3_file_path = f"{self.bucket_name}/{self.s3_key_path}"
+        self.s3_file_uri = f"{self.s3_bucket_name}/{self.s3_object_key}"
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -419,7 +444,7 @@ class BurnCubeProcessingTask:
             )
 
         self.input_products.validate()
-        self.product.validate()
+        self.output_product.validate()
 
     def validate_data(self):
         # The following variables passed by K8s Pod manifest
@@ -445,7 +470,7 @@ class BurnCubeProcessingTask:
         )
 
         self.geomed_datasets = hnrs_dc.find_datasets(
-            product=self.input_products.geomed,
+            product=self.input_products.geomed_name,
             geopolygon=self.gpgon,
             time=self.period_start,
         )
@@ -456,7 +481,7 @@ class BurnCubeProcessingTask:
             )
 
         self.wofs_datasets = odc_dc.find_datasets(
-            product=self.input_products.wofs_summary,
+            product=self.input_products.wofs_summary_name,
             geopolygon=self.gpgon,
             time=self.mapping_period_start,
         )
@@ -467,7 +492,7 @@ class BurnCubeProcessingTask:
             )
 
         self.ref_ard_datasets = odc_dc.find_datasets(
-            product=self.input_products.ard_product_names,
+            product=self.input_products.ard_names,
             geopolygon=self.gpgon,
             time=(self.period_start, self.period_end),
         )
@@ -478,7 +503,7 @@ class BurnCubeProcessingTask:
             )
 
         self.mapping_ard_datasets = odc_dc.find_datasets(
-            product=self.input_products.ard_product_names,
+            product=self.input_products.ard_names,
             geopolygon=self.gpgon,
             time=(self.mapping_period_start, self.mapping_period_end),
         )
@@ -494,11 +519,11 @@ class BurnCubeProcessingTask:
             "task_id": self.task_id,
             "period": (self.period_start, self.period_end),
             "mappingperiod": (self.mapping_period_start, self.mapping_period_end),
-            "geomed_product_name": self.input_products.geomed,
-            "wofs_summary_product_name": self.input_products.wofs_summary,
-            "ard_product_names": self.input_products.ard_product_names,
+            "geomed_name": self.input_products.geomed_name,
+            "wofs_summary_name": self.input_products.wofs_summary_name,
+            "ard_names": self.input_products.ard_names,
             "region_id": self.region_id,
-            "output": self.s3_file_path,
+            "output": self.s3_file_uri,
             "task_table": self.task_table,
             "DEA Burn Cube": version,
             "summary_datasets": [e.metadata_doc["label"] for e in self.geomed_datasets]
@@ -509,13 +534,13 @@ class BurnCubeProcessingTask:
 
         logger.info(
             "Upload processing log file %s in s3.",
-            f"s3://{self.bucket_name}/{self.s3_key_path.replace('.nc', '.json')}",
+            f"s3://{self.s3_bucket_name}/{self.s3_object_key.replace('.nc', '.json')}",
         )
 
         io.upload_dict_to_s3(
             processing_log,
-            self.bucket_name,
-            self.s3_key_path.replace(".nc", ".json"),
+            self.s3_bucket_name,
+            self.s3_object_key.replace(".nc", ".json"),
         )
 
     @classmethod
@@ -524,13 +549,13 @@ class BurnCubeProcessingTask:
         cfg = helper.load_yaml_remote(cfg_url)
 
         input_products = BurnCubeInputProducts(**cfg["input_products"])
-        product = BurnCubeProduct(**cfg["product"])
+        output_product = BurnCubeOutputProduct(**cfg["product"])
 
         return cls(
             output_folder=cfg["output_folder"],
             task_table=cfg["task_table"],
             input_products=input_products,
-            product=product,
+            output_product=output_product,
             task_id=task_id,
             region_id=region_id,
         )
@@ -548,9 +573,7 @@ class BurnCubeProcessingTask:
 
         properties: Dict[str, Any] = {}
 
-        properties[
-            "title"
-        ] = f"BurnMapping-{self.input_products.platform}-{self.task_id}-{self.region_id}"
+        properties["title"] = self.title
         properties["dtr:start_datetime"] = helper.format_datetime(
             self.mapping_period_start
         )
@@ -559,7 +582,7 @@ class BurnCubeProcessingTask:
             datetime.datetime.utcnow(), timespec="seconds"
         )
         properties["odc:region_code"] = self.region_id
-        properties["odc:product"] = self.product.name
+        properties["odc:product"] = self.output_product.name
         properties["instrument"] = list(
             itertools.chain(
                 *[
@@ -572,16 +595,16 @@ class BurnCubeProcessingTask:
         properties["platform"] = "_".join(
             sorted({e.metadata.platform for e in input_datasets})
         )
-        properties["odc:file_format"] = "GeoTIFF"
-        properties["odc:product_family"] = self.product.product_family
-        properties["odc:producer"] = "ga.gov.au"
-        properties["odc:dataset_version"] = self.product.version
-        properties["dea:dataset_maturity"] = "final"
-        properties["odc:collection_number"] = 3
+        properties["odc:file_format"] = self.output_product.OUTPUT_EXT
+        properties["odc:product_family"] = self.output_product.product_family
+        properties["odc:producer"] = self.output_product.PRODUCER
+        properties["odc:dataset_version"] = self.output_product.version
+        properties["dea:dataset_maturity"] = self.output_product.MATURITY
+        properties["odc:collection_number"] = self.output_product.COLLECTION_NUM
 
         uuid = odc_uuid(
-            self.product.name,
-            self.product.version,
+            self.output_product.name,
+            self.output_product.version,
             sources=[str(e.id) for e in input_datasets],
             tile=self.region_id,
             time=str((self.mapping_period_start, self.mapping_period_end)),
@@ -595,7 +618,7 @@ class BurnCubeProcessingTask:
                 tzinfo=timezone.utc
             ),
             properties=properties,
-            collection=self.product.name,
+            collection=self.output_product.name,
         )
 
         ProjectionExtension.add_to(item)
@@ -612,9 +635,9 @@ class BurnCubeProcessingTask:
         )
 
         # Add all the assets
-        for band_name in self.product.bands:
+        for band_name in self.output_product.bands:
             asset = pystac.Asset(
-                href=f"BurnMapping-{self.input_products.platform}-{self.task_id}-{self.region_id}-{band_name}.tif",
+                href=f"{self.title}-{band_name}.tif",
                 media_type="image/tiff; application=geotiff",
                 roles=["data"],
                 title=band_name,
@@ -636,19 +659,17 @@ class BurnCubeProcessingTask:
 
         stac_metadata_path = (
             "s3://"
-            + self.bucket_name
+            + self.s3_bucket_name
             + "/"
-            + self.s3_key_path.replace(".nc", ".stac-item.json")
+            + self.s3_object_key.replace(".nc", ".stac-item.json")
         )
-
-        print("stac_metadata_path", stac_metadata_path)
 
         # Add links
         item.links.append(
             pystac.Link(
                 rel="product_overview",
                 media_type="application/json",
-                target=f"https://explorer.dea.ga.gov.au/product/{self.product.name}",
+                target=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
             )
         )
 
@@ -656,7 +677,7 @@ class BurnCubeProcessingTask:
             pystac.Link(
                 rel="collection",
                 media_type="application/json",
-                target=f"https://explorer.dea.ga.gov.au/stac/collections/{self.product.name}",
+                target=f"https://explorer.dea.ga.gov.au/stac/collections/{self.output_product.name}",
             )
         )
 
@@ -685,8 +706,8 @@ class BurnCubeProcessingTask:
 
         io.upload_dict_to_s3(
             stac_metadata,
-            self.bucket_name,
-            self.s3_key_path.replace(".nc", ".stac-item.json"),
+            self.s3_bucket_name,
+            self.s3_object_key.replace(".nc", ".stac-item.json"),
         )
 
 
@@ -906,11 +927,11 @@ class BurnCubeFilterTask:
         for region_index in region_gdf.index:
             region_id = region_gdf.region_code[region_index]
 
-            _, s3_key_path, bucket_name = generate_output_filenames(
+            _, s3_object_key, s3_bucket_name = generate_output_filenames(
                 self.output_folder, self.task_id, region_id, self.platform
             )
 
-            if not helper.check_s3_file_exists(f"{bucket_name}/{s3_key_path}"):
+            if not helper.check_s3_file_exists(f"{s3_bucket_name}/{s3_object_key}"):
                 not_run_regions.append(region_id)
 
         not_run_geojson = region_gdf[

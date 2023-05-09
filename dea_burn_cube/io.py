@@ -20,13 +20,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def upload_dict_to_s3(dictionary: Dict, bucket_name: str, file_name: str):
+def upload_dict_to_s3(dictionary: Dict, s3_bucket_name: str, file_name: str):
     """
     Uploads a Python dictionary as a JSON file to AWS S3.
 
     Args:
         dictionary: A Python dictionary to upload as a JSON file.
-        bucket_name: The name of the S3 bucket to upload the JSON file to.
+        s3_bucket_name: The name of the S3 bucket to upload the JSON file to.
         file_name: The name to use for the uploaded JSON file in S3.
 
     """
@@ -36,17 +36,17 @@ def upload_dict_to_s3(dictionary: Dict, bucket_name: str, file_name: str):
 
     # Upload the JSON string to S3
     try:
-        s3.Object(bucket_name, file_name).put(Body=json_string)
+        s3.Object(s3_bucket_name, file_name).put(Body=json_string)
     except Exception:
         logger.warning("Cannot upload the file to: %s", file_name)
 
 
-def upload_object_to_s3(local_file_path: str, s3_uri: str) -> None:
+def upload_object_to_s3(local_file_name: str, s3_uri: str) -> None:
     """
     Uploads a local file to an S3 bucket.
 
     Args:
-        local_file_path: The path of the local file to upload.
+        local_file_name: The path of the local file to upload.
         s3_uri: The S3 URI where the file will be uploaded.
 
     Returns:
@@ -57,7 +57,7 @@ def upload_object_to_s3(local_file_path: str, s3_uri: str) -> None:
 
     s3_bucket_name, s3_object_key = helper.extract_s3_details(s3_uri)
 
-    with open(local_file_path, "rb") as f:
+    with open(local_file_name, "rb") as f:
         s3.upload_fileobj(
             f,
             s3_bucket_name,
@@ -67,18 +67,18 @@ def upload_object_to_s3(local_file_path: str, s3_uri: str) -> None:
 
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs: xr.Dataset,
-    local_file_path: str,
+    local_file_name: str,
     object_key: str,
-    bucket_name: str,
+    s3_bucket_name: str,
 ) -> None:
     """
     Saves burn cube result as netCDF file, converts each band to a GeoTIFF and uploads the files to an S3 bucket.
 
     Args:
         burn_cube_result_apply_wofs: An XArray Dataset object representing the result of the burn cube analysis.
-        local_file_path: A string representing the path to save the local netCDF file.
+        local_file_name: A string representing the path to save the local netCDF file.
         object_key: A string representing the target S3 bucket and prefix where the files will be uploaded.
-        bucket_name: A string representing the name of the S3 bucket.
+        s3_bucket_name: A string representing the name of the S3 bucket.
 
     Returns:
         None.
@@ -99,12 +99,12 @@ def result_file_saving_and_uploading(
     }  # compression
 
     # this will save it in the current working directory
-    burn_cube_result_apply_wofs.to_netcdf(local_file_path, encoding=encoding, mode="w")
+    burn_cube_result_apply_wofs.to_netcdf(local_file_name, encoding=encoding, mode="w")
 
     s3 = boto3.client("s3")
 
-    with open(local_file_path, "rb") as f:
-        s3.upload_fileobj(f, bucket_name, object_key)
+    with open(local_file_name, "rb") as f:
+        s3.upload_fileobj(f, s3_bucket_name, object_key)
 
     # use to_cog feature to convert each band from XArray.Dataset to COG
     for band, _ in burn_cube_result_apply_wofs.data_vars.items():
@@ -113,14 +113,14 @@ def result_file_saving_and_uploading(
 
         da_output = ds_output.to_array()
 
-        local_tiff_file = local_file_path.replace(".nc", f"-{band.lower()}.tif")
+        local_tiff_file = local_file_name.replace(".nc", f"-{band.lower()}.tif")
 
         write_cog(geo_im=da_output, fname=local_tiff_file, overwrite=True)
 
         with open(local_tiff_file, "rb") as f:
             s3.upload_fileobj(
                 f,
-                bucket_name,
+                s3_bucket_name,
                 object_key.replace(".nc", f"-{band.lower()}.tif"),
             )
 
