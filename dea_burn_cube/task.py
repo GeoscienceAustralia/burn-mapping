@@ -750,6 +750,7 @@ class BurnCubeFilterTask:
         process_cfg = helper.load_yaml_remote(process_cfg_url)
 
         self.task_id = task_id
+        self.task_table = process_cfg["task_table"]
         self.output_folder = process_cfg["output_folder"]
         self.platform = process_cfg["input_products"]["platform"]
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
