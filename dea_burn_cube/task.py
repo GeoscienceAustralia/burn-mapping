@@ -360,6 +360,7 @@ class BurnCubeProcessingTask:
     task_id: str
     region_id: str
     task_table: str
+    stac_metadata_path: str
 
     # local_file_name: burn cube output file name, end with .nc
     local_file_name: str = field(init=False, repr=False)
@@ -407,6 +408,7 @@ class BurnCubeProcessingTask:
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
         self.s3_file_uri = f"{self.s3_bucket_name}/{self.s3_object_key}"
+        self.stac_metadata_path = self.s3_file_uri.replace(".nc", ".stac-item.json")
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -657,13 +659,6 @@ class BurnCubeProcessingTask:
 
             item.add_asset(band_name, asset=asset)
 
-        stac_metadata_path = (
-            "s3://"
-            + self.s3_bucket_name
-            + "/"
-            + self.s3_object_key.replace(".nc", ".stac-item.json")
-        )
-
         # Add links
         item.links.append(
             pystac.Link(
@@ -693,7 +688,7 @@ class BurnCubeProcessingTask:
             pystac.Link(
                 rel="self",
                 media_type="application/json",
-                target=stac_metadata_path,
+                target=self.stac_metadata_path,
             )
         )
 
@@ -701,7 +696,7 @@ class BurnCubeProcessingTask:
 
         logger.info(
             "Upload STAC metadata file %s in s3.",
-            stac_metadata_path,
+            self.stac_metadata_path,
         )
 
         io.upload_dict_to_s3(
@@ -841,7 +836,7 @@ class BurnCubeFilterTask:
         region_gdf = gpd.read_file(region_list_s3_path)
         region_gdf = region_gdf.to_crs(epsg="3577")
 
-        logger.info("Filter  %s  by Ocean Mask", region_list_s3_path)
+        logger.info("Filter %s by Ocean Mask", region_list_s3_path)
 
         ocean_mask = gpd.read_file(self.ocean_mask_path)
 
@@ -857,51 +852,51 @@ class BurnCubeFilterTask:
                     filter_by_ocean_mask.append(region_id)
                     break
 
-            region_gdf = region_gdf[
-                region_gdf["region_code"].isin(filter_by_ocean_mask)
-            ].reindex()
+        region_gdf = region_gdf[
+            region_gdf["region_code"].isin(filter_by_ocean_mask)
+        ].reindex()
 
-            logger.info(
-                "The number of region changes to %s after Ocean Mask filter",
-                str(len(region_gdf)),
-            )
+        logger.info(
+            "The number of region changes to %s after Ocean Mask filter",
+            str(len(region_gdf)),
+        )
 
-            # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
-            # also the geometry are always Polygon
-            logger.info("Filter regions by Hot Spot %s", self.hotspot_csv_s3_uri)
+        # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
+        # also the geometry are always Polygon
+        logger.info("Filter regions by Hot Spot %s", self.hotspot_csv_s3_uri)
 
-            hotspot_df = pd.read_csv(self.hotspot_csv_s3_uri)
-            latitude = hotspot_df.latitude.values
-            longitude = hotspot_df.longitude.values
+        hotspot_df = pd.read_csv(self.hotspot_csv_s3_uri)
+        latitude = hotspot_df.latitude.values
+        longitude = hotspot_df.longitude.values
 
-            reverse_transformer = pyproj.Transformer.from_crs("EPSG:4283", "EPSG:3577")
-            easting, northing = reverse_transformer.transform(latitude, longitude)
+        reverse_transformer = pyproj.Transformer.from_crs("EPSG:4283", "EPSG:3577")
+        easting, northing = reverse_transformer.transform(latitude, longitude)
 
-            patch = [
-                Point(easting[i], northing[i]).buffer(4000)
-                for i in range(0, len(hotspot_df))
-            ]
-            hotspot_polygons = unary_union(patch)
+        patch = [
+            Point(easting[i], northing[i]).buffer(4000)
+            for i in range(0, len(hotspot_df))
+        ]
+        hotspot_polygons = unary_union(patch)
 
-            filter_by_hotspot = []
+        filter_by_hotspot = []
 
-            for region_index in region_gdf.index:
-                region_id = region_gdf.region_code[region_index]
-                region_geometry = region_gdf.geometry[region_index]
-                if region_geometry.intersects(hotspot_polygons):
-                    filter_by_hotspot.append(region_id)
+        for region_index in region_gdf.index:
+            region_id = region_gdf.region_code[region_index]
+            region_geometry = region_gdf.geometry[region_index]
+            if region_geometry.intersects(hotspot_polygons):
+                filter_by_hotspot.append(region_id)
 
-            region_gdf = region_gdf[
-                region_gdf["region_code"].isin(filter_by_hotspot)
-            ].reindex()
+        region_gdf = region_gdf[
+            region_gdf["region_code"].isin(filter_by_hotspot)
+        ].reindex()
 
-            # shuffle the region list to aviod data skew
-            region_gdf = region_gdf.sample(frac=1).reset_index(drop=True)
+        # shuffle the region list to aviod data skew
+        region_gdf = region_gdf.sample(frac=1).reset_index(drop=True)
 
-            logger.info(
-                "The number of region changes to %s  after Hot Spot filter",
-                str(len(region_gdf)),
-            )
+        logger.info(
+            "The number of region changes to %s after Hot Spot filter",
+            str(len(region_gdf)),
+        )
 
         return region_gdf
 

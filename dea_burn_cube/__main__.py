@@ -233,6 +233,15 @@ def burn_cube_add_metadata(
         )
     )
 
+    if not overwrite and helper.check_s3_file_exists(
+        bc_processing_task.stac_metadata_path
+    ):
+        logger.info(
+            "Find metadata file %s in s3, skip it.",
+            bc_processing_task.stac_metadata_path,
+        )
+        sys.exit(0)
+
     try:
         bc_processing_task.validate_cfg()
         bc_processing_task.validate_data()
