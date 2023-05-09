@@ -78,7 +78,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
     ):
         sys.exit(0)
 
-    not_run_geojson = bc_filter_task.filter_by_output()
+    not_run_geojson = bc_filter_task.filter_by_output(overwrite)
 
     not_run_geojson.to_file(
         bc_filter_task.region_list_local_uri.replace(

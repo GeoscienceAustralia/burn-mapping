@@ -409,7 +409,9 @@ class BurnCubeProcessingTask:
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
         self.s3_file_uri = f"{self.s3_bucket_name}/{self.s3_object_key}"
-        self.stac_metadata_path = self.s3_file_uri.replace(".nc", ".stac-item.json")
+        self.stac_metadata_path = (
+            f"s3://{self.s3_file_uri.replace('.nc', '.stac-item.json')}"
+        )
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -756,7 +758,7 @@ class BurnCubeFilterTask:
         self.platform = process_cfg["input_products"]["platform"]
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
-        self.region_list_local_uri = f"{self.task_id}-region.json"
+        self.region_list_local_uri = f"{self.task_id}-regions.json"
         self.region_list_s3_uri = (
             f"{self.ancillary_folder}/{self.region_list_local_uri}"
         )
@@ -902,7 +904,7 @@ class BurnCubeFilterTask:
 
         return region_gdf
 
-    def filter_by_output(self) -> gpd.GeoDataFrame:
+    def filter_by_output(self, overwrite) -> gpd.GeoDataFrame:
         """
         Filter regions by output NetCDF files.
 
@@ -918,21 +920,30 @@ class BurnCubeFilterTask:
         region_gdf = gpd.read_file(self.region_list_s3_uri)
         region_gdf = region_gdf.to_crs(epsg="3577")
 
-        logger.info("Filter %s by output NetCDF files", self.region_list_s3_uri)
-
-        not_run_regions: List[str] = []
-        for region_index in region_gdf.index:
-            region_id = region_gdf.region_code[region_index]
-
-            _, s3_object_key, s3_bucket_name = generate_output_filenames(
-                self.output_folder, self.task_id, region_id, self.platform
+        if overwrite:
+            logger.info(
+                "Overwrite mode, no need filter %s by output NetCDF files",
+                self.region_list_s3_uri,
             )
+            not_run_geojson = region_gdf
+        else:
+            logger.info("Filter %s by output NetCDF files", self.region_list_s3_uri)
 
-            if not helper.check_s3_file_exists(f"s3://{s3_bucket_name}/{s3_object_key}"):
-                not_run_regions.append(region_id)
+            not_run_regions: List[str] = []
+            for region_index in region_gdf.index:
+                region_id = region_gdf.region_code[region_index]
 
-        not_run_geojson = region_gdf[
-            region_gdf["region_code"].isin(not_run_regions)
-        ].reindex()
+                _, s3_object_key, s3_bucket_name = generate_output_filenames(
+                    self.output_folder, self.task_id, region_id, self.platform
+                )
+
+                if not helper.check_s3_file_exists(
+                    f"s3://{s3_bucket_name}/{s3_object_key}"
+                ):
+                    not_run_regions.append(region_id)
+
+            not_run_geojson = region_gdf[
+                region_gdf["region_code"].isin(not_run_regions)
+            ].reindex()
 
         return not_run_geojson
