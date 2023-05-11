@@ -4,6 +4,7 @@ botocore
 click
 datacube==1.8.9
 dea_tools==0.2.8.dev47
+eodatasets3==0.29.7
 fiona==1.8.22
 fsspec
 geopandas
