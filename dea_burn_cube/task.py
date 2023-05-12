@@ -653,7 +653,7 @@ class BurnCubeProcessingTask:
         for band_name in self.output_product.bands:
             dataset_assembler.note_measurement(
                 band_name,
-                f"{self.title}-{band_name}{self.BAND_EXT}",
+                f"{self.title}_{band_name}{self.BAND_EXT}",
                 expand_valid_data=False,
                 grid=GridSpec(
                     shape=self.geobox.shape,
@@ -907,10 +907,10 @@ class BurnCubeFilterTask:
 
     def filter_by_output(self, overwrite) -> gpd.GeoDataFrame:
         """
-        Filter regions by output NetCDF files.
+        Filter regions by output odc metadata files.
 
         Returns:
-            A GeoDataFrame containing the regions that do not have corresponding NetCDF files in S3.
+            A GeoDataFrame containing the regions that do not have corresponding odc metadata files in S3.
         """
 
         _ = s3fs.S3FileSystem(anon=True)
@@ -923,12 +923,12 @@ class BurnCubeFilterTask:
 
         if overwrite:
             logger.info(
-                "Overwrite mode, no need filter %s by output NetCDF files",
+                "Overwrite mode, no need filter %s by output odc metadata files",
                 self.region_list_s3_uri,
             )
             not_run_geojson = region_gdf
         else:
-            logger.info("Filter %s by output NetCDF files", self.region_list_s3_uri)
+            logger.info("Filter %s by output odc metadata files", self.region_list_s3_uri)
 
             not_run_regions: List[str] = []
             for region_index in region_gdf.index:
