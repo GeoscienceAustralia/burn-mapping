@@ -79,7 +79,7 @@ def result_file_saving_and_uploading(
 
         da_output = ds_output.to_array()
 
-        local_tiff_file = object_title + f"-{band.lower()}.tif"
+        local_tiff_file = object_title + f"_{band.lower()}.tif"
 
         write_cog(geo_im=da_output, fname=local_tiff_file, overwrite=True)
 
@@ -87,10 +87,10 @@ def result_file_saving_and_uploading(
             s3.upload_fileobj(
                 f,
                 s3_bucket_name,
-                object_key + f"-{band.lower()}.tif",
+                object_key + f"_{band.lower()}.tif",
             )
 
             logger.info(
                 "Upload GeoTiff file: %s",
-                object_key + f"-{band.lower()}.tif",
+                object_key + f"_{band.lower()}.tif",
             )

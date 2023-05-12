@@ -928,7 +928,9 @@ class BurnCubeFilterTask:
             )
             not_run_geojson = region_gdf
         else:
-            logger.info("Filter %s by output odc metadata files", self.region_list_s3_uri)
+            logger.info(
+                "Filter %s by output odc metadata files", self.region_list_s3_uri
+            )
 
             not_run_regions: List[str] = []
             for region_index in region_gdf.index:
