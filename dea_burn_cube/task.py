@@ -73,10 +73,8 @@ def generate_output_filenames(
 
     """
     time_str = task_to_str(task_id, task_table)
-    title = f"{product_name}-{platform}-{region_id}-{task_id}_final"
-    bc_output_file_path = (
-        f"{product_name}/{product_version}/{region_id[:3]}/{region_id[3:]}/{title}"
-    )
+    title = f"{product_name}-{platform}-{region_id}-{time_str}_final"
+    bc_output_file_path = f"{product_name}/{product_version}/{region_id[:3]}/{region_id[3:]}/{time_str}/{title}"
 
     s3_bucket_name, s3_object_key = helper.extract_s3_details(
         f"{output}/{bc_output_file_path}"
@@ -429,7 +427,7 @@ class BurnCubeProcessingTask:
             self.input_products.platform,
             self.output_product.name,
             self.output_product.version,
-            self.generate_output_filenames,
+            self.task_table,
         )
 
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
