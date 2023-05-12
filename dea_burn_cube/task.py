@@ -48,7 +48,13 @@ ODC_NS = UUID("6f34c6f4-13d6-43c0-8e4e-42b6c13203af")
 
 
 def generate_output_filenames(
-    output: str, task_id: str, region_id: str, platform: str
+    output: str,
+    task_id: str,
+    region_id: str,
+    platform: str,
+    product_name: str,
+    product_version: str,
+    task_table: str,
 ) -> Tuple[str, str, str]:
     """
     Generate local and target file paths for output file.
@@ -58,24 +64,29 @@ def generate_output_filenames(
         task_id: A string representing the ID of the task.
         region_id: A string representing the ID of the region.
         platform: A string representing the platform, e.g. s2 or ls.
+        product_name: A string representing the product name.
+        product_version: A string representing the version of product.
+        task_table: The name of the CSV file containing the task information.
 
     Returns:
         A tuple of strings representing the local file path and target file path.
 
-    Example:
-        >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
-        ('BurnMapping-123-ABC', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC')
     """
+    time_str = task_to_str(task_id, task_table)
+    title = f"{product_name}-{platform}-{region_id}-{task_id}_final"
     bc_output_file_path = (
-        f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}"
+        f"{product_name}/{product_version}/{region_id[:3]}/{region_id[3:]}/{title}"
     )
 
-    title = bc_output_file_path.split("/")[-1]
     s3_bucket_name, s3_object_key = helper.extract_s3_details(
         f"{output}/{bc_output_file_path}"
     )
 
     return title, s3_object_key, s3_bucket_name
+
+
+def task_to_str(task_id: str, task_table: str) -> str:
+    return task_to_ranges(task_id, task_table)["Mapping Period Start"] + "--P1Y"
 
 
 def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
@@ -416,6 +427,9 @@ class BurnCubeProcessingTask:
             self.task_id,
             self.region_id,
             self.input_products.platform,
+            self.output_product.name,
+            self.output_product.version,
+            self.generate_output_filenames,
         )
 
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
@@ -557,7 +571,7 @@ class BurnCubeProcessingTask:
         with open(local_proc_info_path, "w") as proc_info_file:
             json.dump(processing_log, proc_info_file, indent=2)
 
-        bc_io.upload_dict_to_s3(local_proc_info_path, self.proc_info_path)
+        bc_io.upload_object_to_s3(local_proc_info_path, self.proc_info_path)
 
     @classmethod
     def from_config(cls, cfg_url: str, task_id: str, region_id: str):
@@ -746,6 +760,8 @@ class BurnCubeFilterTask:
         self.output_folder = process_cfg["output_folder"]
         self.platform = process_cfg["input_products"]["platform"]
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
+        self.product_name = process_cfg["product"]["name"]
+        self.product_version = process_cfg["product"]["version"].replace(".", "-")
 
         self.region_list_local_uri = f"{self.task_id}-regions.json"
         self.region_list_s3_uri = (
@@ -923,7 +939,13 @@ class BurnCubeFilterTask:
                 region_id = region_gdf.region_code[region_index]
 
                 _, s3_object_title, s3_bucket_name = generate_output_filenames(
-                    self.output_folder, self.task_id, region_id, self.platform
+                    self.output_folder,
+                    self.task_id,
+                    region_id,
+                    self.platform,
+                    self.product_name,
+                    self.product_version,
+                    self.task_table,
                 )
 
                 if not helper.check_s3_file_exists(
