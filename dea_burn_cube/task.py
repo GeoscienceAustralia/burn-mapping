@@ -6,6 +6,7 @@ using the DEA Burn Cube.
 
 import calendar
 import datetime
+import io
 import itertools
 import logging
 import math
@@ -13,9 +14,11 @@ import os
 import re
 import shutil
 import sys
+import warnings
 import zipfile
 from dataclasses import dataclass, field
 from datetime import timezone
+from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 from uuid import UUID, uuid5
 
@@ -27,14 +30,17 @@ import pyproj
 import pystac
 import requests
 import s3fs
+from eodatasets3.assemble import DatasetAssembler, serialise
+from eodatasets3.images import GridSpec
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.projection import ProjectionExtension
+from rasterio.crs import CRS
 from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import dea_burn_cube.__version__ as version
-from dea_burn_cube import helper, io
+from dea_burn_cube import bc_io, helper
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -542,7 +548,7 @@ class BurnCubeProcessingTask:
             f"s3://{self.s3_bucket_name}/{self.s3_object_key.replace('.nc', '.json')}",
         )
 
-        io.upload_dict_to_s3(
+        bc_io.upload_dict_to_s3(
             processing_log,
             self.s3_bucket_name,
             self.s3_object_key.replace(".nc", ".json"),
@@ -565,7 +571,194 @@ class BurnCubeProcessingTask:
             region_id=region_id,
         )
 
-    def add_metadata(self):
+    def add_odc_metadata(self) -> str:
+
+        naming_conventions_values = "dea_c3"
+        explorer_path = (
+            f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}"
+        )
+        classifier = "level3"
+        inherit_skip_properties = [
+            "eo:cloud_cover",
+            "fmask:snow",
+            "fmask:cloud",
+            "fmask:water",
+            "fmask:cloud_shadow",
+            "eo:sun_elevation",
+            "eo:sun_azimuth",
+            "gqa:iterative_stddev_x",
+            "gqa:iterative_stddev_y",
+            "gqa:iterative_stddev_xy",
+            "gqa:stddev_xy",
+            "gqa:stddev_x",
+            "gqa:stddev_y",
+            "gqa:mean_xy",
+            "gqa:mean_x",
+            "gqa:mean_y",
+            "gqa:abs_xy",
+            "gqa:abs_x",
+            "gqa:abs_y",
+            "gqa:abs_iterative_mean_y",
+            "gqa:abs_iterative_mean_x",
+            "gqa:abs_iterative_mean_xy",
+            "gqa:iterative_mean_xy",
+            "gqa:iterative_mean_x",
+            "gqa:iterative_mean_y",
+            "gqa:cep90",
+            "landsat:landsat_product_id",
+            "landsat:landsat_scene_id",
+            "landsat:collection_category",
+            "landsat:collection_number",
+            "landsat:wrs_path",
+            "landsat:wrs_row",
+        ]
+
+        dataset_assembler = DatasetAssembler(
+            naming_conventions=naming_conventions_values,
+            dataset_location=Path(explorer_path),
+            allow_absolute_paths=True,
+        )
+
+        # ignore the tons of Inheritable property warnings
+        warnings.simplefilter(action="ignore", category=UserWarning)
+
+        platforms, instruments = ([], [])
+
+        for dataset in self.mapping_ard_datasets:
+
+            source_datasetdoc = serialise.from_doc(
+                dataset.metadata_doc, skip_validation=True
+            )
+            dataset_assembler.add_source_dataset(
+                source_datasetdoc,
+                classifier=classifier,
+                auto_inherit_properties=True,  # it will grab all useful input dataset preperties
+                inherit_geometry=False,
+                inherit_skip_properties=inherit_skip_properties,
+            )
+
+            if "eo:platform" in source_datasetdoc.properties:
+                platforms.append(source_datasetdoc.properties["eo:platform"])
+            if "eo:instrument" in source_datasetdoc.properties:
+                instruments.append(source_datasetdoc.properties["eo:instrument"])
+
+        dataset_assembler.platform = ",".join(sorted(set(platforms)))
+        dataset_assembler.instrument = "_".join(sorted(set(instruments)))
+
+        dataset_assembler.geometry = self.geobox.extent.geom
+
+        dataset_assembler.datetime = helper.format_datetime(self.mapping_period_start)
+        dataset_assembler.properties["dtr:start_datetime"] = helper.format_datetime(
+            self.mapping_period_start
+        )
+        dataset_assembler.properties["dtr:end_datetime"] = helper.format_datetime(
+            self.mapping_period_end
+        )
+
+        # inherit properties from cfg
+        # for (
+        #    product_property_name,
+        #    product_property_value,
+        # ) in self.product.properties.items():
+        #    dataset_assembler.properties[product_property_name] = product_property_value
+
+        dataset_assembler.product_name = self.output_product.name
+        dataset_assembler.dataset_version = self.output_product.version
+        dataset_assembler.region_code = self.region_id
+
+        # set the warning message back
+        warnings.filterwarnings("default")
+
+        dataset_assembler.processed = datetime.datetime.utcnow()
+
+        dataset_assembler.maturity = self.output_product.MATURITY
+        dataset_assembler.collection_number = self.output_product.COLLECTION_NUM
+
+        for band_name in self.output_product.bands:
+            dataset_assembler.note_measurement(
+                band_name,
+                f"{self.title}-{band_name}.tif",
+                expand_valid_data=False,
+                grid=GridSpec(
+                    shape=self.geobox.shape,
+                    transform=self.geobox.transform,
+                    crs=CRS.from_epsg(self.geobox.crs.to_epsg()),
+                ),
+                nodata=-999,
+            )
+
+        # for band, path in self.paths(ext=ext).items():
+        #    # when we pass grid, the eodatasets will not load file from path
+        #    dataset_assembler.note_measurement(
+        #        band,
+        #        path,
+        #        expand_valid_data=False,
+        #        grid=GridSpec(
+        #            shape=self.geobox.shape,
+        #            transform=self.geobox.transform,
+        #            crs=CRS.from_epsg(self.geobox.crs.to_epsg()),
+        #        ),
+        #        nodata=output_dataset[band].nodata
+        #        if "nodata" in output_dataset[band].attrs
+        #        else None,
+        #    )
+
+        dataset_assembler.extend_user_metadata(
+            "input-products", sorted({e.type.name for e in self.mapping_ard_datasets})
+        )
+
+        # dataset_assembler.extend_user_metadata("odc-stats-config", vars(task.product))
+
+        # dataset_assembler.note_software_version(
+        #    "eodatasets3",
+        #    "https://github.com/GeoscienceAustralia/eo-datasets",
+        #    version(eodatasets3),
+        # )
+
+        # dataset_assembler.note_software_version(
+        #    proc.NAME, "https://github.com/GeoscienceAustralia/burn-mapping", proc.VERSION
+        # )
+
+        # if task.product.preview_image_ows_style:
+        #    try:
+        #        dataset_assembler._accessories["thumbnail"] = Path(
+        #            urlparse(odc_file_path.split(".")[0] + "_thumbnail.jpg").path
+        #        ).name
+
+        #        dataset_assembler.note_software_version(
+        #            "datacube-ows",
+        #            "https://github.com/opendatacube/datacube-ows",
+        #            # Just realized the odc-stats does not have version.
+        #            version("datacube_ows"),
+        #        )
+        #    except ImportError as e:
+        #        raise type(e)(
+        #            str(e)
+        #            + '. Please run python -m pip install "odc-stats[ows]" \
+        #                    to setup environment to generate thumbnail.'
+        #        )
+
+        # dataset_assembler._accessories["checksum:sha1"] = Path(
+        #    urlparse(sha1_url).path
+        # ).name
+        # dataset_assembler._accessories["metadata:processor"] = Path(
+        #    urlparse(proc_info_url).path
+        # ).name
+
+        meta = dataset_assembler.to_dataset_doc()
+        # already add all information to dataset_assembler,
+        # now convert to odc and stac metadata format
+
+        # stac_meta = self.get_eo3_stac_meta(task, meta, stac_file_path, odc_file_path)
+
+        meta_stream = io.StringIO("")  # too short, not worth to move to another method.
+        serialise.to_stream(meta_stream, meta)
+        odc_meta = meta_stream.getvalue()  # odc_meta is Python str
+        print(odc_meta)
+
+        # return odc_meta
+
+    def add_stac_metadata(self):
 
         geobox_wgs84 = self.geobox.extent.to_crs(
             "epsg:4326", resolution=math.inf, wrapdateline=True
@@ -702,7 +895,7 @@ class BurnCubeProcessingTask:
             self.stac_metadata_path,
         )
 
-        io.upload_dict_to_s3(
+        bc_io.upload_dict_to_s3(
             stac_metadata,
             self.s3_bucket_name,
             self.s3_object_key.replace(".nc", ".stac-item.json"),

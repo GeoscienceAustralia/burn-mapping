@@ -11,7 +11,7 @@ from multiprocessing import cpu_count
 import click
 
 import dea_burn_cube.__version__
-from dea_burn_cube import bc_data_processing, helper, io, task
+from dea_burn_cube import bc_data_processing, bc_io, helper, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -87,7 +87,7 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
         driver="GeoJSON",
     )
 
-    io.upload_object_to_s3(
+    bc_io.upload_object_to_s3(
         bc_filter_task.region_list_local_uri.replace(
             "-regions.json", "-cleanup-regions.json"
         ),
@@ -143,7 +143,7 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url, overwrite):
 
     region_gdf.to_file(bc_filter_task.region_list_local_uri, driver="GeoJSON")
 
-    io.upload_object_to_s3(
+    bc_io.upload_object_to_s3(
         bc_filter_task.region_list_local_uri, bc_filter_task.region_list_s3_uri
     )
 
@@ -191,9 +191,78 @@ def update_hotspot_data(
     # save the current task hotspot information to its CSV file, and upload to S3 later
     filtered_df.to_csv(bc_filter_task.hotspot_csv_local_uri, index=False)
 
-    io.upload_object_to_s3(
+    bc_io.upload_object_to_s3(
         bc_filter_task.hotspot_csv_local_uri, bc_filter_task.hotspot_csv_s3_uri
     )
+
+
+@main.command(no_args_is_help=True)
+@click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
+    "--region-id",
+    "-r",
+    type=str,
+    default=None,
+    help="REQUIRED. Region id AU-30 Grid.",
+)
+@click.option(
+    "--process-cfg-url",
+    "-p",
+    type=str,
+    default=None,
+    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
+)
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=False,
+    help="Rerun scenes that have already been processed.",
+)
+def burn_cube_add_odc_metadata(
+    task_id,
+    region_id,
+    process_cfg_url,
+    overwrite,
+):
+    logging_setup()
+
+    bc_processing_task: task.BurnCubeProcessingTask = (
+        task.BurnCubeProcessingTask.from_config(
+            cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
+        )
+    )
+
+    if not overwrite and helper.check_s3_file_exists(
+        bc_processing_task.stac_metadata_path
+    ):
+        logger.info(
+            "Find metadata file %s in s3, skip it.",
+            bc_processing_task.stac_metadata_path,
+        )
+        sys.exit(0)
+
+    try:
+        bc_processing_task.validate_cfg()
+        bc_processing_task.validate_data()
+    except ValueError:
+        logger.error(
+            "The setting values in cfg have problem. finish the processing %s",
+            region_id,
+        )
+        sys.exit(0)
+    except task.IncorrectInputDataError:
+        logger.error(
+            "The input datasets have problem. finish the processing %s", region_id
+        )
+        # Not enough data to finish the processing, so stop it here
+        sys.exit(0)
+
+    bc_processing_task.add_odc_metadata()
 
 
 @main.command(no_args_is_help=True)
@@ -263,7 +332,7 @@ def burn_cube_add_metadata(
         sys.exit(0)
 
     bc_processing_task.upload_processing_log()
-    bc_processing_task.add_metadata()
+    bc_processing_task.add_stac_metadata()
 
 
 @main.command(no_args_is_help=True)
@@ -346,7 +415,7 @@ def burn_cube_run(
             n_procs,
         )
 
-        io.result_file_saving_and_uploading(
+        bc_io.result_file_saving_and_uploading(
             burn_cube_result,
             bc_processing_task.local_file_name,
             bc_processing_task.s3_object_key,
@@ -360,7 +429,7 @@ def burn_cube_run(
 
     # then add metadata
     bc_processing_task.upload_processing_log()
-    bc_processing_task.add_metadata()
+    bc_processing_task.add_stac_metadata()
 
 
 if __name__ == "__main__":
