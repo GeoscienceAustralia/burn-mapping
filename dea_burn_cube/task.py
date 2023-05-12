@@ -7,10 +7,8 @@ using the DEA Burn Cube.
 import calendar
 import datetime
 import io
-import itertools
 import json
 import logging
-import math
 import os
 import re
 import shutil
@@ -18,9 +16,8 @@ import sys
 import warnings
 import zipfile
 from dataclasses import dataclass, field
-from datetime import timezone
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 from uuid import UUID, uuid5
 
 import datacube
@@ -29,15 +26,12 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyproj
-import pystac
 import requests
 import s3fs
 from eodatasets3.assemble import DatasetAssembler, serialise
 from eodatasets3.images import GridSpec
 from eodatasets3.scripts.tostac import json_fallback
 from odc.dscache.tools.tiling import parse_gridspec_with_name
-from pystac.extensions.eo import Band, EOExtension
-from pystac.extensions.projection import ProjectionExtension
 from rasterio.crs import CRS
 from shapely.geometry import Point
 from shapely.ops import unary_union
@@ -573,7 +567,7 @@ class BurnCubeProcessingTask:
             region_id=region_id,
         )
 
-    def add_odc_metadata(self):
+    def add_metadata_files(self):
 
         dataset_assembler = DatasetAssembler(
             naming_conventions="dea_c3",
@@ -698,149 +692,6 @@ class BurnCubeProcessingTask:
         bc_io.upload_object_to_s3(
             local_yaml_file,
             f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
-        )
-
-    def add_stac_metadata(self):
-
-        geobox_wgs84 = self.geobox.extent.to_crs(
-            "epsg:4326", resolution=math.inf, wrapdateline=True
-        )
-
-        bbox = geobox_wgs84.boundingbox
-
-        # Note: we only pass mapping ard as Burn Cube upstream data for now
-        input_datasets = self.mapping_ard_datasets
-
-        properties: Dict[str, Any] = {}
-
-        properties["title"] = self.title
-        properties["dtr:start_datetime"] = helper.format_datetime(
-            self.mapping_period_start
-        )
-        properties["dtr:end_datetime"] = helper.format_datetime(self.mapping_period_end)
-        properties["odc:processing_datetime"] = helper.format_datetime(
-            datetime.datetime.utcnow(), timespec="seconds"
-        )
-        properties["odc:region_code"] = self.region_id
-        properties["odc:product"] = self.output_product.name
-        properties["instrument"] = list(
-            itertools.chain(
-                *[
-                    v.lower().split("_")
-                    for v in {e.metadata.instrument for e in input_datasets}
-                ]
-            )
-        )
-        properties["gsd"] = [e.metadata.eo_gsd for e in input_datasets][0]
-        properties["platform"] = "_".join(
-            sorted({e.metadata.platform for e in input_datasets})
-        )
-        properties["odc:file_format"] = self.output_product.OUTPUT_EXT
-        properties["odc:product_family"] = self.output_product.product_family
-        properties["odc:producer"] = self.output_product.PRODUCER
-        properties["odc:dataset_version"] = self.output_product.version
-        properties["dea:dataset_maturity"] = self.output_product.MATURITY
-        properties["odc:collection_number"] = self.output_product.COLLECTION_NUM
-
-        uuid = odc_uuid(
-            self.output_product.name,
-            self.output_product.version,
-            sources=[str(e.id) for e in input_datasets],
-            tile=self.region_id,
-            time=str((self.mapping_period_start, self.mapping_period_end)),
-        )
-
-        item = pystac.Item(
-            id=str(uuid),
-            geometry=geobox_wgs84.json,
-            bbox=[bbox.left, bbox.bottom, bbox.right, bbox.top],
-            datetime=pd.Timestamp(self.mapping_period_start).replace(
-                tzinfo=timezone.utc
-            ),
-            properties=properties,
-            collection=self.output_product.name,
-        )
-
-        ProjectionExtension.add_to(item)
-        proj_ext = ProjectionExtension.ext(item)
-        proj_ext.apply(
-            self.geobox.crs.epsg,
-            transform=self.geobox.transform,
-            shape=self.geobox.shape,
-        )
-
-        # Lineage last
-        item.properties["odc:lineage"] = dict(
-            inputs=[str(e.id) for e in input_datasets]
-        )
-
-        # Add all the assets
-        for band_name in self.output_product.bands:
-            asset = pystac.Asset(
-                href=f"{self.title}-{band_name}.tif",
-                media_type="image/tiff; application=geotiff",
-                roles=["data"],
-                title=band_name,
-            )
-
-            eo = EOExtension.ext(asset)
-            band = Band.create(band_name)
-            eo.apply(bands=[band])
-
-            proj = ProjectionExtension.ext(asset)
-
-            proj.apply(
-                self.geobox.crs.epsg,
-                transform=self.geobox.transform,
-                shape=self.geobox.shape,
-            )
-
-            item.add_asset(band_name, asset=asset)
-
-        # Add links
-        item.links.append(
-            pystac.Link(
-                rel="product_overview",
-                media_type="application/json",
-                target=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
-            )
-        )
-
-        item.links.append(
-            pystac.Link(
-                rel="collection",
-                media_type="application/json",
-                target=f"https://explorer.dea.ga.gov.au/stac/collections/{self.output_product.name}",
-            )
-        )
-
-        item.links.append(
-            pystac.Link(
-                rel="alternative",
-                media_type="text/html",
-                target=f"https://explorer.dea.ga.gov.au/dataset/{str(uuid)}",
-            )
-        )
-
-        item.links.append(
-            pystac.Link(
-                rel="self",
-                media_type="application/json",
-                target=self.stac_metadata_path,
-            )
-        )
-
-        stac_metadata = item.to_dict()
-
-        logger.info(
-            "Upload STAC metadata file %s in s3.",
-            self.stac_metadata_path,
-        )
-
-        bc_io.upload_dict_to_s3(
-            stac_metadata,
-            self.s3_bucket_name,
-            self.s3_object_key.replace(".nc", ".stac-item.json"),
         )
 
 

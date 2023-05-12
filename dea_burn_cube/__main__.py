@@ -223,76 +223,6 @@ def update_hotspot_data(
     default=False,
     help="Rerun scenes that have already been processed.",
 )
-def burn_cube_add_odc_metadata(
-    task_id,
-    region_id,
-    process_cfg_url,
-    overwrite,
-):
-    logging_setup()
-
-    bc_processing_task: task.BurnCubeProcessingTask = (
-        task.BurnCubeProcessingTask.from_config(
-            cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
-        )
-    )
-
-    if not overwrite and helper.check_s3_file_exists(
-        bc_processing_task.stac_metadata_path
-    ):
-        logger.info(
-            "Find metadata file %s in s3, skip it.",
-            bc_processing_task.stac_metadata_path,
-        )
-        sys.exit(0)
-
-    try:
-        bc_processing_task.validate_cfg()
-        bc_processing_task.validate_data()
-    except ValueError:
-        logger.error(
-            "The setting values in cfg have problem. finish the processing %s",
-            region_id,
-        )
-        sys.exit(0)
-    except task.IncorrectInputDataError:
-        logger.error(
-            "The input datasets have problem. finish the processing %s", region_id
-        )
-        # Not enough data to finish the processing, so stop it here
-        sys.exit(0)
-
-    bc_processing_task.upload_processing_log()
-    bc_processing_task.add_odc_metadata()
-
-
-@main.command(no_args_is_help=True)
-@click.option(
-    "--task-id",
-    "-t",
-    type=str,
-    default=None,
-    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
-)
-@click.option(
-    "--region-id",
-    "-r",
-    type=str,
-    default=None,
-    help="REQUIRED. Region id AU-30 Grid.",
-)
-@click.option(
-    "--process-cfg-url",
-    "-p",
-    type=str,
-    default=None,
-    help="REQUIRED. The Path URL to Burn Cube process cfg file as YAML format.",
-)
-@click.option(
-    "--overwrite/--no-overwrite",
-    default=False,
-    help="Rerun scenes that have already been processed.",
-)
 def burn_cube_add_metadata(
     task_id,
     region_id,
@@ -333,7 +263,7 @@ def burn_cube_add_metadata(
         sys.exit(0)
 
     bc_processing_task.upload_processing_log()
-    bc_processing_task.add_stac_metadata()
+    bc_processing_task.add_metadata_files()
 
 
 @main.command(no_args_is_help=True)
