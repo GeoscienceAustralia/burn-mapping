@@ -547,7 +547,7 @@ class BurnCubeProcessingTask:
         bc_io.upload_dict_to_s3(
             processing_log,
             self.s3_bucket_name,
-            self.s3_object_key.replace(".nc", ".proc-info..json"),
+            self.s3_object_key.replace(".nc", ".proc-info.json"),
         )
 
     @classmethod
