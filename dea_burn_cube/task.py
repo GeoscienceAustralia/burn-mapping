@@ -51,7 +51,6 @@ def generate_output_filenames(
     output: str,
     task_id: str,
     region_id: str,
-    platform: str,
     product_name: str,
     product_version: str,
     task_table: str,
@@ -63,7 +62,6 @@ def generate_output_filenames(
         output: A string representing the S3 bucket and prefix where the output file will be stored.
         task_id: A string representing the ID of the task.
         region_id: A string representing the ID of the region.
-        platform: A string representing the platform, e.g. s2 or ls.
         product_name: A string representing the product name.
         product_version: A string representing the version of product.
         task_table: The name of the CSV file containing the task information.
@@ -73,7 +71,7 @@ def generate_output_filenames(
 
     """
     time_str = task_to_str(task_id, task_table)
-    title = f"{product_name}-{platform}-{region_id}-{time_str}_final"
+    title = f"{product_name}_{region_id}_{time_str}_final"
     bc_output_file_path = f"{product_name}/{product_version}/{region_id[:3]}/{region_id[3:]}/{time_str}/{title}"
 
     s3_bucket_name, s3_object_key = helper.extract_s3_details(
@@ -424,7 +422,6 @@ class BurnCubeProcessingTask:
             self.output_folder,
             self.task_id,
             self.region_id,
-            self.input_products.platform,
             self.output_product.name,
             self.output_product.version,
             self.task_table,
@@ -940,7 +937,6 @@ class BurnCubeFilterTask:
                     self.output_folder,
                     self.task_id,
                     region_id,
-                    self.platform,
                     self.product_name,
                     self.product_version,
                     self.task_table,
