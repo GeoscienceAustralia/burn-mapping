@@ -336,6 +336,7 @@ class BurnCubeOutputProduct:
     PRODUCER: str = "ga.gov.au"
     MATURITY: str = "final"
     COLLECTION_NUM: int = 3
+    inherit_skip_properties: List[str]
 
     def validate(self):
         if not isinstance(self.name, str):
@@ -571,50 +572,11 @@ class BurnCubeProcessingTask:
 
     def add_odc_metadata(self):
 
-        naming_conventions_values = "dea_c3"
-        explorer_path = (
-            f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}"
-        )
-        classifier = "ard"
-        inherit_skip_properties = [
-            "eo:cloud_cover",
-            "fmask:snow",
-            "fmask:cloud",
-            "fmask:water",
-            "fmask:cloud_shadow",
-            "eo:sun_elevation",
-            "eo:sun_azimuth",
-            "gqa:iterative_stddev_x",
-            "gqa:iterative_stddev_y",
-            "gqa:iterative_stddev_xy",
-            "gqa:stddev_xy",
-            "gqa:stddev_x",
-            "gqa:stddev_y",
-            "gqa:mean_xy",
-            "gqa:mean_x",
-            "gqa:mean_y",
-            "gqa:abs_xy",
-            "gqa:abs_x",
-            "gqa:abs_y",
-            "gqa:abs_iterative_mean_y",
-            "gqa:abs_iterative_mean_x",
-            "gqa:abs_iterative_mean_xy",
-            "gqa:iterative_mean_xy",
-            "gqa:iterative_mean_x",
-            "gqa:iterative_mean_y",
-            "gqa:cep90",
-            "landsat:landsat_product_id",
-            "landsat:landsat_scene_id",
-            "landsat:collection_category",
-            "landsat:collection_number",
-            "landsat:wrs_path",
-            "landsat:wrs_row",
-            "fmask:clear",
-        ]
-
         dataset_assembler = DatasetAssembler(
-            naming_conventions=naming_conventions_values,
-            dataset_location=Path(explorer_path),
+            naming_conventions="dea_c3",
+            dataset_location=Path(
+                f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}"
+            ),
             allow_absolute_paths=True,
         )
 
@@ -630,10 +592,10 @@ class BurnCubeProcessingTask:
             )
             dataset_assembler.add_source_dataset(
                 source_datasetdoc,
-                classifier=classifier,
+                classifier="ard",
                 auto_inherit_properties=True,  # it will grab all useful input dataset preperties
                 inherit_geometry=False,
-                inherit_skip_properties=inherit_skip_properties,
+                inherit_skip_properties=self.output_product.inherit_skip_properties,
             )
 
             if "eo:platform" in source_datasetdoc.properties:
