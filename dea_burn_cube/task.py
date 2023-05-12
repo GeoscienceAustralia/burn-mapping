@@ -402,7 +402,7 @@ class BurnCubeProcessingTask:
     mapping_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
 
     PROD_INFO_EXT: str = ".proc-info.json"
-    ODC_META_EXT: str = ".odc-metadata.yml"
+    ODC_META_EXT: str = ".odc-metadata.yaml"
     STAC_META_EXT: str = ".stac-item.json"
     BAND_EXT: str = ".tif"
 
@@ -946,7 +946,7 @@ class BurnCubeFilterTask:
                 )
 
                 if not helper.check_s3_file_exists(
-                    f"s3://{s3_bucket_name}/{s3_object_title}.odc-metadata.yml"
+                    f"s3://{s3_bucket_name}/{s3_object_title}.odc-metadata.yaml"
                 ):
                     not_run_regions.append(region_id)
 
