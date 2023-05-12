@@ -698,7 +698,7 @@ class BurnCubeProcessingTask:
         serialise.to_stream(meta_stream, meta)
         odc_meta = meta_stream.getvalue()  # odc_meta is Python str
 
-        local_odc_metadata_path = {self.title} + self.ODC_META_EXT
+        local_odc_metadata_path = self.title + self.ODC_META_EXT
 
         with open(local_odc_metadata_path, "w") as yml_file:
             yml_file.write(odc_meta)
