@@ -8,6 +8,7 @@ import calendar
 import datetime
 import io
 import itertools
+import json
 import logging
 import math
 import os
@@ -23,6 +24,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 from uuid import UUID, uuid5
 
 import datacube
+import eodatasets3.stac as eo3stac
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -32,6 +34,7 @@ import requests
 import s3fs
 from eodatasets3.assemble import DatasetAssembler, serialise
 from eodatasets3.images import GridSpec
+from eodatasets3.scripts.tostac import json_fallback
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.projection import ProjectionExtension
@@ -332,11 +335,11 @@ class BurnCubeOutputProduct:
     version: str
     product_family: str
     bands: List[str]
+    inherit_skip_properties: List[str]
     OUTPUT_EXT: str = "GeoTIFF"
     PRODUCER: str = "ga.gov.au"
     MATURITY: str = "final"
     COLLECTION_NUM: int = 3
-    inherit_skip_properties: List[str]
 
     def validate(self):
         if not isinstance(self.name, str):
@@ -657,8 +660,26 @@ class BurnCubeProcessingTask:
         meta = dataset_assembler.to_dataset_doc()
         # already add all information to dataset_assembler,
         # now convert to odc and stac metadata format
+        stac_meta = eo3stac.to_stac_item(
+            dataset=meta,
+            stac_item_destination_url=f"{self.s3_file_uri.replace('.nc', '.stac-item.json')}",
+            dataset_location=str(Path(self.s3_file_uri).parent),
+            odc_dataset_metadata_url=f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
+            explorer_base_url=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
+        )
+        stac_meta = json.dumps(
+            stac_meta,
+            default=json_fallback,
+            indent=4,
+        )  # stac_meta is Python str
+        local_json_file = f"{self.title}.stac-item.json"
 
-        # stac_meta = self.get_eo3_stac_meta(task, meta, stac_file_path, odc_file_path)
+        with open(local_json_file, "w") as json_file:
+            json_file.write(stac_meta)
+
+        logger.info("Upload STAC metadata to", self.stac_metadata_path)
+
+        bc_io.upload_object_to_s3(local_json_file, self.stac_metadata_path)
 
         meta_stream = io.StringIO("")  # too short, not worth to move to another method.
         serialise.to_stream(meta_stream, meta)
@@ -668,8 +689,9 @@ class BurnCubeProcessingTask:
 
         with open(local_yaml_file, "w") as yml_file:
             yml_file.write(odc_meta)
-        print(
-            "Upload YAML metadata to",
+
+        logger.info(
+            "Upload ODC metadata to",
             f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
         )
 
