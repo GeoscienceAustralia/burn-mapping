@@ -64,18 +64,18 @@ def generate_output_filenames(
 
     Example:
         >>> generate_output_filenames('s3://my-bucket/my-folder', '123', 'ABC')
-        ('BurnMapping-123-ABC.nc', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC.nc')
+        ('BurnMapping-123-ABC', 's3://my-bucket/my-folder/123/ABC/BurnMapping-123-ABC')
     """
     bc_output_file_path = (
-        f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}.nc"
+        f"{task_id}/{region_id}/BurnMapping-{platform}-{task_id}-{region_id}"
     )
 
-    local_file_name = bc_output_file_path.split("/")[-1]
+    title = bc_output_file_path.split("/")[-1]
     s3_bucket_name, s3_object_key = helper.extract_s3_details(
         f"{output}/{bc_output_file_path}"
     )
 
-    return local_file_name, s3_object_key, s3_bucket_name
+    return title, s3_object_key, s3_bucket_name
 
 
 def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
@@ -356,29 +356,34 @@ class BurnCubeProcessingTask:
     Data class representing a Burn Cube filter task.
     """
 
+    # the Burn Cube output file title
     title: str = field(init=False, repr=False)
     output_folder: str
     # always under self.output_folder
     ancillary_folder: str = field(init=False, repr=False)
+
     input_products: BurnCubeInputProducts
     output_product: BurnCubeOutputProduct
+
     task_id: str
     region_id: str
     task_table: str
     stac_metadata_path: str = field(init=False, repr=False)
 
-    # local_file_name: burn cube output file name, end with .nc
-    local_file_name: str = field(init=False, repr=False)
+    # output S3 bucket name
     s3_bucket_name: str = field(init=False, repr=False)
+    # Burn Cube output file object key path (no extension part)
     s3_object_key: str = field(init=False, repr=False)
 
-    # s3_file_uri: burn cube output file S3 URI
+    # Burn Cube output file object key path (with s3:// as S3 uri format)
     s3_file_uri: str = field(init=False, repr=False)
 
     period_start: str = field(init=False, repr=False)
     period_end: str = field(init=False, repr=False)
     mapping_period_start: str = field(init=False, repr=False)
     mapping_period_end: str = field(init=False, repr=False)
+
+    # geometry information comes from au-30 grid and region id
     gpgon: datacube.utils.geometry.Geometry = field(init=False, repr=False)
     geobox: datacube.utils.geometry._base.GeoBox = field(init=False, repr=False)
 
@@ -387,6 +392,11 @@ class BurnCubeProcessingTask:
     wofs_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
     ref_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
     mapping_ard_datasets: List[datacube.model.Dataset] = field(init=False, repr=False)
+
+    PROD_INFO_EXT: str = ".proc-info.json"
+    ODC_META_EXT: str = ".odc-metadata.yml"
+    STAC_META_EXT: str = ".stac-item.json"
+    BAND_EXT: str = ".tif"
 
     def __post_init__(self):
         """
@@ -398,7 +408,7 @@ class BurnCubeProcessingTask:
         """
         # Generate output filenames for the task
         (
-            self.local_file_name,
+            self.title,
             self.s3_object_key,
             self.s3_bucket_name,
         ) = generate_output_filenames(
@@ -408,12 +418,13 @@ class BurnCubeProcessingTask:
             self.input_products.platform,
         )
 
-        self.title = self.local_file_name.replace(".nc", "")
-
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
         self.s3_file_uri = f"s3://{self.s3_bucket_name}/{self.s3_object_key}"
-        self.stac_metadata_path = self.s3_file_uri.replace(".nc", ".stac-item.json")
+
+        self.proc_info_path = self.s3_file_uri + self.PROD_INFO_EXT
+        self.odc_metadata_path = self.s3_file_uri + self.ODC_META_EXT
+        self.stac_metadata_path = self.s3_file_uri + self.STAC_META_EXT
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -539,16 +550,14 @@ class BurnCubeProcessingTask:
             + [str(e.id) for e in self.mapping_ard_datasets],
         }
 
-        logger.info(
-            "Upload processing log file %s in s3.",
-            f"s3://{self.s3_bucket_name}/{self.s3_object_key.replace('.nc', '.proc-info.json')}",
-        )
+        logger.info("Upload processing log file %s in s3.", self.proc_info_path)
 
-        bc_io.upload_dict_to_s3(
-            processing_log,
-            self.s3_bucket_name,
-            self.s3_object_key.replace(".nc", ".proc-info.json"),
-        )
+        local_proc_info_path = self.title + self.PROD_INFO_EXT
+
+        with open(local_proc_info_path, "w") as proc_info_file:
+            json.dump(processing_log, proc_info_file, indent=2)
+
+        bc_io.upload_dict_to_s3(local_proc_info_path, self.proc_info_path)
 
     @classmethod
     def from_config(cls, cfg_url: str, task_id: str, region_id: str):
@@ -634,7 +643,7 @@ class BurnCubeProcessingTask:
         for band_name in self.output_product.bands:
             dataset_assembler.note_measurement(
                 band_name,
-                f"{self.title}-{band_name}.tif",
+                f"{self.title}-{band_name}{self.BAND_EXT}",
                 expand_valid_data=False,
                 grid=GridSpec(
                     shape=self.geobox.shape,
@@ -648,7 +657,7 @@ class BurnCubeProcessingTask:
         )
 
         dataset_assembler._accessories["metadata:processor"] = (
-            self.title + ".proc-info.json"
+            self.title + self.PROD_INFO_EXT
         )
 
         meta = dataset_assembler.to_dataset_doc()
@@ -656,9 +665,9 @@ class BurnCubeProcessingTask:
         # now convert to odc and stac metadata format
         stac_meta = eo3stac.to_stac_item(
             dataset=meta,
-            stac_item_destination_url=f"{self.s3_file_uri.replace('.nc', '.stac-item.json')}",
+            stac_item_destination_url=self.stac_metadata_path,
             dataset_location=str(Path(self.s3_file_uri).parent),
-            odc_dataset_metadata_url=f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
+            odc_dataset_metadata_url=self.odc_metadata_path,
             explorer_base_url=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
         )
         stac_meta = json.dumps(
@@ -666,33 +675,27 @@ class BurnCubeProcessingTask:
             default=json_fallback,
             indent=4,
         )  # stac_meta is Python str
-        local_json_file = f"{self.title}.stac-item.json"
+        local_stac_metadata_path = self.title + self.STAC_META_EXT
 
-        with open(local_json_file, "w") as json_file:
+        with open(local_stac_metadata_path, "w") as json_file:
             json_file.write(stac_meta)
 
         logger.info("Upload STAC metadata to", self.stac_metadata_path)
 
-        bc_io.upload_object_to_s3(local_json_file, self.stac_metadata_path)
+        bc_io.upload_object_to_s3(local_stac_metadata_path, self.stac_metadata_path)
 
         meta_stream = io.StringIO("")  # too short, not worth to move to another method.
         serialise.to_stream(meta_stream, meta)
         odc_meta = meta_stream.getvalue()  # odc_meta is Python str
 
-        local_yaml_file = f"{self.title}.odc-metadata.yml"
+        local_odc_metadata_path = {self.title} + self.ODC_META_EXT
 
-        with open(local_yaml_file, "w") as yml_file:
+        with open(local_odc_metadata_path, "w") as yml_file:
             yml_file.write(odc_meta)
 
-        logger.info(
-            "Upload ODC metadata to",
-            f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
-        )
+        logger.info("Upload ODC metadata to", self.odc_metadata_path)
 
-        bc_io.upload_object_to_s3(
-            local_yaml_file,
-            f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
-        )
+        bc_io.upload_object_to_s3(local_odc_metadata_path, self.odc_metadata_path)
 
 
 @dataclass
@@ -919,12 +922,12 @@ class BurnCubeFilterTask:
             for region_index in region_gdf.index:
                 region_id = region_gdf.region_code[region_index]
 
-                _, s3_object_key, s3_bucket_name = generate_output_filenames(
+                _, s3_object_title, s3_bucket_name = generate_output_filenames(
                     self.output_folder, self.task_id, region_id, self.platform
                 )
 
                 if not helper.check_s3_file_exists(
-                    f"s3://{s3_bucket_name}/{s3_object_key}"
+                    f"s3://{s3_bucket_name}/{s3_object_title}.odc-metadata.yml"
                 ):
                     not_run_regions.append(region_id)
 

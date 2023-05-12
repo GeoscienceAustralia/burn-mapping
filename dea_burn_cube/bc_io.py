@@ -5,9 +5,7 @@ the DEA Burn Cube and AWS S3.
 """
 
 
-import json
 import logging
-from typing import Dict
 
 import boto3
 import xarray as xr
@@ -18,27 +16,6 @@ from dea_burn_cube import helper
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
-
-
-def upload_dict_to_s3(dictionary: Dict, s3_bucket_name: str, file_name: str):
-    """
-    Uploads a Python dictionary as a JSON file to AWS S3.
-
-    Args:
-        dictionary: A Python dictionary to upload as a JSON file.
-        s3_bucket_name: The name of the S3 bucket to upload the JSON file to.
-        file_name: The name to use for the uploaded JSON file in S3.
-
-    """
-    # Initialize the S3 resource and convert the dictionary to a JSON string
-    s3 = boto3.resource("s3")
-    json_string = json.dumps(dictionary, indent=4)
-
-    # Upload the JSON string to S3
-    try:
-        s3.Object(s3_bucket_name, file_name).put(Body=json_string)
-    except Exception:
-        logger.warning("Cannot upload the file to: %s", file_name)
 
 
 def upload_object_to_s3(local_file_name: str, s3_uri: str) -> None:
@@ -67,7 +44,7 @@ def upload_object_to_s3(local_file_name: str, s3_uri: str) -> None:
 
 def result_file_saving_and_uploading(
     burn_cube_result_apply_wofs: xr.Dataset,
-    local_file_name: str,
+    object_title: str,
     object_key: str,
     s3_bucket_name: str,
 ) -> None:
@@ -76,7 +53,7 @@ def result_file_saving_and_uploading(
 
     Args:
         burn_cube_result_apply_wofs: An XArray Dataset object representing the result of the burn cube analysis.
-        local_file_name: A string representing the path to save the local netCDF file.
+        object_title: A string representing the path to save the local netCDF file.
         object_key: A string representing the target S3 bucket and prefix where the files will be uploaded.
         s3_bucket_name: A string representing the name of the S3 bucket.
 
@@ -88,23 +65,12 @@ def result_file_saving_and_uploading(
 
     Example:
         >>> result_file_saving_and_uploading(burn_cube_result,
-                                            'burn_cube_result.nc',
+                                            'burn_cube_result',
                                             's3://my-bucket/output',
                                             'my-bucket')
     """
 
-    comp = dict(zlib=True, complevel=5)
-    encoding = {
-        var: comp for var in burn_cube_result_apply_wofs.data_vars
-    }  # compression
-
-    # this will save it in the current working directory
-    burn_cube_result_apply_wofs.to_netcdf(local_file_name, encoding=encoding, mode="w")
-
     s3 = boto3.client("s3")
-
-    with open(local_file_name, "rb") as f:
-        s3.upload_fileobj(f, s3_bucket_name, object_key)
 
     # use to_cog feature to convert each band from XArray.Dataset to COG
     for band, _ in burn_cube_result_apply_wofs.data_vars.items():
@@ -113,7 +79,7 @@ def result_file_saving_and_uploading(
 
         da_output = ds_output.to_array()
 
-        local_tiff_file = local_file_name.replace(".nc", f"-{band.lower()}.tif")
+        local_tiff_file = object_title + f"-{band.lower()}.tif"
 
         write_cog(geo_im=da_output, fname=local_tiff_file, overwrite=True)
 
@@ -121,10 +87,10 @@ def result_file_saving_and_uploading(
             s3.upload_fileobj(
                 f,
                 s3_bucket_name,
-                object_key.replace(".nc", f"-{band.lower()}.tif"),
+                object_key + f"-{band.lower()}.tif",
             )
 
             logger.info(
                 "Upload GeoTiff file: %s",
-                object_key.replace(".nc", f"-{band.lower()}.tif"),
+                object_key + f"-{band.lower()}.tif",
             )

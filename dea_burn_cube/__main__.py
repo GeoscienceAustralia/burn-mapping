@@ -329,16 +329,16 @@ def burn_cube_run(
         # Not enough data to finish the processing, so stop it here
         sys.exit(0)
 
-    if not overwrite and helper.check_s3_file_exists(bc_processing_task.s3_file_uri):
+    if not overwrite and helper.check_s3_file_exists(
+        bc_processing_task.odc_metadata_path
+    ):
         logger.info(
-            "Find NetCDF file %s in s3, skip it.", bc_processing_task.s3_object_key
+            "Find metadata file %s in s3, skip it.",
+            bc_processing_task.odc_metadata_path,
         )
         sys.exit(0)
 
-    logger.info(
-        "Will save NetCDF file as temp file to: %s", bc_processing_task.local_file_name
-    )
-    logger.info("Will upload NetCDF file to: %s", bc_processing_task.s3_file_uri)
+    logger.info("Will upload result files to: %s", bc_processing_task.s3_file_uri)
 
     try:
         burn_cube_result = bc_data_processing.generate_bc_result(
@@ -348,7 +348,7 @@ def burn_cube_run(
 
         bc_io.result_file_saving_and_uploading(
             burn_cube_result,
-            bc_processing_task.local_file_name,
+            bc_processing_task.title,
             bc_processing_task.s3_object_key,
             bc_processing_task.s3_bucket_name,
         )
