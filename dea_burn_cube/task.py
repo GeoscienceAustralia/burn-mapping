@@ -72,7 +72,8 @@ def generate_output_filenames(
     """
     time_str = task_to_str(task_id, task_table)
     title = f"{product_name}_{region_id}_{time_str}_final"
-    bc_output_file_path = f"{product_name}/{product_version.replace(".", "-")}/{region_id[:3]}/{region_id[3:]}/{time_str}/{title}"
+    product_version = product_version.replace(".", "-")
+    bc_output_file_path = f"{product_name}/{product_version}/{region_id[:3]}/{region_id[3:]}/{time_str}/{title}"
 
     s3_bucket_name, s3_object_key = helper.extract_s3_details(
         f"{output}/{bc_output_file_path}"
