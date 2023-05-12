@@ -262,6 +262,7 @@ def burn_cube_add_odc_metadata(
         # Not enough data to finish the processing, so stop it here
         sys.exit(0)
 
+    bc_processing_task.upload_processing_log()
     bc_processing_task.add_odc_metadata()
 
 

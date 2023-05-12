@@ -414,10 +414,8 @@ class BurnCubeProcessingTask:
 
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
-        self.s3_file_uri = f"{self.s3_bucket_name}/{self.s3_object_key}"
-        self.stac_metadata_path = (
-            f"s3://{self.s3_file_uri.replace('.nc', '.stac-item.json')}"
-        )
+        self.s3_file_uri = f"s3://{self.s3_bucket_name}/{self.s3_object_key}"
+        self.stac_metadata_path = self.s3_file_uri.replace(".nc", ".stac-item.json")
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -545,13 +543,13 @@ class BurnCubeProcessingTask:
 
         logger.info(
             "Upload processing log file %s in s3.",
-            f"s3://{self.s3_bucket_name}/{self.s3_object_key.replace('.nc', '.json')}",
+            f"s3://{self.s3_bucket_name}/{self.s3_object_key.replace('.nc', '.proc-info.json')}",
         )
 
         bc_io.upload_dict_to_s3(
             processing_log,
             self.s3_bucket_name,
-            self.s3_object_key.replace(".nc", ".json"),
+            self.s3_object_key.replace(".nc", ".proc-info..json"),
         )
 
     @classmethod
@@ -571,13 +569,13 @@ class BurnCubeProcessingTask:
             region_id=region_id,
         )
 
-    def add_odc_metadata(self) -> str:
+    def add_odc_metadata(self):
 
         naming_conventions_values = "dea_c3"
         explorer_path = (
             f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}"
         )
-        classifier = "level3"
+        classifier = "ard"
         inherit_skip_properties = [
             "eo:cloud_cover",
             "fmask:snow",
@@ -611,6 +609,7 @@ class BurnCubeProcessingTask:
             "landsat:collection_number",
             "landsat:wrs_path",
             "landsat:wrs_row",
+            "fmask:clear",
         ]
 
         dataset_assembler = DatasetAssembler(
@@ -655,16 +654,15 @@ class BurnCubeProcessingTask:
             self.mapping_period_end
         )
 
-        # inherit properties from cfg
-        # for (
-        #    product_property_name,
-        #    product_property_value,
-        # ) in self.product.properties.items():
-        #    dataset_assembler.properties[product_property_name] = product_property_value
-
         dataset_assembler.product_name = self.output_product.name
         dataset_assembler.dataset_version = self.output_product.version
         dataset_assembler.region_code = self.region_id
+
+        dataset_assembler.properties["odc:file_format"] = self.output_product.OUTPUT_EXT
+        dataset_assembler.properties["odc:producer"] = self.output_product.PRODUCER
+        dataset_assembler.properties[
+            "odc:product_family"
+        ] = self.output_product.product_family
 
         # set the warning message back
         warnings.filterwarnings("default")
@@ -686,64 +684,13 @@ class BurnCubeProcessingTask:
                 ),
                 nodata=-999,
             )
-
-        # for band, path in self.paths(ext=ext).items():
-        #    # when we pass grid, the eodatasets will not load file from path
-        #    dataset_assembler.note_measurement(
-        #        band,
-        #        path,
-        #        expand_valid_data=False,
-        #        grid=GridSpec(
-        #            shape=self.geobox.shape,
-        #            transform=self.geobox.transform,
-        #            crs=CRS.from_epsg(self.geobox.crs.to_epsg()),
-        #        ),
-        #        nodata=output_dataset[band].nodata
-        #        if "nodata" in output_dataset[band].attrs
-        #        else None,
-        #    )
-
         dataset_assembler.extend_user_metadata(
             "input-products", sorted({e.type.name for e in self.mapping_ard_datasets})
         )
 
-        # dataset_assembler.extend_user_metadata("odc-stats-config", vars(task.product))
-
-        # dataset_assembler.note_software_version(
-        #    "eodatasets3",
-        #    "https://github.com/GeoscienceAustralia/eo-datasets",
-        #    version(eodatasets3),
-        # )
-
-        # dataset_assembler.note_software_version(
-        #    proc.NAME, "https://github.com/GeoscienceAustralia/burn-mapping", proc.VERSION
-        # )
-
-        # if task.product.preview_image_ows_style:
-        #    try:
-        #        dataset_assembler._accessories["thumbnail"] = Path(
-        #            urlparse(odc_file_path.split(".")[0] + "_thumbnail.jpg").path
-        #        ).name
-
-        #        dataset_assembler.note_software_version(
-        #            "datacube-ows",
-        #            "https://github.com/opendatacube/datacube-ows",
-        #            # Just realized the odc-stats does not have version.
-        #            version("datacube_ows"),
-        #        )
-        #    except ImportError as e:
-        #        raise type(e)(
-        #            str(e)
-        #            + '. Please run python -m pip install "odc-stats[ows]" \
-        #                    to setup environment to generate thumbnail.'
-        #        )
-
-        # dataset_assembler._accessories["checksum:sha1"] = Path(
-        #    urlparse(sha1_url).path
-        # ).name
-        # dataset_assembler._accessories["metadata:processor"] = Path(
-        #    urlparse(proc_info_url).path
-        # ).name
+        dataset_assembler._accessories["metadata:processor"] = (
+            self.title + ".proc-info.json"
+        )
 
         meta = dataset_assembler.to_dataset_doc()
         # already add all information to dataset_assembler,
@@ -754,9 +701,20 @@ class BurnCubeProcessingTask:
         meta_stream = io.StringIO("")  # too short, not worth to move to another method.
         serialise.to_stream(meta_stream, meta)
         odc_meta = meta_stream.getvalue()  # odc_meta is Python str
-        print(odc_meta)
 
-        # return odc_meta
+        local_yaml_file = f"{self.title}.odc-metadata.yml"
+
+        with open(local_yaml_file, "w") as yml_file:
+            yml_file.write(odc_meta)
+        print(
+            "Upload YAML metadata to",
+            f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
+        )
+
+        bc_io.upload_object_to_s3(
+            local_yaml_file,
+            f"{self.s3_file_uri.replace('.nc', '.odc-metadata.yml')}",
+        )
 
     def add_stac_metadata(self):
 
