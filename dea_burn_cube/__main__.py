@@ -360,7 +360,7 @@ def burn_cube_run(
 
     # then add metadata
     bc_processing_task.upload_processing_log()
-    bc_processing_task.add_stac_metadata()
+    bc_processing_task.add_metadata_files()
 
 
 if __name__ == "__main__":
