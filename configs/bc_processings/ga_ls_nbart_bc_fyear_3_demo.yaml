@@ -69,5 +69,18 @@ product:
     - landsat:wrs_path
     - landsat:wrs_row
     - fmask:clear
+  thumbnail_styling:
+    name: ga_ls_nbart_bc_fyear_3_demo,
+    needed_bands: 
+      - wofssevere
+    index_function: 
+      function: datacube_ows.band_utils.single_band
+      mapped_bands: True
+      kwargs: 
+        - band: wofssevere,
+    range: 
+     - -1
+     - 1
+    mpl_ramp: PuOr_r
 
 task_table: 10-year-historical-processing-4year-geomad.csv
