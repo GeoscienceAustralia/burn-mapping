@@ -1,8 +1,10 @@
 aiohttp==3.8.3
+blinker
 boto3
 botocore
 click
 datacube==1.8.9
+datacube_ows==1.8.21
 dea_tools==0.2.8.dev47
 eodatasets3==0.29.7
 fiona==1.8.22
@@ -14,5 +16,6 @@ pyarrow
 pyproj==3.2.1
 s3fs==0.4.2
 scipy==1.9.1
+sentry-sdk
 Shapely==1.8.5.post1
 SQLAlchemy==1.4.46

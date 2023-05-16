@@ -17,7 +17,7 @@ import warnings
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 from uuid import UUID, uuid5
 
 import datacube
@@ -28,6 +28,12 @@ import pandas as pd
 import pyproj
 import requests
 import s3fs
+import xarray as xr
+from datacube_ows.styles.api import (
+    StandaloneStyle,
+    apply_ows_style,
+    xarray_image_as_png,
+)
 from eodatasets3.assemble import DatasetAssembler, serialise
 from eodatasets3.images import GridSpec
 from eodatasets3.scripts.tostac import json_fallback
@@ -338,6 +344,8 @@ class BurnCubeOutputProduct:
     product_family: str
     bands: List[str]
     inherit_skip_properties: List[str]
+    # the Dict which compatible with the OWS styling config
+    thumbnail_styling: [Dict[str, Any]]
     OUTPUT_EXT: str = "GeoTIFF"
     PRODUCER: str = "ga.gov.au"
     MATURITY: str = "final"
@@ -405,6 +413,7 @@ class BurnCubeProcessingTask:
     ODC_META_EXT: str = ".odc-metadata.yaml"
     STAC_META_EXT: str = ".stac-item.json"
     BAND_EXT: str = ".tif"
+    THUMBNAIL_EXT: str = "_thumbnail.jpg"
 
     def __post_init__(self):
         """
@@ -435,6 +444,7 @@ class BurnCubeProcessingTask:
         self.proc_info_path = self.s3_file_uri + self.PROD_INFO_EXT
         self.odc_metadata_path = self.s3_file_uri + self.ODC_META_EXT
         self.stac_metadata_path = self.s3_file_uri + self.STAC_META_EXT
+        self.thumbnail_path = self.s3_file_uri + self.THUMBNAIL_EXT
 
         # Generate task processing periods
         processing_period = generate_task(self.task_id, self.task_table)
@@ -586,6 +596,42 @@ class BurnCubeProcessingTask:
             region_id=region_id,
         )
 
+    def _generate_thumbnail(self):
+        """
+        We will load the output files from S3 again to avoid the coupling between processing and metadata generation.
+        """
+        bc_style = StandaloneStyle(self.output_product.thumbnail_styling)
+
+        # load the bands from ows_styling_dict
+        # assign the time to xr.Dataset cause ows needs it
+
+        band_names = self.output_product.thumbnail_styling["needed_bands"]
+
+        burncube_result_dataset = xr.Dataset()
+
+        # load the data based on band_names
+        for band_name in band_names:
+            band_uri_path = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
+
+            # Open into an xarray.DataArray
+            geotiff_da = xr.open_rasterio(band_uri_path)
+            burncube_result_dataset[band_name] = geotiff_da
+
+        dst = burncube_result_dataset.expand_dims(
+            dim={"time": [self.mapping_period_start]}
+        )
+
+        dst = dst.drop_vars("band").squeeze("band")
+
+        image = apply_ows_style(bc_style, dst)
+
+        local_thumbnail_file = self.title + self.THUMBNAIL_EXT
+
+        with open(local_thumbnail_file, "wb") as fp:
+            fp.write(xarray_image_as_png(image))
+
+        bc_io.upload_object_to_s3(local_thumbnail_file, self.thumbnail_path)
+
     def add_metadata_files(self):
 
         dataset_assembler = DatasetAssembler(
@@ -670,6 +716,8 @@ class BurnCubeProcessingTask:
             self.title + self.PROD_INFO_EXT
         )
 
+        dataset_assembler._accessories["thumbnail"] = self.title + self.THUMBNAIL_EXT
+
         meta = dataset_assembler.to_dataset_doc()
         # already add all information to dataset_assembler,
         # now convert to odc and stac metadata format
@@ -690,7 +738,7 @@ class BurnCubeProcessingTask:
         with open(local_stac_metadata_path, "w") as json_file:
             json_file.write(stac_meta)
 
-        logger.info("Upload STAC metadata to", self.stac_metadata_path)
+        logger.info("Upload STAC metadata to %s", self.stac_metadata_path)
 
         bc_io.upload_object_to_s3(local_stac_metadata_path, self.stac_metadata_path)
 
@@ -703,7 +751,10 @@ class BurnCubeProcessingTask:
         with open(local_odc_metadata_path, "w") as yml_file:
             yml_file.write(odc_meta)
 
-        logger.info("Upload ODC metadata to", self.odc_metadata_path)
+        logger.info("Upload ODC metadata to %s", self.odc_metadata_path)
+
+        # generate and upload thumbnail
+        self._generate_thumbnail()
 
         bc_io.upload_object_to_s3(local_odc_metadata_path, self.odc_metadata_path)
 
