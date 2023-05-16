@@ -515,7 +515,7 @@ class BurnCubeProcessingTask:
 
         if len(self.geomed_datasets) != 1:
             raise IncorrectInputDataError(
-                "Found " + len(self.geomed_datasets) + " GeoMAD dataset"
+                "Found " + str(len(self.geomed_datasets)) + " GeoMAD dataset"
             )
 
         self.wofs_datasets = odc_dc.find_datasets(
@@ -526,7 +526,7 @@ class BurnCubeProcessingTask:
 
         if len(self.wofs_datasets) != 1:
             raise IncorrectInputDataError(
-                "Found " + len(self.wofs_datasets) + " WOfS dataset"
+                "Found " + str(len(self.wofs_datasets)) + " WOfS dataset"
             )
 
         self.ref_ard_datasets = odc_dc.find_datasets(
