@@ -29,13 +29,9 @@ import pyproj
 import requests
 import s3fs
 import xarray as xr
-from datacube_ows.styles.api import (
-    StandaloneStyle,
-    apply_ows_style,
-    xarray_image_as_png,
-)
+from datacube_ows.styles.api import StandaloneStyle, apply_ows_style
 from eodatasets3.assemble import DatasetAssembler, serialise
-from eodatasets3.images import GridSpec
+from eodatasets3.images import FileWrite, GridSpec
 from eodatasets3.scripts.tostac import json_fallback
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from rasterio.crs import CRS
@@ -625,10 +621,33 @@ class BurnCubeProcessingTask:
 
         image = apply_ows_style(bc_style, dst)
 
+        def _xarray_to_list(image, dest_shape):
+            # apply the OWS styling, the return image must have red, green, blue and alpha.
+            display_pixels = []
+            for display_band in ["red", "green", "blue"]:
+                display_pixels.append(image[display_band].values.reshape(dest_shape))
+            return display_pixels
+
+        input_geobox = GridSpec(
+            shape=self.geobox.shape,
+            transform=self.geobox.transform,
+            crs=CRS.from_epsg(self.geobox.crs.to_epsg()),
+        )
+
+        display_pixels = _xarray_to_list(image, self.geobox.shape[0:2])
+
+        thumbnail_bytes = FileWrite().create_thumbnail_from_numpy(
+            rgb=display_pixels,
+            static_stretch=(0, 255),
+            out_scale=10,
+            input_geobox=input_geobox,
+            nodata=None,
+        )
+
         local_thumbnail_file = self.title + self.THUMBNAIL_EXT
 
         with open(local_thumbnail_file, "wb") as fp:
-            fp.write(xarray_image_as_png(image))
+            fp.write(thumbnail_bytes)
 
         bc_io.upload_object_to_s3(local_thumbnail_file, self.thumbnail_path)
 
