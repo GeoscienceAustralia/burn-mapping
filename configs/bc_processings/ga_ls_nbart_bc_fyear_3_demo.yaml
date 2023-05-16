@@ -70,17 +70,17 @@ product:
     - landsat:wrs_row
     - fmask:clear
   thumbnail_styling:
-    name: ga_ls_nbart_bc_fyear_3_demo,
-    needed_bands: 
-      - wofssevere
-    index_function: 
+    index_function:
       function: datacube_ows.band_utils.single_band
-      mapped_bands: True
-      kwargs: 
-        - band: wofssevere,
-    range: 
-     - -1
-     - 1
-    mpl_ramp: PuOr_r
+      kwargs:
+        band: wofssevere
+      mapped_bands: true
+    mpl_ramp: Oranges
+    name: ga_ls_nbart_bc_fyear_3_demo
+    needed_bands:
+    - wofssevere
+    range:
+    - 0
+    - 1
 
 task_table: 10-year-historical-processing-4year-geomad.csv
