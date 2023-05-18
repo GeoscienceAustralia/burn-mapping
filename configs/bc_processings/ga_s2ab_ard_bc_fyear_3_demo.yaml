@@ -63,8 +63,14 @@ product:
     - gqa:iterative_mean_x
     - gqa:iterative_mean_y
     - gqa:cep90
-    - s2cloudless_clear
-    - s2cloudless_cloud
+    - s2cloudless:clear
+    - s2cloudless:cloud
+    - sat:orbit_state
+    - sat:relative_orbit
+    - sentinel:datastrip_id
+    - sentinel:datatake_start_datetime
+    - sentinel:sentinel_tile_id
+    - sentinel:product_name
   thumbnail_styling:
     index_function:
       function: datacube_ows.band_utils.single_band
