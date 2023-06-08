@@ -12,8 +12,8 @@ plugin_config:
     count: count
 
 product:
-  name: ga_s2ab_gm_4fyear_3
-  short_name: ga_s2ab_gm_4fyear_3
+  name: ga_s2ab_ard_gm_4fyear_2015
+  short_name: ga_s2ab_ard_gm_4fyear_2015
   version: 3.0.0
   product_family: geomedian
 
