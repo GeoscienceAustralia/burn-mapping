@@ -16,7 +16,7 @@ measurements:
       - startdate
       - bushfire_startdate
     dtype: float64
-    nodate: 0
+    nodata: 0
     units: '1'
   - name: wofssevere
     aliases:
