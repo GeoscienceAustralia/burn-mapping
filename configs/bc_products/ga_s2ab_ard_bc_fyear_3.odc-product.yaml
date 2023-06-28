@@ -11,29 +11,49 @@ metadata:
     name: ga_s2ab_ard_bc_fyear_3
 
 measurements:
+  - name: wofsstartdate
+    aliases:
+      - startdate
+      - bushfire_startdate
+    dtype: float64
+    nodata: 0
+    units: '1'
   - name: wofssevere
+    aliases:
+      - severe
     dtype: float64
     nodata: -999
     units: '1'
   - name: wofsseverity
+    aliases:
+      - severity
     dtype: float64
     nodata: -999
     units: '1'
   - name: wofsmoderate
+    aliases:
+      - moderate
     dtype: float64
     nodata: -999
     units: '1'
-  - name: severe
-    dtype: int16
-    nodata: -999
-    units: '1'
-  - name: severity
+  - name: wofsduration
+    aliases:
+      - duration
+      - bushfire_duration
     dtype: float64
-    nodata: -999
+    nodata: 0
     units: '1'
-  - name: moderate
-    dtype: int16
-    nodata: -999
+  - name: wofscorroborate
+    aliases:
+      - corroborate
+    dtype: float64
+    nodata: 0
+    units: '1'
+  - name: wofscleaned
+    aliases:
+      - cleaned
+    dtype: float64
+    nodata: 0
     units: '1'
   - name: count
     dtype: int16
