@@ -44,9 +44,8 @@ from dea_burn_cube import bc_io, helper
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
-# Some random UUID to be ODC namespace
-# copy paste from: odc-stats Model.py design
-ODC_NS = UUID("6f34c6f4-13d6-43c0-8e4e-42b6c13203af")
+# Some random UUID to be Burn Cube namespace
+ODC_NS = UUID("6f34c6f4-13d6-43c0-8e4e-42b6c42203af")
 
 
 def generate_output_filenames(
