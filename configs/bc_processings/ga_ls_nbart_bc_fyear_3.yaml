@@ -27,12 +27,13 @@ product:
   version: 3.0.0
   product_family: burncube
   bands:
-    - wofssevere
+    - wofsstartdate
     - wofsseverity
+    - wofssevere
     - wofsmoderate
-    - severe
-    - severity
-    - moderate
+    - wofsduration
+    - wofscorroborate
+    - wofscleaned
     - count
   inherit_skip_properties:
     - eo:cloud_cover
