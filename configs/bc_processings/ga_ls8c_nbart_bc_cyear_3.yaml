@@ -2,8 +2,8 @@ output_folder: s3://dea-public-data-dev/projects/burn_cube/derivative
 
 input_products:
   platform: ls
-  geomed_name: ga_ls8c_nbart_gm_4fyear_2015
-  wofs_summary_name: ga_ls_wo_fq_fyear_3
+  geomed_name: ga_ls8c_nbart_gm_4cyear_2016
+  wofs_summary_name: ga_ls_wo_fq_cyear_3
   ard_names:
     - ga_ls8c_ard_3
   input_ard_bands:
@@ -22,8 +22,8 @@ input_products:
     - swir2
 
 product:
-  name: ga_ls_nbart_bc_fyear_3
-  short_name: ga_ls_nbart_bc_fyear_3
+  name: ga_ls8c_nbart_bc_cyear_3
+  short_name: ga_ls8c_nbart_bc_cyear_3
   version: 3.0.0
   product_family: burncube
   bands:
@@ -77,7 +77,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_ls_nbart_bc_fyear_3
+    name: ga_ls8c_nbart_bc_cyear_3
     needed_bands:
     - wofssevere
     range:

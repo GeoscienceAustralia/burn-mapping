@@ -23,8 +23,8 @@ input_products:
     - nbart_swir_3
 
 product:
-  name: ga_s2ab_ard_bc_cyear_3
-  short_name: ga_s2ab_ard_bc_cyear_3
+  name: ga_s2_ard_bc_cyear_3
+  short_name: ga_s2_ard_bc_cyear_3
   version: 3.0.0
   product_family: burncube
   bands:
@@ -79,7 +79,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_s2ab_ard_bc_cyear_3
+    name: ga_s2_ard_bc_cyear_3
     needed_bands:
     - wofssevere
     range:

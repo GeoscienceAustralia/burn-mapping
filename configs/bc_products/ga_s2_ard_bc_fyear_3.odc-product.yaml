@@ -1,5 +1,5 @@
-name: ga_s2ab_ard_bc_cyear_3
-description: Geoscience Australia Sentinel 2A & 2B MSI Analysis Ready Data Collection 3 Burn Cube 4 Calendar Years Collection 3
+name: ga_s2_ard_bc_fyear_3
+description: Geoscience Australia Sentinel 2A & 2B MSI Analysis Ready Data Collection 3 Burn Cube 4 Financial Years Collection 3
 license: CC-BY-4.0
 metadata_type: eo3
 
@@ -8,7 +8,7 @@ metadata:
     odc:file_format: GeoTIFF
     odc:product_family: burncube
   product:
-    name: ga_s2ab_ard_bc_cyear_3
+    name: ga_s2_ard_bc_fyear_3
 
 measurements:
   - name: wofsstartdate
