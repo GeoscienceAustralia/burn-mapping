@@ -310,19 +310,8 @@ def main():
 
     s3 = boto3.client("s3")
 
-    with open(nm_output, "rb") as f:
-        s3.upload_fileobj(
-            f,
-            "s3://dea-public-data-dev",
-            "project/burn_cube/BAC_test/" + nm_output,
-        )
-
-    with open(nm_vect, "rb") as f:
-        s3.upload_fileobj(
-            f,
-            "s3://dea-public-data-dev",
-            "project/burn_cube/BAC_test/" + nm_vect,
-        )
+    s3.upload_file(nm_output, "dea-public-data-dev", f"project/burn_cube/BAC_test/{nm_output}")
+    s3.upload_file(nm_vect, "dea-public-data-dev", f"project/burn_cube/BAC_test/{nm_vect}")
 
 if __name__ == "__main__":
     main()
