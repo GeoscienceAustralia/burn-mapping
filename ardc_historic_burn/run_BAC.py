@@ -308,7 +308,7 @@ def main():
 
     import boto3
 
-    s3 = boto3.client("s3")
+    s3 = boto3.client('s3', aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"), aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"))
 
     s3.upload_file(nm_output, "dea-public-data-dev", f"project/burn_cube/BAC_test/{nm_output}")
     s3.upload_file(nm_vect, "dea-public-data-dev", f"project/burn_cube/BAC_test/{nm_vect}")
