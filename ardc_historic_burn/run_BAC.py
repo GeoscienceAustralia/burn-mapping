@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
 
     #xy = 'x32y15'
-    xy = args.value
+    xy = args.regionid
 
     print("regionid:", xy)
 
