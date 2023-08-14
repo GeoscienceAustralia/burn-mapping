@@ -306,5 +306,23 @@ def main():
             overwrite=True,
             nodata=-999)
 
+    import boto3
+
+    s3 = boto3.client("s3")
+
+    with open(nm_output, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            "s3://dea-public-data-dev",
+            "project/burn_cube/BAC_test/" + nm_output,
+        )
+
+     with open(nm_vect, "rb") as f:
+        s3.upload_fileobj(
+            f,
+            "s3://dea-public-data-dev",
+            "project/burn_cube/BAC_test/" + nm_vect,
+        )
+
 if __name__ == "__main__":
     main()
