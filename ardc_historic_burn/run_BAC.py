@@ -317,7 +317,7 @@ def main():
             "project/burn_cube/BAC_test/" + nm_output,
         )
 
-     with open(nm_vect, "rb") as f:
+    with open(nm_vect, "rb") as f:
         s3.upload_fileobj(
             f,
             "s3://dea-public-data-dev",
