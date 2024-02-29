@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import time
 from typing import Any, Dict, Tuple
 from urllib.parse import urlparse
@@ -52,6 +53,38 @@ def format_datetime(dt: datetime, with_tz=True, timespec="microseconds") -> str:
     if with_tz:
         dt = dt + "Z"
     return dt
+
+
+def get_and_set_aws_credentials() -> Dict[str, str]:
+    """
+    Fetches the current AWS credentials based on the IAM role attached to the environment and sets them as
+    environment variables.
+
+    Returns:
+        Dict[str, str]: A dictionary containing 'access_key', 'secret_key', and 'token'.
+    """
+    # Create a session using the default configuration (implicitly using the IAM role)
+    session = boto3.Session()
+
+    # Access the credentials
+    credentials = session.get_credentials()
+
+    # Get current, refreshed credentials
+    current_credentials = credentials.get_frozen_credentials()
+
+    # Set credentials as environment variables
+    os.environ["AWS_ACCESS_KEY_ID"] = current_credentials.access_key
+    os.environ["AWS_SECRET_ACCESS_KEY"] = current_credentials.secret_key
+    os.environ["AWS_SESSION_TOKEN"] = current_credentials.token
+
+    # Prepare the credentials dictionary
+    credentials_dict = {
+        "access_key": os.environ["AWS_ACCESS_KEY_ID"],
+        "secret_key": os.environ["AWS_SECRET_ACCESS_KEY"],
+        "token": os.environ["AWS_SESSION_TOKEN"],
+    }
+
+    return credentials_dict
 
 
 def load_yaml_remote(yaml_url: str) -> Dict[str, Any]:

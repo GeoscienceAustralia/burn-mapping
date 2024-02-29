@@ -69,6 +69,9 @@ def filter_regions_by_output(task_id, process_cfg_url, overwrite):
 
     logging_setup()
 
+    # setup AWS cred => not super cool cause it is side effect method
+    helper.get_and_set_aws_credentials()
+
     bc_filter_task = task.BurnCubeFilterTask(process_cfg_url, task_id)
 
     if not overwrite and helper.check_s3_file_exists(
@@ -134,6 +137,9 @@ def filter_regions(task_id, region_list_s3_path, process_cfg_url, overwrite):
     """
     logging_setup()
 
+    # setup AWS cred => not super cool cause it is side effect method
+    helper.get_and_set_aws_credentials()
+
     bc_filter_task = task.BurnCubeFilterTask(process_cfg_url, task_id)
 
     if not overwrite and helper.check_s3_file_exists(bc_filter_task.region_list_s3_uri):
@@ -174,6 +180,9 @@ def update_hotspot_data(
     overwrite,
 ):
     logging_setup()
+
+    # setup AWS cred => not super cool cause it is side effect method
+    helper.get_and_set_aws_credentials()
 
     bc_filter_task = task.BurnCubeFilterTask(process_cfg_url, task_id)
 
@@ -306,6 +315,9 @@ def burn_cube_run(
     n_procs = cpu_count()
 
     logging_setup()
+
+    # setup AWS cred => not super cool cause it is side effect method
+    helper.get_and_set_aws_credentials()
 
     bc_processing_task: task.BurnCubeProcessingTask = (
         task.BurnCubeProcessingTask.from_config(

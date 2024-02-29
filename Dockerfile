@@ -23,7 +23,8 @@ RUN apt-get update && \
 # Pip installation
 RUN mkdir -p /conf
 COPY requirements.txt /conf/
-RUN pip install -r /conf/requirements.txt
+COPY constraints.txt /conf/
+RUN pip install -r /conf/requirements.txt -c /conf/constraints.txt
 
 # Copy source code and install it
 RUN mkdir -p /code
