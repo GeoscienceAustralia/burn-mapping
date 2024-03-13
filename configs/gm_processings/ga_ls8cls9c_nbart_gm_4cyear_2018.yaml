@@ -88,6 +88,7 @@ output_location: >-
 
 # save-tasks options
 input_products: ga_ls8c_ard_3-ga_ls9c_ard_3
-frequency: annual
+temporal-range: 2018--P4Y
+frequency: all
 grid: au-30
 gqa: 1
