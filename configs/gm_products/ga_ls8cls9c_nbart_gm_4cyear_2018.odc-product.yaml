@@ -27,11 +27,11 @@ measurements:
     dtype: int16
     nodata: -999
     units: '1'
-  - name: nbart_swir1
+  - name: nbart_swir_1
     dtype: int16
     nodata: -999
     units: '1'
-  - name: nbart_swir2
+  - name: nbart_swir_2
     dtype: int16
     nodata: -999
     units: '1'
