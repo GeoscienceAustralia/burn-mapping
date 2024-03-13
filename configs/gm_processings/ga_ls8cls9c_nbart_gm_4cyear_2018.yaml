@@ -89,5 +89,5 @@ output_location: >-
 # save-tasks options
 input_products: ga_ls8c_ard_3-ga_ls9c_ard_3
 frequency: annual
-grid: au_extended_30
+grid: au-30
 gqa: 1
