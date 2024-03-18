@@ -85,6 +85,6 @@ product:
     range:
     - 0
     - 1
-  
+
 
 task_table: 10-year-historical-processing-4year-geomad.csv
