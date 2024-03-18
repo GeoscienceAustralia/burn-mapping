@@ -1,5 +1,5 @@
-name: ga_ls8c_nbart_gm_3cyear_2016
-description: Geoscience Australia Landsat Nadir BRDF Adjusted Reflectance Terrain, Landsat 8 Geomedian 3 Calendar Years Collection 3
+name: ga_ls8c_nbart_gm_2cyear_2018
+description: Geoscience Australia Landsat Nadir BRDF Adjusted Reflectance Terrain, Landsat 8 Geomedian 2 Calendar Years Collection 3
 license: CC-BY-4.0
 metadata_type: eo3
 
@@ -8,7 +8,7 @@ metadata:
     odc:file_format: GeoTIFF
     odc:product_family: geomedian
   product:
-    name: ga_ls8c_nbart_gm_3cyear_2016
+    name: ga_ls8c_nbart_gm_2cyear_2018
 
 measurements:
   - name: nbart_blue

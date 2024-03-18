@@ -2,7 +2,7 @@ output_folder: s3://dea-public-data-dev/projects/burn_cube/derivative
 
 input_products:
   platform: ls
-  geomed_name: ga_ls8c_nbart_gm_2cyear_2016
+  geomed_name: ga_ls8c_nbart_gm_2cyear_2018
   wofs_summary_name: ga_ls_wo_fq_cyear_3
   ard_names:
     - ga_ls8c_ard_3
