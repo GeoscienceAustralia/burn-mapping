@@ -14,12 +14,12 @@ input_products:
     - nbart_swir_1
     - nbart_swir_2
   input_gm_bands:
-    - nbart_red
-    - nbart_green
-    - nbart_blue
-    - nbart_nir
-    - nbart_swir_1
-    - nbart_swir_2
+    - red
+    - green
+    - blue
+    - nir
+    - swir1
+    - swir2
 
 product:
   name: ga_ls8c_nbart_bc_3bands_2years_cyear_3
