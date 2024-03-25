@@ -2,22 +2,28 @@ output_folder: s3://dea-public-data-dev/projects/burn_cube/derivative
 
 input_products:
   platform: ls
-  geomed_name: ga_ls8c_nbart_gm_4cyear_2016
+  geomed_name: ga_ls8c_nbart_gm_3cyear_2017
   wofs_summary_name: ga_ls_wo_fq_cyear_3
   ard_names:
     - ga_ls8c_ard_3
   input_ard_bands:
+    - nbart_red
     - nbart_green
+    - nbart_blue
     - nbart_nir
+    - nbart_swir_1
     - nbart_swir_2
   input_gm_bands:
-    - green
-    - nir
-    - swir2
+    - nbart_red
+    - nbart_green
+    - nbart_blue
+    - nbart_nir
+    - nbart_swir_1
+    - nbart_swir_2
 
 product:
-  name: ga_ls8c_nbart_bc_3bands_cyear_3
-  short_name: ga_ls8c_nbart_bc_3bands_cyear_3
+  name: ga_ls8c_nbart_bc_7bands_3years_cyear_3
+  short_name: ga_ls8c_nbart_bc_7bands_3years_cyear_3
   version: 3.0.0
   product_family: burncube
   bands:
@@ -71,11 +77,11 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_ls8c_nbart_bc_3bands_cyear_3
+    name: ga_ls8c_nbart_bc_7bands_3years_cyear_3
     needed_bands:
     - wofssevere
     range:
     - 0
     - 1
 
-task_table: 10-year-historical-processing-4year-geomad.csv
+task_table: 10-year-historical-processing-3year-geomad.csv
