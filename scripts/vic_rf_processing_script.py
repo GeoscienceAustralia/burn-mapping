@@ -4,6 +4,8 @@ from typing import Tuple
 
 import click
 import datacube
+import requests
+import rioxarray
 import xarray as xr
 from datacube.utils.cog import write_cog
 from dea_tools.bandindices import calculate_indices
@@ -147,9 +149,6 @@ def feature_layers(
     return result
 
 
-import requests
-
-
 def download_file_from_s3_public(url, file_path):
     response = requests.get(url)
     if response.status_code == 200:
@@ -225,6 +224,8 @@ def vic_rf_processing(
     pre_fire_gm_product_name = process_cfg["input_products"]["geomed_name"]
     output_folder = process_cfg["output_folder"]
     time_pre = ("2017-01-01", "2017-12-31")
+
+    print(rioxarray.__version__)
 
     box = _get_gpgon(region_id)
     pgon = box[0]  # it always only one polygon there
