@@ -366,6 +366,8 @@ def vic_rf_processing(
 
     bc_io.upload_object_to_s3(nm_output, s3_file_uri)
 
+    print("finish processing", region_id)
+
 
 if __name__ == "__main__":
     vic_rf_processing()

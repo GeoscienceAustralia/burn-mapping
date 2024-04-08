@@ -95,7 +95,7 @@ Pygments==2.14.0
 pyparsing==3.0.9
 pyproj==3.2.1
 pyrsistent==0.19.3
-pystac==1.7.3
+pystac[validation]==1.8.2
 python-dateutil==2.8.2
 pyTMD==2.0.0
 pytz==2023.2
@@ -127,7 +127,7 @@ tornado==6.2
 tqdm==4.65.0
 traitlets==5.9.0
 traittypes==0.2.1
-typing-extensions==4.5.0
+typing-extensions==4.6.1
 urllib3==1.26.15
 wcwidth==0.2.6
 widgetsnbextension==4.0.6
