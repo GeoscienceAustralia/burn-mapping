@@ -1,43 +1,41 @@
 # # ARDC_burnt_area_mapping_tools.py
 
 # Import required packages
-import sys, os
+import os
+import sys
 
 os.environ["AWS_NO_SIGN_REQUEST"] = "yes"
+import re
+import time
+from datetime import datetime
+
 import boto3
 import botocore
 import geopandas as gpd
 import pandas as pd
-import re
-from datetime import datetime
 import rasterio
 from shapely.geometry import Polygon
 
-from datetime import datetime
-import time
 start_time = time.time()
 
-import sys, os, re
-import datacube
+import os
+import re
+import sys
+
 import geopandas as gpd
-import xarray as xr
-import pandas as pd
-import numpy as np
-import rioxarray
-import getpass
-from datacube.utils.cog import write_cog
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.patheffects as path_effects
-from matplotlib.patches import Rectangle
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import rioxarray
+import xarray as xr
 from rasterio import features
 from shapely.geometry import shape
 
-
 sys.path.insert(1, "../../Tools/")
 
-from dea_tools.spatial import xr_vectorize, xr_rasterize
 from datacube.testutils.io import rio_slurp_xarray
+from dea_tools.spatial import xr_rasterize
 
 
 def gen_grid_codes(x_range, y_range):
@@ -93,7 +91,7 @@ def koppen_import(koppen_shp_fname, legend_fname):
 
     """
     # Read in Koppen-Geiger legend text file
-    with open(legend_fname, "r") as f:
+    with open(legend_fname) as f:
         lines = f.readlines()
 
     # Define regular expression patterns to extract the gridcode, climate zone name, description and color
@@ -682,14 +680,14 @@ def validation_climate_analysis(
     # Plot Climate geodataframe with the climate gridcode symbolised.
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     CZSFclip.plot(ax=ax, color=CZSFclip["Color"], legend=True)
-    ax.set_title("Koppen-Geiger Climate Classification Map of {}".format(loc_name))
+    ax.set_title(f"Koppen-Geiger Climate Classification Map of {loc_name}")
     handles = [mpatches.Patch(color=color) for color in CZSFclip["Color"].unique()]
     plt.legend(handles, CZSFclip["Name"].unique().tolist(), loc="lower right")
 
     # Save the plot as a PNG image. First calculate the folder and raster name frmo the fname variable.
     save_folder = fname.split("/")[0]
     save_name = fname.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    plt.savefig("{}/{}_climate_classification_map.png".format(save_folder, save_name))
+    plt.savefig(f"{save_folder}/{save_name}_climate_classification_map.png")
 
     # Display the plot
     plt.show()

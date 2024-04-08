@@ -1,36 +1,19 @@
 import os
-import datacube
 import re
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import xarray as xr
-import geopandas as gpd
-import rioxarray
-import rasterio.features
-import rioxarray
-import sys
-
-from dea_tools.plotting import rgb
-from dea_tools.datahandling import load_ard
-from skimage import morphology
-from scipy import ndimage
-from shapely.geometry import shape
-from shapely.geometry import Polygon
-from datacube.utils.geometry import Geometry, CRS
-from datacube.utils.cog import write_cog
-from odc.dscache.tools.tiling import parse_gridspec_with_name
-from typing import List, Tuple
-
-from joblib import load
-from dea_tools.bandindices import calculate_indices
-from dea_tools.classification import predict_xr
-from dea_tools.dask import create_local_dask_cluster
-from odc.algo import int_geomedian
-from skimage import morphology
+from typing import Tuple
 
 import click
-from dea_burn_cube import bc_data_processing, bc_io, helper, task
+import datacube
+import xarray as xr
+from datacube.utils.cog import write_cog
+from dea_tools.bandindices import calculate_indices
+from dea_tools.classification import predict_xr
+from joblib import load
+from odc.dscache.tools.tiling import parse_gridspec_with_name
+from scipy import ndimage
+from skimage import morphology
+
+from dea_burn_cube import bc_io, helper
 
 
 def _get_gpgon(
@@ -59,7 +42,7 @@ def _get_gpgon(
 
     x = int(match.group(1))
     y = int(match.group(2))
-    
+
     geobox = gridspec.tile_geobox((x, y))
 
     # Return the resulting Geometry object
@@ -68,14 +51,16 @@ def _get_gpgon(
 
 # Define the feature_layers function
 # This function generates the data required by the RF model to map burnt area
-def feature_layers(query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name):
+def feature_layers(
+    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name
+):
     # Load ls8 4-year geomedian for the specified time period and query parameters
     ds_base = hnrs_dc.load(
-        #product="ga_ls8c_nbart_gm_4cyear_3",
+        # product="ga_ls8c_nbart_gm_4cyear_3",
         product=pre_fire_gm_product_name,
         # time=("2017-01-01", "2017-12-31"),  # calendar year
         time=time_pre,  # calendar year
-        **query
+        **query,
     )
 
     # Load post-fire annual geomedian
@@ -164,16 +149,15 @@ def feature_layers(query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre
 
 import requests
 
+
 def download_file_from_s3_public(url, file_path):
     response = requests.get(url)
     if response.status_code == 200:
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(response.content)
         print(f"File downloaded successfully: {file_path}")
     else:
         print("Failed to download file")
-
-
 
 
 @click.command(no_args_is_help=True)
@@ -212,7 +196,7 @@ def vic_rf_processing(
     """
     Simple program to use VIC RF solution (Note: retrain the model by DEA) to generate VIC RF result.
     """
-    
+
     dc = datacube.Datacube(
         app=f"Burn Cube K8s processing - {region_id}",
         config={
@@ -235,21 +219,22 @@ def vic_rf_processing(
     )
     # need to set the AWS login so that we can access the data we need
     os.environ["AWS_NO_SIGN_REQUEST"] = "Yes"
-    
+
     process_cfg = helper.load_yaml_remote(process_cfg_url)
-    
+
     pre_fire_gm_product_name = process_cfg["input_products"]["geomed_name"]
+    output_folder = process_cfg["output_folder"]
     time_pre = ("2017-01-01", "2017-12-31")
-    
+
     box = _get_gpgon(region_id)
     pgon = box[0]  # it always only one polygon there
-    
+
     # Define the name of the Koppen climate GeoTIFF file
     geotiff_fname = "remapped_koppen_data_3classes_3577.tif"
-    
+
     # auto download Koppen climate from AWS S3
-    cfg_folder = "s3://dea-public-data-dev/projects/burn_cube/configs/"
-    
+    cfg_folder = "https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/"
+
     # URL of the public S3 object
     url = cfg_folder + geotiff_fname
 
@@ -263,14 +248,16 @@ def vic_rf_processing(
 
     # Rename variable 1 to 'climate_code' for clarity and easier access.
     climate_dataset = climate_dataset.rename({1: "climate_code"})
-    
-    climate_dataset = climate_dataset.where(climate_dataset["climate_code"] != 2147483647)
-    
+
+    climate_dataset = climate_dataset.where(
+        climate_dataset["climate_code"] != 2147483647
+    )
+
     # Define the path to the saved machine learning model file.
     model_path = "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
-    
+
     # auto download Machine Learning model from AWS S3
-    
+
     # URL of the public S3 object
     url = cfg_folder + model_path
 
@@ -278,7 +265,7 @@ def vic_rf_processing(
 
     # Load the machine learning model from the specified file using the `load` function from the `joblib` library.
     model = load(model_path)
-    
+
     # Define the resolution of the geospatial data.
     resolution = (-30, 30)
 
@@ -287,7 +274,7 @@ def vic_rf_processing(
 
     # Define a list of bands to load
     measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
-    
+
     # Define the analysis year
     time_post = "2020"
 
@@ -298,19 +285,24 @@ def vic_rf_processing(
         "measurements": measurements,
         "geopolygon": pgon,
     }
-    
-    data = feature_layers(query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name).squeeze()
-    
-    predicted = predict_xr(model,
-                           data,
-                           proba=True,
-                           persist=True,
-                           clean=True,
-                           return_input=True).compute()
-    
+
+    data = feature_layers(
+        query,
+        hnrs_dc,
+        dc,
+        time_pre,
+        time_post,
+        climate_dataset,
+        pre_fire_gm_product_name,
+    ).squeeze()
+
+    predicted = predict_xr(
+        model, data, proba=True, persist=True, clean=True, return_input=True
+    ).compute()
+
     x_range = pgon.boundingbox.range_x
     y_range = pgon.boundingbox.range_y
-    
+
     # Load the water observations data over the processed tile and analysis year
     wo = dc.load(
         product="ga_ls_wo_fq_cyear_3",
@@ -324,53 +316,56 @@ def vic_rf_processing(
     # Create water mask to mask pixels that have more than 20% wet observations
     # Plot the water mask
     wo_mask = wo.frequency > 0.2
-    
+
     predicted_wofs = xr.where(wo_mask == 0, predicted, 0)
-    
-    # Define the size of the disk structuring element, measured in number of pixels. 
+
+    # Define the size of the disk structuring element, measured in number of pixels.
     # The default value is 2.
     disk_size = 2
 
-    #Remove the time index from the xr dataarray
+    # Remove the time index from the xr dataarray
     all_burn = predicted_wofs.Predictions.isel(time=0)
-    
+
     # Perform an opening morphological operation on the `all_burn` dataarray
     opened_data = xr.DataArray(
         morphology.binary_opening(all_burn, morphology.disk(disk_size)),
         coords=all_burn.coords,
     )
-    #Perform a closing morphological operation on the `opened_data` dataarray
+    # Perform a closing morphological operation on the `opened_data` dataarray
     dilated_data = xr.DataArray(
         ndimage.binary_dilation(opened_data, morphology.disk(disk_size + 1)),
         coords=all_burn.coords,
     )
-    
-    #Set the post-processed data to the `all_burn_cleaned` variable, and convert to a float dtype
+
+    # Set the post-processed data to the `all_burn_cleaned` variable, and convert to a float dtype
     all_burn_cleaned = dilated_data
     all_burn_cleaned = all_burn_cleaned.astype(int)
-    all_burn_cleaned = all_burn_cleaned.astype('float64')
+    all_burn_cleaned = all_burn_cleaned.astype("float64")
 
-    #Reapply the wo mask, to remove burnt pixels over water bodies that the above closing created
+    # Reapply the wo mask, to remove burnt pixels over water bodies that the above closing created
     all_burn_cleaned = xr.where(wo_mask == 0, all_burn_cleaned, 0)
 
-    #Ensure the crs attribute is set to 3577 using the wo dc 
+    # Ensure the crs attribute is set to 3577 using the wo dc
     all_burn_cleaned.attrs["crs"] = wo.crs
 
-    #build dynamic name
-    nm_sensor = "ls"  #from dc.load 
+    # build dynamic name
+    nm_sensor = "ls"  # from dc.load
     nm_algo = "rf"
-    nm_yeartype = "cyear"  #decision point here
+    nm_yeartype = "cyear"  # decision point here
     nm_collection = "3"
-    nm_xy = xy  #dynamic build from data loading process
-    nm_date = "2020"  #see what is in bc, based upon nm_yeartype decision from above
-    nm_output = f'Processed_tiles/ga_{nm_sensor}_{nm_algo}_{nm_yeartype}_{nm_collection}_{nm_xy}_{nm_date}_demo.tif'
-    
-    write_cog(geo_im=all_burn_cleaned,
-              fname=nm_output,
-              overwrite=True,
-              nodata=-999)
+    nm_xy = region_id  # dynamic build from data loading process
+    nm_date = "2020"  # see what is in bc, based upon nm_yeartype decision from above
+    output_product_name = f"ga_{nm_sensor}_{nm_algo}_{nm_yeartype}_{nm_collection}"
+    nm_output = output_product_name + f"_{nm_xy}_{nm_date}_demo.tif"
 
-    
-    
-if __name__ == '__main__':
+    write_cog(geo_im=all_burn_cleaned, fname=nm_output, overwrite=True, nodata=-999)
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{nm_output}"
+
+    print("upload to AWS S3:", s3_file_uri)
+
+    bc_io.upload_object_to_s3(nm_output, s3_file_uri)
+
+
+if __name__ == "__main__":
     vic_rf_processing()

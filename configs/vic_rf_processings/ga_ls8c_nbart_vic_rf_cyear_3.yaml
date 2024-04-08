@@ -1,4 +1,4 @@
-output_folder: s3://dea-public-data-dev/projects/vic_rf/derivative
+output_folder: s3://dea-public-data-dev/projects/burncube/derivative
 
 input_products:
   platform: ls

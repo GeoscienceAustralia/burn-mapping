@@ -5,7 +5,7 @@ botocore
 click
 datacube==1.8.9
 datacube_ows==1.8.21
-dea_tools==0.2.8.dev47
+dea_tools==0.3.2
 eodatasets3==0.29.7
 fiona==1.8.22
 fsspec
@@ -15,7 +15,9 @@ odc_dscache>=0.2.2
 pyarrow
 pyproj==3.2.1
 s3fs==0.4.2
+scikit-learn==1.3.2
 scipy==1.9.1
 sentry-sdk
 Shapely==1.8.5.post1
 SQLAlchemy==1.4.46
+odc-geo
