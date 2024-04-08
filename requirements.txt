@@ -11,6 +11,7 @@ fiona==1.8.22
 fsspec
 geopandas
 numpy==1.23.5
+odc-geo
 odc_dscache>=0.2.2
 pyarrow
 pyproj==3.2.1
@@ -20,4 +21,3 @@ scipy==1.9.1
 sentry-sdk
 Shapely==1.8.5.post1
 SQLAlchemy==1.4.46
-odc-geo
