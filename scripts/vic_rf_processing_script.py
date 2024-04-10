@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import re
 from typing import Tuple
 
@@ -364,7 +365,7 @@ def vic_rf_processing(
         ndimage.binary_dilation(opened_data, morphology.disk(disk_size + 1)),
         coords=all_burn.coords,
     )
-    
+
     # Set the post-processed data to the `all_burn_cleaned` variable, and convert to a float dtype
     all_burn_cleaned = dilated_data
     all_burn_cleaned = all_burn_cleaned.astype(int)
