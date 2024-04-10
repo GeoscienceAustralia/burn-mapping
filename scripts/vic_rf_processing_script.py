@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from typing import Tuple
@@ -16,6 +17,24 @@ from scipy import ndimage
 from skimage import morphology
 
 from dea_burn_cube import bc_io, helper
+
+logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+logger = logging.getLogger(__name__)
+
+
+def logging_setup():
+    """Set up logging."""
+    loggers = [
+        logging.getLogger(name)
+        for name in logging.root.manager.loggerDict
+        if not name.startswith("sqlalchemy") and not name.startswith("boto")
+    ]
+
+    stdout_hdlr = logging.StreamHandler(sys.stdout)
+    for logger in loggers:
+        logger.addHandler(stdout_hdlr)
+        logger.propagate = False
 
 
 def _get_gpgon(
@@ -196,6 +215,8 @@ def vic_rf_processing(
     Simple program to use VIC RF solution (Note: retrain the model by DEA) to generate VIC RF result.
     """
 
+    logging_setup()
+
     dc = datacube.Datacube(
         app=f"Burn Cube K8s processing - {region_id}",
         config={
@@ -297,12 +318,16 @@ def vic_rf_processing(
         pre_fire_gm_product_name,
     ).squeeze()
 
+    logger.info("Finish data loading")
+
     predicted = predict_xr(
         model, data, proba=True, persist=True, clean=True, return_input=True
     ).compute()
 
     x_range = pgon.boundingbox.range_x
     y_range = pgon.boundingbox.range_y
+
+    logger.info("Finish prediction")
 
     # Load the water observations data over the processed tile and analysis year
     wo = dc.load(
@@ -319,6 +344,8 @@ def vic_rf_processing(
     wo_mask = wo.frequency > 0.2
 
     predicted_wofs = xr.where(wo_mask == 0, predicted, 0)
+
+    logger.info("Apply WO Summary masking")
 
     # Define the size of the disk structuring element, measured in number of pixels.
     # The default value is 2.
@@ -337,7 +364,7 @@ def vic_rf_processing(
         ndimage.binary_dilation(opened_data, morphology.disk(disk_size + 1)),
         coords=all_burn.coords,
     )
-
+    
     # Set the post-processed data to the `all_burn_cleaned` variable, and convert to a float dtype
     all_burn_cleaned = dilated_data
     all_burn_cleaned = all_burn_cleaned.astype(int)
@@ -361,16 +388,18 @@ def vic_rf_processing(
 
     write_cog(geo_im=all_burn_cleaned, fname=nm_output, overwrite=True, nodata=-999)
 
+    logger.info("Save result as:", nm_output)
+
     s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{nm_output}"
 
-    print("upload to AWS S3:", s3_file_uri)
+    logger.info("Upload result to AWS S3 file:", s3_file_uri)
 
     # activate AWS credential from attached service account
     helper.get_and_set_aws_credentials()
 
     bc_io.upload_object_to_s3(nm_output, s3_file_uri)
 
-    print("finish processing", region_id)
+    logger.info("finish processing:", region_id)
 
 
 if __name__ == "__main__":
