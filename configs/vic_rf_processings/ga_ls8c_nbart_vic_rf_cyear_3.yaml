@@ -76,3 +76,4 @@ product:
     - 1
 
 task_table: 10-year-historical-processing-4year-geomad.csv
+model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib

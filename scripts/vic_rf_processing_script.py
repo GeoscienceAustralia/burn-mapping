@@ -174,9 +174,9 @@ def download_file_from_s3_public(url, file_path):
     if response.status_code == 200:
         with open(file_path, "wb") as f:
             f.write(response.content)
-        print(f"File downloaded successfully: {file_path}")
+        print(f"File downloaded successfully from: {url}")
     else:
-        print("Failed to download file")
+        print(f"Failed to download file from: {url}")
 
 
 @click.command(no_args_is_help=True)
@@ -249,6 +249,10 @@ def vic_rf_processing(
 
     output_product_name = process_cfg["product"]["name"]
 
+    # e.g., "https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/"
+    # + "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
+    model_url = process_cfg["model_path"]
+
     print(rioxarray.__version__)
 
     box = _get_gpgon(region_id)
@@ -283,10 +287,7 @@ def vic_rf_processing(
 
     # auto download Machine Learning model from AWS S3
 
-    # URL of the public S3 object
-    url = cfg_folder + model_path
-
-    download_file_from_s3_public(url, model_path)
+    download_file_from_s3_public(model_url, model_path)
 
     # Load the machine learning model from the specified file using the `load` function from the `joblib` library.
     model = load(model_path)
