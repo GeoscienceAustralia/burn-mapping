@@ -247,6 +247,8 @@ def vic_rf_processing(
     output_folder = process_cfg["output_folder"]
     time_pre = ("2017-01-01", "2017-12-31")
 
+    output_product_name = process_cfg["product"]["name"]
+
     print(rioxarray.__version__)
 
     box = _get_gpgon(region_id)
@@ -384,7 +386,7 @@ def vic_rf_processing(
     nm_collection = "3"
     nm_xy = region_id  # dynamic build from data loading process
     nm_date = "2020"  # see what is in bc, based upon nm_yeartype decision from above
-    output_product_name = f"ga_{nm_sensor}_{nm_algo}_{nm_yeartype}_{nm_collection}"
+
     nm_output = output_product_name + f"_{nm_xy}_{nm_date}_demo.tif"
 
     write_cog(geo_im=all_burn_cleaned, fname=nm_output, overwrite=True, nodata=-999)
