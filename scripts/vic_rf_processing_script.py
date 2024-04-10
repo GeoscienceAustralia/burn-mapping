@@ -365,6 +365,9 @@ def vic_rf_processing(
 
     print("upload to AWS S3:", s3_file_uri)
 
+    # activate AWS credential from attached service account
+    helper.get_and_set_aws_credentials()
+
     bc_io.upload_object_to_s3(nm_output, s3_file_uri)
 
     print("finish processing", region_id)
