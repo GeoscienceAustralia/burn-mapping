@@ -389,18 +389,18 @@ def vic_rf_processing(
 
     write_cog(geo_im=all_burn_cleaned, fname=nm_output, overwrite=True, nodata=-999)
 
-    logger.info("Save result as:", nm_output)
+    logger.info("Save result as: " + str(nm_output))
 
     s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{nm_output}"
 
-    logger.info("Upload result to AWS S3 file:", s3_file_uri)
+    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
 
     # activate AWS credential from attached service account
     helper.get_and_set_aws_credentials()
 
     bc_io.upload_object_to_s3(nm_output, s3_file_uri)
 
-    logger.info("finish processing:", region_id)
+    logger.info("finish processing: " + str(region_id))
 
 
 if __name__ == "__main__":
