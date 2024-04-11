@@ -1,11 +1,12 @@
 import logging
 import os
-import sys
 import re
+import sys
 from typing import Tuple
 
 import click
 import datacube
+import numpy as np
 import requests
 import rioxarray
 import xarray as xr
@@ -15,7 +16,9 @@ from dea_tools.classification import predict_xr
 from joblib import load
 from odc.dscache.tools.tiling import parse_gridspec_with_name
 from scipy import ndimage
+from scipy.ndimage._measurements import _stats
 from skimage import morphology
+from skimage.segmentation import quickshift
 
 from dea_burn_cube import bc_io, helper
 
@@ -380,30 +383,70 @@ def vic_rf_processing(
     # Ensure the crs attribute is set to 3577 using the wo dc
     all_burn_cleaned.attrs["crs"] = wo.crs
 
-    # build dynamic name
-    nm_sensor = "ls"  # from dc.load
-    nm_algo = "rf"
-    nm_yeartype = "cyear"  # decision point here
-    nm_collection = "3"
     nm_xy = region_id  # dynamic build from data loading process
     nm_date = "2020"  # see what is in bc, based upon nm_yeartype decision from above
 
-    nm_output = output_product_name + f"_{nm_xy}_{nm_date}_demo.tif"
+    pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
-    write_cog(geo_im=all_burn_cleaned, fname=nm_output, overwrite=True, nodata=-999)
+    write_cog(geo_im=all_burn_cleaned, fname=pred_tif, overwrite=True, nodata=-999)
 
-    logger.info("Save result as: " + str(nm_output))
+    logger.info("Save result as: " + str(pred_tif))
 
-    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{nm_output}"
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
 
     logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
 
     # activate AWS credential from attached service account
     helper.get_and_set_aws_credentials()
 
-    bc_io.upload_object_to_s3(nm_output, s3_file_uri)
+    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
 
-    logger.info("finish processing: " + str(region_id))
+    logger.info("finish predication: " + str(region_id))
+
+    # generate tif to segmentation
+    tif_to_seg = output_product_name + f"_{nm_xy}_{nm_date}_seg.tif"
+
+    write_cog(geo_im=data.dNDVI, fname=tif_to_seg, overwrite=True, nodata=-999)
+
+    logger.info("Save result as: " + str(tif_to_seg))
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{tif_to_seg}"
+
+    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
+
+    bc_io.upload_object_to_s3(tif_to_seg, s3_file_uri)
+
+    logger.info("finish segement: " + str(region_id))
+
+    # Convert our mean NDVI xarray into a numpy array
+    dndvi = rioxarray.open_rasterio(tif_to_seg).squeeze().values
+
+    # Calculate the segments
+    segments = quickshift(
+        dndvi, kernel_size=2, convert2lab=False, max_dist=6, ratio=1.0
+    )
+
+    pred = rioxarray.open_rasterio(pred_tif).squeeze().drop_vars("band")
+
+    count, _sum = _stats(pred, labels=segments, index=segments)
+    mode = _sum > (count / 2)
+    mode = xr.DataArray(
+        mode, coords=pred.coords, dims=pred.dims, attrs=pred.attrs
+    ).astype(np.int16)
+
+    pred_object_tif = output_product_name + f"_{nm_xy}_{nm_date}_prediction_object.tif"
+
+    write_cog(mode, pred_object_tif, overwrite=True)
+
+    logger.info("Save result as: " + str(pred_object_tif))
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_object_tif}"
+
+    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
+
+    bc_io.upload_object_to_s3(pred_object_tif, s3_file_uri)
+
+    logger.info("finish proection object filter: " + str(region_id))
 
 
 if __name__ == "__main__":
