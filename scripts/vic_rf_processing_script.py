@@ -117,14 +117,14 @@ def feature_layers(
     )
 
     # Calculate differences in some indices between pre and post-fire data
-    dNDVI = da_base.NDVI_pre.isel(time=0) - da_post.NDVI_post
-    dNDVI = dNDVI.rename("dNDVI")
-    dNBR = da_base.NBR_pre.isel(time=0) - da_post.NBR_post
-    dNBR = dNBR.rename("dNBR")
-    dNDMI = da_base.NDMI_pre.isel(time=0) - da_post.NDMI_post
-    dNDMI = dNDMI.rename("dNDMI")
-    dVARI = da_base.VARI_pre.isel(time=0) - da_post.VARI_post
-    dVARI = dVARI.rename("dVARI")
+    dndvi = da_base.NDVI_pre.isel(time=0) - da_post.NDVI_post
+    dndvi = dndvi.rename("dndvi")
+    dnbr = da_base.NBR_pre.isel(time=0) - da_post.NBR_post
+    dnbr = dnbr.rename("dnbr")
+    dndmi = da_base.NDMI_pre.isel(time=0) - da_post.NDMI_post
+    dndmi = dndmi.rename("dndmi")
+    dvari = da_base.VARI_pre.isel(time=0) - da_post.VARI_post
+    dvari = dvari.rename("dvari")
 
     # Remove unnecessary variables from the datasets
     drop_list = ["green", "red", "blue", "nir", "swir1", "swir2"]
@@ -166,7 +166,7 @@ def feature_layers(
 
     # Merge all the datasets into a single result dataset
     result = xr.merge(
-        [da_post, da_base, dNBR, dNDVI, dVARI, dNDMI, ds_climate], compat="override"
+        [da_post, da_base, dnbr, dndvi, dvari, dndmi, ds_climate], compat="override"
     )
 
     return result
@@ -406,7 +406,7 @@ def vic_rf_processing(
     # generate tif to segmentation
     tif_to_seg = output_product_name + f"_{nm_xy}_{nm_date}_seg.tif"
 
-    write_cog(geo_im=data.dNDVI, fname=tif_to_seg, overwrite=True, nodata=-999)
+    write_cog(geo_im=data.dndvi, fname=tif_to_seg, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(tif_to_seg))
 
