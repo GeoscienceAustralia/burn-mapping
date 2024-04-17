@@ -345,9 +345,9 @@ def generate_result_by_study_site_folder(
         )
     )
 
-    # Save the plot as a PNG image. First calculate the folder and raster name frmo the fname variable.
-    save_folder = tif_filepath.split("/")[0]
-    save_name = tif_filepath.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    # Save the plot as a PNG image next to GeoTIFF files
+    save_folder = "/".join(tif_filepath.split("/")[:-1])
+    # save_name = tif_filepath.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     plt.savefig(
         f"{save_folder}/{algo_name}_{study_site}-{year}-{year_basis}_climate_analysis_graph.png"
     )

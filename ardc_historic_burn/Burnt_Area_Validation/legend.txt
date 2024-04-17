@@ -37,4 +37,3 @@ Please cite Beck et al. [2018] when using the maps in any publication:
     Beck, H.E., N.E. Zimmermann, T.R. McVicar, N. Vergopolan, A. Berg, E.F. Wood:
     Present and future Köppen-Geiger climate classification maps at 1-km resolution,
     Nature Scientific Data, 2018.
-

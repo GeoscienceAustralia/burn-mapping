@@ -673,7 +673,7 @@ def validation_climate_analysis(
     plt.legend(handles, czsf_clip["Name"].unique().tolist(), loc="lower right")
 
     # Save the plot as a PNG image. First calculate the folder and raster name frmo the fname variable.
-    save_folder = fname.split("/")[0]
+    save_folder = "/".join(fname.split("/")[:-1])
     save_name = fname.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     plt.savefig(f"{save_folder}/{save_name}_climate_classification_map.png")
 
