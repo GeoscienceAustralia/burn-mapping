@@ -585,14 +585,20 @@ def run_validation(
     overall_climate_list = []
 
     for study_site in study_sites:
-        save_folder = f"{study_site}_{algo_name}"
-        csv_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}.csv"
-        climate_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}_Climate_Validation_statistics.csv"
+        save_folder = f"performance-report/{study_site}_{algo_name}"
+        csv_file_name = (
+            f"performance-report/{algo_name}_{study_site}-{year}-{year_basis}.csv"
+        )
+        climate_file_name = f"performance-report/{algo_name}_{study_site}-{year}-{year_basis}_Climate_Validation_statistics.csv"
 
         # result CSV
-        overall_result.append(pd.read_csv(f"{save_folder}/{csv_file_name}"))
+        overall_result.append(
+            pd.read_csv(f"performance-report/{save_folder}/{csv_file_name}")
+        )
 
-        climate_df = pd.read_csv(f"{save_folder}/{climate_file_name}")
+        climate_df = pd.read_csv(
+            f"performance-report/{save_folder}/{climate_file_name}"
+        )
         climate_df["study site"] = [study_site] * len(climate_df)
         overall_climate_list.append(climate_df)
 
