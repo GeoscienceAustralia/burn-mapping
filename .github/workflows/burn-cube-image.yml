@@ -10,6 +10,7 @@ on:
     paths:
       - 'dea_burn_cube/**'
       - 'scripts/**'
+      - 'ardc_historic_burn/Burnt_Area_Validation/**'
       - '!dea_burn_cube/configs/*'
       - '.github/workflows/burn-cube-image.yml'
       - 'Dockerfile'
