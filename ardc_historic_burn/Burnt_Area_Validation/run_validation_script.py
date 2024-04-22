@@ -11,6 +11,8 @@ import numpy as np
 import requests
 import xarray as xr
 
+from dea_burn_cube import helper
+
 # Import tools and functions from ARDC_burnt_area_mapping_tools.py
 from ARDC_burnt_area_mapping_tools import (
     ardc_year_calc,
@@ -611,6 +613,8 @@ def run_validation(
     ).split("/", 1)
 
     print("s3_folder", s3_folder)
+
+    helper.get_and_set_aws_credentials()
 
     upload_folder_to_s3("performance-report", bucket_name, s3_folder)
 
