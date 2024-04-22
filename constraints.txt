@@ -95,7 +95,7 @@ Pygments==2.14.0
 pyparsing==3.0.9
 pyproj==3.2.1
 pyrsistent==0.19.3
-pystac[validation]==1.8.2
+pystac[validation]==1.10.0
 python-dateutil==2.8.2
 pyTMD==2.0.0
 pytz==2023.2
