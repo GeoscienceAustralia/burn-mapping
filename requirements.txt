@@ -21,3 +21,4 @@ scipy==1.9.1
 sentry-sdk==1.44.1
 Shapely==1.8.5.post1
 SQLAlchemy==1.4.46
+rtree==1.2.0
