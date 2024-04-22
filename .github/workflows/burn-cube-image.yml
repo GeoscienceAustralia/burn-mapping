@@ -14,6 +14,8 @@ on:
       - '!dea_burn_cube/configs/*'
       - '.github/workflows/burn-cube-image.yml'
       - 'Dockerfile'
+      - 'constraints.txt'
+      - 'requirements.txt'
 
   release:
     types: [created, edited]
