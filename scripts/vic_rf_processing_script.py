@@ -112,8 +112,7 @@ def feature_layers(
 
     for level3_key in [0, 111, 112, 124, 215, 216, 220]:
         level3_key_name = f"level3_{str(level3_key)}"
-        ds_lc[level3_key_name] = ds_lc["level3"] * 0
-        ds_lc[level3_key_name] = xr.where(ds_lc["level3"] == level3_key, 1, ds_lc[level3_key_name])
+        ds_lc[level3_key_name] = xr.where(ds_lc["level3"] == level3_key, 1, 0)
 
     # Drop the original 'level3' variable
     ds_lc = ds_lc.drop_vars("level3")
@@ -121,7 +120,7 @@ def feature_layers(
     # level 4
     # refs to detail table here: https://knowledge.dea.ga.gov.au/data/product/dea-land-cover-landsat/?tab=details
 
-    level4_keys =  [0, 1, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 
+    level4_keys = [0, 1, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 
                     25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 55, 56, 57, 58, 59, 
                     60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 
                     77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 
@@ -129,11 +128,13 @@ def feature_layers(
 
     for level4_key in level4_keys:
         level4_key_name = f"level4_{str(level4_key)}"
-        ds_lc[level4_key_name] = ds_lc["level4"] * 0
-        ds_lc[level4_key_name] = xr.where(ds_lc["level4"] == level4_key, 1, ds_lc[level4_key_name])
+        ds_lc[level4_key_name] = xr.where(ds_lc["level4"] == level4_key, 1, 0)
 
     # Drop the original 'level4' variable
     ds_lc = ds_lc.drop_vars("level4")
+
+    ds_lc = ds_lc.isel(time=0)
+    ds_lc = ds_lc.drop_vars("time")
 
     # Calculate band indices for pre and post-fire data
     # Calculate the base(pre) indices
