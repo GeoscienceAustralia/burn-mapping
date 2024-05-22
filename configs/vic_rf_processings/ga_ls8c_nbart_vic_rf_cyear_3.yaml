@@ -13,8 +13,8 @@ input_products:
     - swir2
 
 product:
-  name: ga_ls8c_nbart_vic_rf_obj_filter_cyear_3
-  short_name: ga_ls8c_nbart_vic_rf_obj_filter_cyear_3
+  name: ga_ls8c_nbart_vic_rf_with_lc_cyear_3
+  short_name: ga_ls8c_nbart_vic_rf_with_lc_cyear_3
   version: 3.0.0
   product_family: vic_rf
   bands:
@@ -68,7 +68,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_ls8c_nbart_vic_rf_obj_filter_cyear_3
+    name: ga_ls8c_nbart_vic_rf_with_lc_cyear_3
     needed_bands:
     - wofssevere
     range:
@@ -76,4 +76,4 @@ product:
     - 1
 
 task_table: 10-year-historical-processing-4year-geomad.csv
-model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib
+model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/dea_ml_ba_with_landcover_rf_model.joblib
