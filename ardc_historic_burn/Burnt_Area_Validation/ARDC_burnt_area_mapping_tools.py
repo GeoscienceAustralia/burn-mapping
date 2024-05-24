@@ -566,14 +566,14 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
     TypeError
         If TP, TN, FP, or FN are not numeric values.
     ValueError
-        If TP, TN, FP, or FN are not positive values greater than 0.
+        If TP, TN, FP, or FN are not positive values greater than or equals to 0.
 
     """
     if not all(isinstance(val, (int, float)) for val in [tp, tn, fp, fn]):
         raise TypeError("TP, TN, FP, and FN should be numeric values.")
 
-    if not all(val > 0 for val in [tp, tn, fp, fn]):
-        raise ValueError("TP, TN, FP, and FN should be postive values greater than 0.")
+    if not all(val >= 0 for val in [tp, tn, fp, fn]):
+        raise ValueError("TP, TN, FP, and FN should be postive values greater than or equals to 0.")
 
     available_metrics = {
         "accuracy": (tp + tn) / (tp + tn + fp + fn),
