@@ -575,6 +575,8 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
     if not all(val >= 0 for val in [tp, tn, fp, fn]):
         raise ValueError("TP, TN, FP, and FN should be postive values greater than or equals to 0.")
 
+    print("tp, tn, fp, fn", tp, tn, fp, fn)
+
     available_metrics = {
         "accuracy": (tp + tn) / (tp + tn + fp + fn),
         "balanced-accuracy": 0.5 * ((tp / (tp + fn)) + (tn / (tn + fp))),
