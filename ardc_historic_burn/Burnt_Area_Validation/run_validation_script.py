@@ -153,14 +153,14 @@ def generate_result_by_study_site_folder(
     print(study_site, algo_name, accuracy_metrics)
 
     # Precision = TP/(TP+FP)
-    if TPTotal + FPTotal > 0 and TPTotal > 0:
+    if TPTotal + FPTotal > 0 and TPTotal >= 0:
         Prec = round(100 * accuracy_metrics["precision"], 1)
         PrecStr = "Precision = " + str(Prec) + "%"
     else:
         PrecStr = "Precision is undefined"
 
     # Recall = TP/(FN+TP)
-    if FNTotal + TPTotal > 0 and TPTotal > 0:
+    if FNTotal + TPTotal > 0 and TPTotal >= 0:
         Rec = round(100 * accuracy_metrics["recall"], 1)
         RecStr = "Recall = " + str(Rec) + "%"
     else:
