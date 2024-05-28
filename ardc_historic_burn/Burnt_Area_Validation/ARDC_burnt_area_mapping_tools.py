@@ -588,9 +588,9 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
         "false-negative-rate": fn / (tp + fn),
         "cohen-kappa": (2 * (tp * tn - fp * fn))
         / ((tp + fp) * (fp + tn) * (tp + fn) * (fn + tn)),
-        "g-measure": 2
-        * ((tp / (tp + fp)) * (tp / (tp + fn)))
-        / ((tp / (tp + fp)) + (tp / (tp + fn))),
+        #"g-measure": 2
+        #* ((tp / (tp + fp)) * (tp / (tp + fn)))
+        #/ ((tp / (tp + fp)) + (tp / (tp + fn))),
         "matthews-correlation-coefficient": ((tp * tn) - (fp * fn))
         / ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5,
         "f1-score": (2 * tp) / (2 * tp + fp + fn),
