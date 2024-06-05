@@ -76,4 +76,4 @@ product:
     - 1
 
 task_table: 10-year-historical-processing-4year-geomad.csv
-model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/dea_ml_ba_with_landcover_rf_model.joblib
+model_path: s3://dea-public-data-dev/projects/burn_cube/configs/dea_ml_ba_xgb_with_landcover_rf_model_04_06_2024.joblib
