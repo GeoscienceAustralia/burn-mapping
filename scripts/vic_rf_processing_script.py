@@ -481,7 +481,7 @@ def vic_rf_processing(
     reorder_data = data[feature_list]
 
     predicted = predict_xr(
-        model, data, proba=True, persist=True, clean=True, return_input=True
+        model, reorder_data, proba=True, persist=True, clean=True, return_input=True
     ).compute()
 
     x_range = pgon.boundingbox.range_x
