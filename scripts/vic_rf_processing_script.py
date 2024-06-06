@@ -163,13 +163,13 @@ def feature_layers(
 
     # Calculate differences in some indices between pre and post-fire data
     dndvi = da_base.NDVI_pre.isel(time=0) - da_post.NDVI_post
-    dndvi = dndvi.rename("dndvi")
+    dndvi = dndvi.rename("dNDVI")
     dnbr = da_base.NBR_pre.isel(time=0) - da_post.NBR_post
-    dnbr = dnbr.rename("dnbr")
+    dnbr = dnbr.rename("dNBR")
     dndmi = da_base.NDMI_pre.isel(time=0) - da_post.NDMI_post
-    dndmi = dndmi.rename("dndmi")
+    dndmi = dndmi.rename("dNDMI")
     dvari = da_base.VARI_pre.isel(time=0) - da_post.VARI_post
-    dvari = dvari.rename("dvari")
+    dvari = dvari.rename("dVARI")
 
     # Remove unnecessary variables from the datasets
     drop_list = ["green", "red", "blue", "nir", "swir1", "swir2"]
