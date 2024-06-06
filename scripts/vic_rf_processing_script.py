@@ -559,7 +559,7 @@ def vic_rf_processing(
     # generate tif to segmentation
     tif_to_seg = output_product_name + f"_{nm_xy}_{nm_date}_seg.tif"
 
-    write_cog(geo_im=data.dndvi, fname=tif_to_seg, overwrite=True, nodata=-999)
+    write_cog(geo_im=data.dNDVI, fname=tif_to_seg, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(tif_to_seg))
 
