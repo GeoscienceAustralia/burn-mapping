@@ -555,12 +555,12 @@ def run_validation(
                     local_file.write(s3_file.read())
 
     study_sites = [
+        "Esperance_WA",
+        "Port_Hedland_WA",
         "kangaroo_Island_SA",
         "East_Vic",
         "Cairns_QLD",
         "Cooktown_QLD",
-        "Esperance_WA",
-        "Port_Hedland_WA",
     ]
 
     for study_site in study_sites:
