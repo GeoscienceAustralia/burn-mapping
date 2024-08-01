@@ -467,6 +467,8 @@ def vic_rf_processing(
 
     logger.info("finish segement: " + str(region_id))
 
+    """
+    
     # Convert our mean NDVI xarray into a numpy array
     dndvi = rioxarray.open_rasterio(tif_to_seg).squeeze().values
 
@@ -479,9 +481,6 @@ def vic_rf_processing(
 
     count, _sum = _stats(pred, labels=segments, index=segments)
     mode = _sum > (count / 2)
-
-    print(pred)
-    print(mode)
 
     mode = xr.DataArray(
         mode, coords=pred.coords, dims=pred.dims, attrs=pred.attrs
@@ -500,6 +499,9 @@ def vic_rf_processing(
     bc_io.upload_object_to_s3(pred_object_tif, s3_file_uri)
 
     logger.info("finish proection object filter: " + str(region_id))
+    """
+
+    
 
 
 if __name__ == "__main__":
