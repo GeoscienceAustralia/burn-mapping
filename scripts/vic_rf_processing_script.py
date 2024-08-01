@@ -387,7 +387,7 @@ def vic_rf_processing(
 
     # Load the water observations data over the processed tile and analysis year
     wo = dc.load(
-        product="ga_ls_wo_fq_fyear_3",
+        product="ga_ls_wo_fq_cyear_3",
         crs="EPSG:3577",
         output_crs="EPSG:3577",
         x=x_range,
