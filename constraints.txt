@@ -166,7 +166,7 @@ wcwidth==0.2.6
 werkzeug==3.0.2
 widgetsnbextension==4.0.6
 xarray==2023.1.0
-xgboost==1.7.6
+xgboost==2.0.3
 xyzservices==2023.2.0
 yarl==1.8.2
 zict==2.2.0
