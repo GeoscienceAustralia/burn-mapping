@@ -479,6 +479,10 @@ def vic_rf_processing(
 
     count, _sum = _stats(pred, labels=segments, index=segments)
     mode = _sum > (count / 2)
+
+    print(pred)
+    print(mode)
+
     mode = xr.DataArray(
         mode, coords=pred.coords, dims=pred.dims, attrs=pred.attrs
     ).astype(np.int16)
