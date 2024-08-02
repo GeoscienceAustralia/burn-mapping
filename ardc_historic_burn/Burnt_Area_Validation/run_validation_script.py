@@ -207,14 +207,14 @@ def generate_result_by_study_site_folder(
     #)
 
     # Example of using contourf instead of plot
-    contour = axes.contourf(
-        CombineArray[0], levels=[0.5, 1.5, 2.5, 3.5, 4.5], colors=colpac2
-    )
+    #contour = axes.contourf(
+    #    CombineArray[0], levels=[0.5, 1.5, 2.5, 3.5, 4.5], colors=colpac2
+    #)
 
     # Add colorbar
-    cbar = fig.colorbar(contour, ax=axes)
+    #cbar = fig.colorbar(contour, ax=axes)
 
-    plt.show()
+    #plt.show()
 
     strDic = {0: TPStr, 1: FNStr, 2: FPStr, 3: TNStr, 4: PrecStr, 5: RecStr}
     # colDic = {0: colpac2[0], 1: colpac2[3], 2: colpac2[2], 3: colpac2[1]}
