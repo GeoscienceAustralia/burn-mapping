@@ -387,7 +387,7 @@ def vic_rf_processing(
 
     # Load the water observations data over the processed tile and analysis year
     wo = dc.load(
-        product="ga_ls_wo_fq_fyear_3",
+        product="ga_ls_wo_fq_cyear_3",
         crs="EPSG:3577",
         output_crs="EPSG:3577",
         x=x_range,
@@ -399,9 +399,6 @@ def vic_rf_processing(
     # Plot the water mask
     wo_mask = wo.frequency > 0.2
 
-    print("predicted")
-    print(predicted)
-
     predicted_wofs = xr.where(wo_mask == 0, predicted, 0)
 
     logger.info("Apply WO Summary masking")
@@ -412,9 +409,6 @@ def vic_rf_processing(
 
     # Remove the time index from the xr dataarray
     all_burn = predicted_wofs.Predictions.isel(time=0)
-
-    print("all_burn")
-    print(all_burn)
 
     # Perform an opening morphological operation on the `all_burn` dataarray
     opened_data = xr.DataArray(
@@ -443,15 +437,13 @@ def vic_rf_processing(
 
     pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
-    print("all_burn_cleaned")
-    print(all_burn_cleaned)
+    # find a way to remove the time dim
+    # all_burn_cleaned = all_burn_cleaned[0].squeeze(dim='time')
+    all_burn_ds = all_burn_cleaned.to_dataset(name="all_burn_ds")
+    all_burn_ds = all_burn_ds.isel(time=0, drop=True)
+    all_burn_da = all_burn_ds["all_burn_ds"]
 
-    all_burn_cleaned = all_burn_cleaned[0].squeeze()
-
-    print("all_burn_cleaned again")
-    print(all_burn_cleaned)
-
-    write_cog(geo_im=all_burn_cleaned, fname=pred_tif, overwrite=True, nodata=-999)
+    write_cog(geo_im=all_burn_da, fname=pred_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(pred_tif))
 
