@@ -439,7 +439,7 @@ def vic_rf_processing(
 
     print(all_burn_cleaned)
 
-    write_cog(geo_im=all_burn_cleaned[0], fname=pred_tif, overwrite=True, nodata=-999)
+    write_cog(geo_im=all_burn_cleaned[0].squeeze(), fname=pred_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(pred_tif))
 
