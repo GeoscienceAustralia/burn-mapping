@@ -399,6 +399,9 @@ def vic_rf_processing(
     # Plot the water mask
     wo_mask = wo.frequency > 0.2
 
+    print("predicted")
+    print(predicted)
+
     predicted_wofs = xr.where(wo_mask == 0, predicted, 0)
 
     logger.info("Apply WO Summary masking")
@@ -409,6 +412,9 @@ def vic_rf_processing(
 
     # Remove the time index from the xr dataarray
     all_burn = predicted_wofs.Predictions.isel(time=0)
+
+    print("all_burn")
+    print(all_burn)
 
     # Perform an opening morphological operation on the `all_burn` dataarray
     opened_data = xr.DataArray(
@@ -437,9 +443,15 @@ def vic_rf_processing(
 
     pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
+    print("all_burn_cleaned")
     print(all_burn_cleaned)
 
-    write_cog(geo_im=all_burn_cleaned[0].squeeze(), fname=pred_tif, overwrite=True, nodata=-999)
+    all_burn_cleaned = all_burn_cleaned[0].squeeze()
+
+    print("all_burn_cleaned again")
+    print(all_burn_cleaned)
+
+    write_cog(geo_im=all_burn_cleaned, fname=pred_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(pred_tif))
 
