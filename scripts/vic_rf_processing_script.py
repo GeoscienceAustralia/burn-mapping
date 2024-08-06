@@ -437,6 +437,8 @@ def vic_rf_processing(
 
     pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
+    print(all_burn_cleaned)
+
     write_cog(geo_im=all_burn_cleaned[0], fname=pred_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(pred_tif))
