@@ -36,7 +36,7 @@ jobs:
         timeout-minutes: 20
         shell: bash
         run: |
-          docker-compose build
+          docker compose build
 
   push_ecr:
     needs: [test]
