@@ -437,7 +437,7 @@ def vic_rf_processing(
 
     pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
-    write_cog(geo_im=all_burn_cleaned, fname=pred_tif, overwrite=True, nodata=-999)
+    write_cog(geo_im=all_burn_cleaned[0], fname=pred_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(pred_tif))
 
@@ -481,10 +481,10 @@ def vic_rf_processing(
     mode = _sum > (count / 2)
 
     # Expand the mask dimensions to match the DataArray
-    expanded_mode = np.expand_dims(mode, axis=0)
+    # expanded_mode = np.expand_dims(mode, axis=0)
 
     mode = xr.DataArray(
-        expanded_mode, coords=pred.coords, dims=pred.dims, attrs=pred.attrs
+        mode, coords=pred.coords, dims=pred.dims, attrs=pred.attrs
     ).astype(np.int16)
 
     pred_object_tif = output_product_name + f"_{nm_xy}_{nm_date}_prediction_object.tif"
