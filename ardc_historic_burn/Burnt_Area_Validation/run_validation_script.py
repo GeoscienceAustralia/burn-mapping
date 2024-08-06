@@ -254,6 +254,8 @@ def generate_result_by_study_site_folder(
     # Save combined array as tiff
     tif_filepath = f"{save_folder}/{algo_name}_{study_site}-{year}-{year_basis}.tif"
 
+    print(CombineArray)
+
     write_cog(geo_im=CombineArray, fname=tif_filepath, overwrite=True)
 
     #
