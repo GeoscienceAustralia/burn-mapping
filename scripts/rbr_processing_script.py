@@ -229,4 +229,4 @@ def rbr_processing(
 
 
 if __name__ == "__main__":
-    vic_rf_processing()
+    rbr_processing()
