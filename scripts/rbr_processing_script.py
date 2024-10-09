@@ -6,19 +6,10 @@ from typing import Tuple
 
 import click
 import datacube
-import numpy as np
-import requests
-import rioxarray
 import xarray as xr
 from datacube.utils.cog import write_cog
-from dea_tools.bandindices import calculate_indices
-from dea_tools.classification import predict_xr
-from joblib import load
+from dea_tools.datahandling import load_ard
 from odc.dscache.tools.tiling import parse_gridspec_with_name
-from scipy import ndimage
-from scipy.ndimage._measurements import _stats
-from skimage import morphology
-from skimage.segmentation import quickshift
 
 from dea_burn_cube import bc_io, helper
 
@@ -138,10 +129,9 @@ def rbr_processing(
 
     process_cfg = helper.load_yaml_remote(process_cfg_url)
 
-    pre_fire_gm_product_name = process_cfg["input_products"]["geomed_name"]
+    # pre_fire_gm_product_name = process_cfg["input_products"]["geomed_name"]
     output_folder = process_cfg["output_folder"]
-    time_pre = ("2017-01-01", "2017-12-31")
-    feature_list = process_cfg["model_features"]
+    # time_pre = ("2017-01-01", "2017-12-31")
 
     output_product_name = process_cfg["product"]["name"]
 
@@ -149,47 +139,55 @@ def rbr_processing(
     pgon = box[0]  # it always only one polygon there
 
     # Define the resolution of the geospatial data.
-    resolution = (-30, 30)
+    # resolution = (-30, 30)
 
     # Define the output coordinate reference system (CRS).
     output_crs = "epsg:3577"
 
     # PRE FIRE DATA
     # load in the 4 (financial or calendar) year geomedian
-    ds = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3", geopolygon=pgon,
-                    time=("2017-01-01", "2017-12-31"), output_crs=output_crs)
+    ds = hnrs_dc.load(
+        product="ga_ls8c_nbart_gm_4cyear_3",
+        geopolygon=pgon,
+        time=("2017-01-01", "2017-12-31"),
+        output_crs=output_crs,
+    )
 
     # POST FIRE DATA
-    #load the post fire data, or the year of interest
-    post_ds = load_ard(dc= dc, 
-                geopolygon = pgon,
-                time=("2020-01-01", "2020-12-31")
-                group_by='solar_day',
-                min_gooddata=0.7,
-                output_crs=output_crs)
+    # load the post fire data, or the year of interest
+    post_ds = load_ard(
+        dc=dc,
+        geopolygon=pgon,
+        time=("2020-01-01", "2020-12-31"),
+        group_by="solar_day",
+        min_gooddata=0.7,
+        output_crs=output_crs,
+    )
 
-    #load wo to mask out the ocean later
-    wofs_summary = dc.load(product="ga_ls_wo_fq_cyear_3",
-                geopolygon = pgon,
-                time=("2020")) #calendar year
-    
+    # load wo to mask out the ocean later
+    wofs_summary = dc.load(
+        product="ga_ls_wo_fq_cyear_3", geopolygon=pgon, time=("2020")
+    )  # calendar year
+
     # normalised burn ratio
     pre_nbr = (ds.nir - ds.swir2) / (ds.nir + ds.swir2)
 
     # normalised burn ratio
-    post_nbr = (post_ds.nbart_nir - post_ds.nbart_swir_2) / (post_ds.nbart_nir + post_ds.nbart_swir_2)
+    post_nbr = (post_ds.nbart_nir - post_ds.nbart_swir_2) / (
+        post_ds.nbart_nir + post_ds.nbart_swir_2
+    )
 
     # delta normalised burn ratio
-    delta_nbr = pre_nbr.squeeze("time")-post_nbr
+    delta_nbr = pre_nbr.squeeze("time") - post_nbr
 
-    RBR = delta_nbr / (pre_nbr.squeeze("time") + 1.001) #RBR
+    RBR = delta_nbr / (pre_nbr.squeeze("time") + 1.001)  # RBR
 
-    #masking the water and ocean
+    # masking the water and ocean
     wofs_summary_frequency = wofs_summary.frequency
 
     # Create a water mask by identifying areas with water frequency greater than or equal to 0.2
-    #water_mask = xr.where(wofs_summary_frequency < 0.2, 1., wofs_summary_frequency*0.)
-    #water_mask.plot()
+    # water_mask = xr.where(wofs_summary_frequency < 0.2, 1., wofs_summary_frequency*0.)
+    # water_mask.plot()
     # NEW
     # # Create a water mask by identifying areas with water frequency greater than or equal to 0.2
     water_mask = wofs_summary_frequency > 0.2
@@ -197,20 +195,20 @@ def rbr_processing(
     # water_mask.plot()
 
     # mask the delta normalised burn ratio
-    #wo_delta_nbr = water_mask.squeeze("time") * delta_nbr
+    # wo_delta_nbr = water_mask.squeeze("time") * delta_nbr
 
     wo_RBR = xr.where(water_mask == 0, RBR, -1)
-    #wo_delta_nbr.plot(col="time", col_wrap=2, vmin=-1, vmax=1, cmap="PiYG")
+    # wo_delta_nbr.plot(col="time", col_wrap=2, vmin=-1, vmax=1, cmap="PiYG")
 
     # finding the most burnt characteristic for each pixel in each dataset for the time period
-    RBR_reduced = wo_RBR.max("time") 
+    RBR_reduced = wo_RBR.max("time")
 
-    threshold_RBR = (RBR_reduced >= 0.3 )*1 #RBR paper 2014
+    threshold_RBR = (RBR_reduced >= 0.3) * 1  # RBR paper 2014
 
     threshold_RBR.attrs["crs"] = wofs_summary.crs
-    threshold_RBR = threshold_RBR.astype('float64')
+    threshold_RBR = threshold_RBR.astype("float64")
 
-    pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_rbr_pred.tif"
+    pred_tif = output_product_name + f"_{region_id}_2020_cyear_rbr_pred.tif"
 
     write_cog(geo_im=threshold_RBR, fname=pred_tif, overwrite=True, nodata=-999)
 

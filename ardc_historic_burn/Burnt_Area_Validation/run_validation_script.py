@@ -11,8 +11,6 @@ import numpy as np
 import requests
 import xarray as xr
 
-from dea_burn_cube import helper
-
 # Import tools and functions from ARDC_burnt_area_mapping_tools.py
 from ARDC_burnt_area_mapping_tools import (
     ardc_year_calc,
@@ -29,6 +27,8 @@ from ARDC_burnt_area_mapping_tools import (
 from datacube.utils.cog import write_cog
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import PercentFormatter
+
+from dea_burn_cube import helper
 
 
 def upload_folder_to_s3(local_folder_path, bucket_name, s3_folder):
@@ -202,19 +202,19 @@ def generate_result_by_study_site_folder(
     fig, axes = plt.subplots(1, 1, figsize=(12, 12))
     plt.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
 
-    #CombineArray[0].plot(
+    # CombineArray[0].plot(
     #    ax=axes, levels=[0.5, 1.5, 2.5, 3.5, 4.5], colors=colpac2, add_colorbar=False
-    #)
+    # )
 
     # Example of using contourf instead of plot
-    #contour = axes.contourf(
+    # contour = axes.contourf(
     #    CombineArray[0], levels=[0.5, 1.5, 2.5, 3.5, 4.5], colors=colpac2
-    #)
+    # )
 
     # Add colorbar
-    #cbar = fig.colorbar(contour, ax=axes)
+    # cbar = fig.colorbar(contour, ax=axes)
 
-    #plt.show()
+    # plt.show()
 
     strDic = {0: TPStr, 1: FNStr, 2: FPStr, 3: TNStr, 4: PrecStr, 5: RecStr}
     # colDic = {0: colpac2[0], 1: colpac2[3], 2: colpac2[2], 3: colpac2[1]}

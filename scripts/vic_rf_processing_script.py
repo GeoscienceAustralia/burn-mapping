@@ -92,7 +92,7 @@ def feature_layers(
     ds_post = dc.load("ga_ls8c_nbart_gm_cyear_3", time=time_post, **query)
 
     # Load Land Cover
-    # NOTE: the ga_ls_landcover_class_fyear_3 is old Collection 3 LC, will chnage it 
+    # NOTE: the ga_ls_landcover_class_fyear_3 is old Collection 3 LC, will chnage it
     # in the future
     lc_query = query
     lc_query["measurements"] = ["level3", "level4"]
@@ -100,7 +100,7 @@ def feature_layers(
     ds_lc = dc.load("ga_ls_landcover_class_fyear_3", time=time_post, **query)
 
     # the landcover level 3 and level 4 should convert to one-hot encoding data.
-    
+
     # level 3
     # 0: No data
     # 111: Cultivated Terrestrial Vegetation (CTV)
@@ -120,11 +120,89 @@ def feature_layers(
     # level 4
     # refs to detail table here: https://knowledge.dea.ga.gov.au/data/product/dea-land-cover-landsat/?tab=details
 
-    level4_keys = [0, 1, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 
-                    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 55, 56, 57, 58, 59, 
-                    60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 
-                    77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 
-                    94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104]
+    level4_keys = [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+    ]
 
     for level4_key in level4_keys:
         level4_key_name = f"level4_{str(level4_key)}"
@@ -211,7 +289,8 @@ def feature_layers(
 
     # Merge all the datasets into a single result dataset
     result = xr.merge(
-        [da_post, da_base, ds_lc, dnbr, dndvi, dvari, dndmi, ds_climate], compat="override"
+        [da_post, da_base, ds_lc, dnbr, dndvi, dvari, dndmi, ds_climate],
+        compat="override",
     )
 
     return result
@@ -472,7 +551,7 @@ def vic_rf_processing(
     bc_io.upload_object_to_s3(tif_to_seg, s3_file_uri)
 
     logger.info("finish segement: " + str(region_id))
-    
+
     # Convert our mean NDVI xarray into a numpy array
     dndvi = rioxarray.open_rasterio(tif_to_seg).squeeze().values
 
