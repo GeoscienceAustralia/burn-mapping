@@ -55,9 +55,7 @@ def process_files(match_products, region_id, output_folder):
     # Collect matching files for each product based on region and file extension
     for match_product in match_products:
         # Build the target folder path dynamically for each product
-        target_folder = (
-            f"{output_folder}/{match_product['product_name']}/3-0-0/{region_id[:2]}/{region_id[2:]}/"
-        )
+        target_folder = f"{output_folder}/{match_product['product_name']}/3-0-0/{region_id[:3]}/{region_id[3:]}/"
 
         logger.info(f"Try to query folder: {target_folder}")
 
@@ -81,7 +79,7 @@ def process_files(match_products, region_id, output_folder):
     # If no files matched the criteria, return None to indicate no further processing is needed
     if not pair_files:
         logger.info(f"cannot find any match file.")
-        return None
+        sys.exit("Cannot find any files from product folders")
 
     # Open and process all matching files, applying their respective weights
     da_list = []
@@ -132,6 +130,8 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
     """
     logging_setup()  # Initialize the logging setup
 
+    print(region_id)
+
     # Load the process configuration from the provided YAML URL
     process_cfg = helper.load_yaml_remote(process_cfg_url)
 
@@ -142,24 +142,23 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
     # Process files based on the region and products information
     sum_summary = process_files(match_products, region_id, output_folder)
 
-    if sum_summary:
-        # Define the output GeoTIFF file name pattern
-        pred_tif = f"dea_nbic_stacking_{region_id}_2020.tif"
+    # Define the output GeoTIFF file name pattern
+    pred_tif = f"dea_nbic_stacking_{region_id}_2020.tif"
 
-        # Write the result to a Cloud Optimized GeoTIFF (COG) file
-        write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
+    # Write the result to a Cloud Optimized GeoTIFF (COG) file
+    write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
 
-        logger.info(f"Saved result as: {pred_tif}")
+    logger.info(f"Saved result as: {pred_tif}")
 
-        # Construct the S3 file URI for the output file
-        s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:2]}/{region_id[2:]}/{pred_tif}"
+    # Construct the S3 file URI for the output file
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
 
-        # Activate AWS credentials from the service account attached
-        helper.get_and_set_aws_credentials()
+    # Activate AWS credentials from the service account attached
+    helper.get_and_set_aws_credentials()
 
-        # Upload the output GeoTIFF to the specified S3 location
-        bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
-        logger.info(f"Uploaded to S3: {s3_file_uri}")
+    # Upload the output GeoTIFF to the specified S3 location
+    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+    logger.info(f"Uploaded to S3: {s3_file_uri}")
 
 
 if __name__ == "__main__":
