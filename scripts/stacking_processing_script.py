@@ -59,6 +59,8 @@ def process_files(match_products, region_id, output_folder):
             f"{output_folder}/{match_product['product_name']}/3-0-0/{region_id[:2]}/{region_id[2:]}/"
         )
 
+        logger.info(f"Try to query folder: {target_folder}")
+
         # List files in the target folder using S3 file system
         all_files = fs.glob(target_folder + "**")
 
@@ -78,6 +80,7 @@ def process_files(match_products, region_id, output_folder):
 
     # If no files matched the criteria, return None to indicate no further processing is needed
     if not pair_files:
+        logger.info(f"cannot find any match file.")
         return None
 
     # Open and process all matching files, applying their respective weights
