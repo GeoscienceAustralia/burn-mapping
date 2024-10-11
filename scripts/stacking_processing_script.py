@@ -56,7 +56,7 @@ def process_files(match_products, region_id, output_folder):
     for match_product in match_products:
         # Build the target folder path dynamically for each product
         target_folder = (
-            f"{output_folder}/{match_product['product_name']}/3-0-0/{region_id}/"
+            f"{output_folder}/{match_product['product_name']}/3-0-0/{region_id[:2]}/{region_id[2:]}/"
         )
 
         # List files in the target folder using S3 file system
@@ -141,7 +141,7 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
 
     if sum_summary:
         # Define the output GeoTIFF file name pattern
-        pred_tif = f"dea_nbic_stacking_{region_id.replace('/', '')}_2020.tif"
+        pred_tif = f"dea_nbic_stacking_{region_id}_2020.tif"
 
         # Write the result to a Cloud Optimized GeoTIFF (COG) file
         write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
@@ -149,7 +149,7 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
         logger.info(f"Saved result as: {pred_tif}")
 
         # Construct the S3 file URI for the output file
-        s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+        s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:2]}/{region_id[2:]}/{pred_tif}"
 
         # Activate AWS credentials from the service account attached
         helper.get_and_set_aws_credentials()
