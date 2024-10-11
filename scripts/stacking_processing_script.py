@@ -1,8 +1,6 @@
-import s3fs
-import re
 import rioxarray
+import s3fs
 import xarray as xr
-
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
 
@@ -14,6 +12,7 @@ fs = s3fs.S3FileSystem(anon=True)
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def logging_setup():
     """Set up logging."""
@@ -33,29 +32,38 @@ def process_files(match_products, region_id, output_folder):
     """
     Search for corresponding files from the match_products based on region id
     """
-    
+
     pair_files = []
-    
+
     # Collect matching files from each product
     for match_product in match_products:
         # Build the target folder path dynamically
         # Let us assume all NBIC product under the same project folder:
         # s3://dea-public-data-dev/projects/burn_cube/derivative
-        target_folder = f"{output_folder/match_product['product_name']}/3-0-0/{region_id}/"
-        
+        target_folder = (
+            f"{output_folder/match_product['product_name']}/3-0-0/{region_id}/"
+        )
+
         # List files in the specific target folder
-        all_files = fs.glob(target_folder + '**')
-        
+        all_files = fs.glob(target_folder + "**")
+
         # Filter matching files by extension and store with product weight
-        matching_files = [file for file in all_files if file.endswith(match_product["extension_name"])]
-        
+        matching_files = [
+            file for file in all_files if file.endswith(match_product["extension_name"])
+        ]
+
         if matching_files:
-            pair_files.append({"file_path": matching_files[0], "product_weight": match_product["product_weight"]})
-    
+            pair_files.append(
+                {
+                    "file_path": matching_files[0],
+                    "product_weight": match_product["product_weight"],
+                }
+            )
+
     # If no files matched, skip further processing
     if not pair_files:
         return None
-    
+
     # Open and process all matching files
     da_list = []
     for pair_file in pair_files:
@@ -63,14 +71,14 @@ def process_files(match_products, region_id, output_folder):
         da = rioxarray.open_rasterio(f"s3://{pair_file['file_path']}")
         # Apply product weight
         da_list.append(da * pair_file["product_weight"])
-    
+
     # Concatenate along a new "variable" dimension and sum across it
     combined = xr.concat(da_list, dim="variable")
     sum_summary = combined.sum(dim="variable")
-    
+
     # Add CRS (Coordinate Reference System) to the output
     sum_summary.attrs["crs"] = geometry.CRS("EPSG:3577")
-    
+
     return sum_summary
 
 
@@ -125,25 +133,21 @@ def stacking_processing(
 
     # Limit processing to the first 4 files for efficiency (or batch processing)
     result = process_files(match_products, region_id, output_folder)
-        
+
     if result:
         sum_summary, pattern = result
         # Write the result to a COG file
 
-        pred_tif = "dea_nbic_stacking_" + pattern.replace("/", "") + "_2020.tif",
+        pred_tif = ("dea_nbic_stacking_" + pattern.replace("/", "") + "_2020.tif",)
 
-        write_cog(
-            geo_im=sum_summary,
-            fname=pred_tif,
-            overwrite=True,
-            nodata=-999
-        )
+        write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=True, nodata=-999)
 
         logger.info("Save result as: " + str(pred_tif))
 
         s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
 
         bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+
 
 if __name__ == "__main__":
     stacking_processing()
