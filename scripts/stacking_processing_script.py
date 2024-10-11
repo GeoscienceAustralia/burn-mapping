@@ -84,13 +84,6 @@ def process_files(match_products, region_id, output_folder):
 
 @click.command(no_args_is_help=True)
 @click.option(
-    "--task-id",
-    "-t",
-    type=str,
-    default=None,
-    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
-)
-@click.option(
     "--region-id",
     "-r",
     type=str,
