@@ -34,7 +34,7 @@ def logging_setup():
         logger.propagate = False  # Prevent logs from propagating to the root logger
 
 
-def process_files(match_products, region_id, output_folder):
+def process_files(match_products, region_id, output_folder, condition):
     """
     Processes the files for the given products and region ID by fetching data from S3,
     applying product weights, and combining the results.
@@ -43,6 +43,7 @@ def process_files(match_products, region_id, output_folder):
     - match_products (list): List of product information including name, weight, and file extension.
     - region_id (str): The ID of the region to process.
     - output_folder (str): The base folder path where output files are stored.
+    - condition (str): The way to convert sub-indicators result to single binary result.
 
     Returns:
     - xarray.DataArray or None: Returns a combined summary of the processed files or None if no files are found.
@@ -91,12 +92,27 @@ def process_files(match_products, region_id, output_folder):
 
     # Combine the weighted data arrays along a new dimension and sum them to get the summary
     combined = xr.concat(da_list, dim="variable")
-    sum_summary = combined.sum(dim="variable")
+    # sum_summary = combined.sum(dim="variable")
+
+    # Compute a binary mask based on the chosen condition
+    if condition == "any":
+        # Set pixel to 1 if any of the images have a non-zero pixel
+        binary_mask = (combined > 0).any(dim="variable").astype(int)
+    elif condition == "majority":
+        # Set pixel to 1 if the majority of images have a non-zero pixel
+        threshold = combined.sizes["variable"] // 2  # majority threshold
+        binary_mask = (combined > 0).sum(dim="variable") > threshold
+        binary_mask = binary_mask.astype(int)
+    elif condition == "all":
+        # Set pixel to 1 only if all images have a non-zero pixel
+        binary_mask = (combined > 0).all(dim="variable").astype(int)
+    else:
+        raise ValueError("Invalid condition. Choose from 'any', 'majority', or 'all'.")
 
     # Add the Coordinate Reference System (CRS) attribute to the output data array
-    sum_summary.attrs["crs"] = geometry.CRS("EPSG:3577")
+    binary_mask.attrs["crs"] = geometry.CRS("EPSG:3577")
 
-    return sum_summary
+    return binary_mask
 
 
 @click.command(no_args_is_help=True)
@@ -139,26 +155,30 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
     output_folder = process_cfg["output_folder"]
     output_product_name = process_cfg["product"]["name"]
 
-    # Process files based on the region and products information
-    sum_summary = process_files(match_products, region_id, output_folder)
+    # generate all kinds of conditions to do result comparision
+    conditions = ["any", "majority", "all"]  # Options: "any", "majority", "all"
 
-    # Define the output GeoTIFF file name pattern
-    pred_tif = f"dea_nbic_stacking_{region_id}_2020.tif"
+    for condition in conditions:
+        # Process files based on the region and products information
+        sum_summary = process_files(match_products, region_id, output_folder, condition)
 
-    # Write the result to a Cloud Optimized GeoTIFF (COG) file
-    write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
+        # Define the output GeoTIFF file name pattern
+        pred_tif = f"dea_nbic_stacking_{region_id}_2020_{condition}.tif"
 
-    logger.info(f"Saved result as: {pred_tif}")
+        # Write the result to a Cloud Optimized GeoTIFF (COG) file
+        write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
 
-    # Construct the S3 file URI for the output file
-    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+        logger.info(f"Saved result as: {pred_tif}")
 
-    # Activate AWS credentials from the service account attached
-    helper.get_and_set_aws_credentials()
+        # Construct the S3 file URI for the output file
+        s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
 
-    # Upload the output GeoTIFF to the specified S3 location
-    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
-    logger.info(f"Uploaded to S3: {s3_file_uri}")
+        # Activate AWS credentials from the service account attached
+        helper.get_and_set_aws_credentials()
+
+        # Upload the output GeoTIFF to the specified S3 location
+        bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+        logger.info(f"Uploaded to S3: {s3_file_uri}")
 
 
 if __name__ == "__main__":
