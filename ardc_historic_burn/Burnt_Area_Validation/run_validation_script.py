@@ -549,7 +549,7 @@ def run_validation(
         for code in study_site_codes:
             study_region_files.extend([file for file in files if code in file])
 
-        local_folder = f"performance-report/{study_site_name}_{algo_name}"
+        local_folder = f"performance-report/{study_site_name}_{algo_name}_{suffix}"
 
         print(local_folder)
 
@@ -576,7 +576,7 @@ def run_validation(
     ]
 
     for study_site in study_sites:
-        save_folder = f"performance-report/{study_site}_{algo_name}"
+        save_folder = f"performance-report/{study_site}_{algo_name}_{suffix}"
 
         generate_result_by_study_site_folder(
             algo_name,
@@ -599,9 +599,9 @@ def run_validation(
     overall_climate_list = []
 
     for study_site in study_sites:
-        save_folder = f"performance-report/{study_site}_{algo_name}"
-        csv_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}.csv"
-        climate_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}_Climate_Validation_statistics.csv"
+        save_folder = f"performance-report/{study_site}_{algo_name}_{suffix}"
+        csv_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}-{suffix}.csv"
+        climate_file_name = f"{algo_name}_{study_site}-{year}-{year_basis}_{suffix}_Climate_Validation_statistics.csv"
 
         # result CSV
         overall_result.append(pd.read_csv(f"{save_folder}/{csv_file_name}"))
@@ -612,12 +612,12 @@ def run_validation(
 
     overall_df = pd.concat(overall_result)
 
-    overall_df.to_csv(f"performance-report/{algo_name}-overall.csv", index=False)
+    overall_df.to_csv(f"performance-report/{algo_name}-{suffix}-overall.csv", index=False)
 
     overall_climate_df = pd.concat(overall_climate_list)
 
     overall_climate_df.to_csv(
-        f"performance-report/{algo_name}-climate-class-overall.csv", index=False
+        f"performance-report/{algo_name}-climate-class-{suffix}-overall.csv", index=False
     )
 
     bucket_name, s3_folder = performance_report_output_folder.replace(
