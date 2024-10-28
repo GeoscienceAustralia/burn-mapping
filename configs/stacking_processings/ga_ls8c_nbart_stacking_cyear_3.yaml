@@ -48,6 +48,6 @@ match_products:
   - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
     extension_name: wofssevere.tif
     product_weight: 1
-  - product_name: dea_ml_ba_rf_with_landcover_rf_model_08_02_2024
-    extension_name: prediction_object.tif
+  - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
+    extension_name: rbr_pred.tif
     product_weight: 1
