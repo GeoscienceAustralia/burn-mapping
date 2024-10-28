@@ -97,15 +97,15 @@ def process_files(match_products, region_id, output_folder, condition):
     # Compute a binary mask based on the chosen condition
     if condition == "any":
         # Set pixel to 1 if any of the images have a non-zero pixel
-        binary_mask = (combined > 0).any(dim="variable").astype(int)
+        binary_mask = (combined > 0).any(dim="variable").astype("int32")
     elif condition == "majority":
         # Set pixel to 1 if the majority of images have a non-zero pixel
         threshold = combined.sizes["variable"] // 2  # majority threshold
         binary_mask = (combined > 0).sum(dim="variable") > threshold
-        binary_mask = binary_mask.astype(int)
+        binary_mask = binary_mask.astype("int32")
     elif condition == "all":
         # Set pixel to 1 only if all images have a non-zero pixel
-        binary_mask = (combined > 0).all(dim="variable").astype(int)
+        binary_mask = (combined > 0).all(dim="variable").astype("int32")
     else:
         raise ValueError("Invalid condition. Choose from 'any', 'majority', or 'all'.")
 
