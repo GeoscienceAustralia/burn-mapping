@@ -1,5 +1,20 @@
 output_folder: s3://dea-public-data-dev/projects/burn_cube/derivative
 
+input_products:
+  platform: ls
+  geomed_name: ga_ls8c_nbart_gm_4cyear_2016
+  wofs_summary_name: ga_ls_wo_fq_cyear_3
+  ard_names:
+    - ga_ls8c_ard_3
+  input_ard_bands:
+    - nbart_green
+    - nbart_nir
+    - nbart_swir_2
+  input_gm_bands:
+    - nbart_green
+    - nbart_nir
+    - nbart_swir_2
+
 product:
   name: ga_ls8c_nbart_stacking_cyear_3
   short_name: ga_ls8c_nbart_stacking_cyear_3
@@ -40,6 +55,19 @@ product:
     - landsat:wrs_path
     - landsat:wrs_row
     - fmask:clear
+  thumbnail_styling:
+    index_function:
+      function: datacube_ows.band_utils.single_band
+      kwargs:
+        band: any
+      mapped_bands: true
+    mpl_ramp: Oranges
+    name: ga_ls8c_nbart_stacking_cyear_3
+    needed_bands:
+    - any
+    range:
+    - 0
+    - 1
 
 match_products:
   - product_name: dea_ml_ba_rf_with_landcover_xgb_model_02_08_2024
