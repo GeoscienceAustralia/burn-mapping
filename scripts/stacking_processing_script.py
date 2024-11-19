@@ -8,7 +8,7 @@ import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
 
-from dea_burn_cube import bc_io, helper
+from dea_burn_cube import bc_io, helper, task
 
 # Set up logging configurations
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
@@ -117,6 +117,13 @@ def process_files(match_products, region_id, output_folder, condition):
 
 @click.command(no_args_is_help=True)
 @click.option(
+    "--task-id",
+    "-t",
+    type=str,
+    default=None,
+    help="REQUIRED. Burn Cube task id, e.g. Dec-21.",
+)
+@click.option(
     "--region-id",
     "-r",
     type=str,
@@ -135,11 +142,12 @@ def process_files(match_products, region_id, output_folder, condition):
     default=False,
     help="Whether to rerun scenes that have already been processed.",
 )
-def stacking_processing(region_id, process_cfg_url, overwrite):
+def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
     """
     Load and process satellite imagery data to generate a stacking result saved as a GeoTIFF file.
 
     Parameters:
+    - task_id (str): The unique identifier of the task.
     - region_id (str): Region ID to identify the area of interest.
     - process_cfg_url (str): URL of the YAML configuration file for process settings.
     - overwrite (bool): Flag to determine whether to overwrite existing files.
@@ -179,6 +187,18 @@ def stacking_processing(region_id, process_cfg_url, overwrite):
         # Upload the output GeoTIFF to the specified S3 location
         bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
         logger.info(f"Uploaded to S3: {s3_file_uri}")
+
+    processing_task: task.BurnCubeProcessingTask = (
+        task.BurnCubeProcessingTask.from_config(
+            cfg_url=process_cfg_url, task_id=task_id, region_id=region_id
+        )
+    )
+
+    processing_task.validate_cfg()
+    processing_task.validate_data()
+
+    processing_task.upload_processing_log()
+    processing_task.add_metadata_files()
 
 
 if __name__ == "__main__":
