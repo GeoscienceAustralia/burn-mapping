@@ -20,6 +20,10 @@ product:
   short_name: ga_ls8c_nbart_stacking_cyear_3
   version: 3.0.0
   product_family: stacking
+  bands:
+    - any
+    - all
+    - majority
   inherit_skip_properties:
     - eo:cloud_cover
     - fmask:clear
