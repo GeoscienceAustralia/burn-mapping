@@ -186,7 +186,7 @@ def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
         logger.info(f"Saved result as: {pred_tif}")
 
         # Construct the S3 file URI for the output file
-        s3_file_uri = f"{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{pred_tif}"
+        s3_file_uri = f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{pred_tif}"
 
         # Activate AWS credentials from the service account attached
         helper.get_and_set_aws_credentials()
