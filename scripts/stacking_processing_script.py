@@ -34,19 +34,19 @@ def logging_setup():
         logger.propagate = False  # Prevent logs from propagating to the root logger
 
 
-def process_files(match_products, region_id, output_folder, condition):
+def fetch_raster_data(match_products, region_id, output_folder):
     """
-    Processes the files for the given products and region ID by fetching data from S3,
-    applying product weights, and combining the results.
+    Fetches raster data for the given products and region ID from S3 and applies product weights.
 
     Parameters:
     - match_products (list): List of product information including name, weight, and file extension.
     - region_id (str): The ID of the region to process.
     - output_folder (str): The base folder path where output files are stored.
-    - condition (str): The way to convert sub-indicators result to single binary result.
 
     Returns:
-    - xarray.DataArray or None: Returns a combined summary of the processed files or None if no files are found.
+    - dict: A dictionary containing:
+        - "raster_data" (dict): Dictionary of file names mapping to their respective data arrays and weights.
+        - "combined_data" (xarray.DataArray): Combined weighted data array.
     """
     pair_files = []
 
@@ -74,38 +74,65 @@ def process_files(match_products, region_id, output_folder, condition):
                 {
                     "file_path": matching_files[0],
                     "product_weight": match_product["product_weight"],
+                    "product_short_name": match_product["product_short_name"],
                 }
             )
 
-    # If no files matched the criteria, return None to indicate no further processing is needed
+    # If no files matched the criteria, exit
     if not pair_files:
-        logger.info(f"cannot find any match file.")
+        logger.info(f"Cannot find any matching files.")
         sys.exit("Cannot find any files from product folders")
 
-    # Open and process all matching files, applying their respective weights
+    # Initialize a dictionary to store raster data with metadata
+    raster_data = {}
     da_list = []
+
+    # Open and process all matching files, applying their respective weights
     for pair_file in pair_files:
         # Open raster data from S3 using rioxarray
         da = rioxarray.open_rasterio(f"s3://{pair_file['file_path']}")
+
         # Multiply the data array by the product weight
-        da_list.append(da * pair_file["product_weight"])
+        weighted_da = da * pair_file["product_weight"]
+        da_list.append(weighted_da)
 
-    # Combine the weighted data arrays along a new dimension and sum them to get the summary
-    combined = xr.concat(da_list, dim="variable")
-    # sum_summary = combined.sum(dim="variable")
+        raster_data[pair_file["product_short_name"]] = {
+            "data": da,
+            "weight": pair_file["product_weight"],
+        }
 
-    # Compute a binary mask based on the chosen condition
+    # Combine the weighted data arrays along a new dimension
+    combined_data = xr.concat(da_list, dim="variable")
+
+    return {
+        "raster_data": raster_data,
+        "combined_data": combined_data,
+    }
+
+
+def generate_binary_mask(combined_data, condition):
+    """
+    Generates a binary mask from the combined raster data based on a specified condition.
+
+    Parameters:
+    - combined_data (xarray.DataArray): Combined weighted raster data.
+    - condition (str): The way to convert sub-indicator results to a single binary result.
+      Options: 'any', 'majority', or 'all'.
+
+    Returns:
+    - xarray.DataArray: Binary mask based on the specified condition.
+    """
     if condition == "any":
         # Set pixel to 1 if any of the images have a non-zero pixel
-        binary_mask = (combined > 0).any(dim="variable").astype("int32")
+        binary_mask = (combined_data > 0).any(dim="variable").astype("int32")
     elif condition == "majority":
         # Set pixel to 1 if the majority of images have a non-zero pixel
-        threshold = combined.sizes["variable"] // 2  # majority threshold
-        binary_mask = (combined > 0).sum(dim="variable") > threshold
+        threshold = combined_data.sizes["variable"] // 2  # majority threshold
+        binary_mask = (combined_data > 0).sum(dim="variable") > threshold
         binary_mask = binary_mask.astype("int32")
     elif condition == "all":
         # Set pixel to 1 only if all images have a non-zero pixel
-        binary_mask = (combined > 0).all(dim="variable").astype("int32")
+        binary_mask = (combined_data > 0).all(dim="variable").astype("int32")
     else:
         raise ValueError("Invalid condition. Choose from 'any', 'majority', or 'all'.")
 
@@ -171,17 +198,58 @@ def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
     # generate all kinds of conditions to do result comparision
     conditions = ["any", "majority", "all"]  # Options: "any", "majority", "all"
 
+    raster_result = fetch_raster_data(
+        match_products, region_id, processing_task.output_folder
+    )
+    raster_data = raster_result["raster_data"]
+
+    severity = (
+        raster_result["combined_data"].sum(dim="variable")
+        / raster_result["combined_data"].sizes["variable"]
+    )
+
+    fname = "severity.tif"
+
+    # Write the result to a Cloud Optimized GeoTIFF (COG) file
+    write_cog(geo_im=severity, fname=fname, overwrite=overwrite, nodata=-999)
+
+    # Activate AWS credentials from the service account attached
+    helper.get_and_set_aws_credentials()
+
+    # Construct the S3 file URI for the output file
+    s3_file_uri = f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{fname}"
+    # Upload the output GeoTIFF to the specified S3 location
+    bc_io.upload_object_to_s3(fname, s3_file_uri)
+    logger.info(f"Uploaded to S3: {s3_file_uri}")
+
+
+    for match_product_short_name, data_info in raster_data.items():
+        # Extract the raster data (assuming it's stored under the "data" key in the dictionary)
+        geo_im = data_info["data"]
+
+        # Define the output file name using the key (short name)
+        fname = f"{match_product_short_name}.tif"
+
+        # Write the data to a COG file
+        write_cog(geo_im=geo_im, fname=fname, overwrite=overwrite, nodata=-999)
+
+        # Construct the S3 file URI for the output file
+        s3_file_uri = f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{fname}"
+
+        # Upload the output GeoTIFF to the specified S3 location
+        bc_io.upload_object_to_s3(fname, s3_file_uri)
+        logger.info(f"Uploaded to S3: {s3_file_uri}")
+
     for condition in conditions:
         # Process files based on the region and products information
-        sum_summary = process_files(
-            match_products, region_id, processing_task.output_folder, condition
-        )
+        # Step 2: Generate binary mask using the combined data from Step 1
+        binary_mask = generate_binary_mask(raster_result["combined_data"], condition)
 
         # Define the output GeoTIFF file name pattern
         pred_tif = f"{condition}.tif"
 
         # Write the result to a Cloud Optimized GeoTIFF (COG) file
-        write_cog(geo_im=sum_summary, fname=pred_tif, overwrite=overwrite, nodata=-999)
+        write_cog(geo_im=binary_mask, fname=pred_tif, overwrite=overwrite, nodata=-999)
 
         logger.info(f"Saved result as: {pred_tif}")
 
