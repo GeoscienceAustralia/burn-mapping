@@ -81,11 +81,14 @@ match_products:
   - product_name: dea_ml_ba_rf_with_landcover_xgb_model_02_08_2024
     extension_name: prediction_object.tif
     product_weight: 1
+    product_short_name: rf
   - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
     extension_name: wofssevere.tif
     product_weight: 1
+    product_short_name: bc
   - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
     extension_name: rbr_pred.tif
     product_weight: 1
+    product_short_name: rbr
 
 task_table: 10-year-historical-processing-4year-geomad.csv
