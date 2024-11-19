@@ -162,16 +162,16 @@ def generate_binary_mask(combined_data, condition):
     "-p",
     type=str,
     required=True,
-    help="REQUIRED. URL to the Stacking process configuration file (YAML format).",
+    help="REQUIRED. URL to the burn_mapping process configuration file (YAML format).",
 )
 @click.option(
     "--overwrite/--no-overwrite",
     default=False,
     help="Whether to rerun scenes that have already been processed.",
 )
-def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
+def burn_mapping_processing(task_id, region_id, process_cfg_url, overwrite):
     """
-    Load and process satellite imagery data to generate a stacking result saved as a GeoTIFF file.
+    Load and process satellite imagery data to generate a burn_mapping result saved as a GeoTIFF file.
 
     Parameters:
     - task_id (str): The unique identifier of the task.
@@ -203,25 +203,26 @@ def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
     )
     raster_data = raster_result["raster_data"]
 
-    severity = (
+    uncertainty = (
         raster_result["combined_data"].sum(dim="variable")
         / raster_result["combined_data"].sizes["variable"]
     )
 
-    fname = "severity.tif"
+    fname = "uncertainty.tif"
 
     # Write the result to a Cloud Optimized GeoTIFF (COG) file
-    write_cog(geo_im=severity, fname=fname, overwrite=overwrite, nodata=-999)
+    write_cog(geo_im=uncertainty, fname=fname, overwrite=overwrite, nodata=-999)
 
     # Activate AWS credentials from the service account attached
     helper.get_and_set_aws_credentials()
 
     # Construct the S3 file URI for the output file
-    s3_file_uri = f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{fname}"
+    s3_file_uri = (
+        f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{fname}"
+    )
     # Upload the output GeoTIFF to the specified S3 location
     bc_io.upload_object_to_s3(fname, s3_file_uri)
     logger.info(f"Uploaded to S3: {s3_file_uri}")
-
 
     for match_product_short_name, data_info in raster_data.items():
         # Extract the raster data (assuming it's stored under the "data" key in the dictionary)
@@ -269,4 +270,4 @@ def stacking_processing(task_id, region_id, process_cfg_url, overwrite):
 
 
 if __name__ == "__main__":
-    stacking_processing()
+    burn_mapping_processing()

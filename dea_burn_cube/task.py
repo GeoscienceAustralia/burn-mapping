@@ -559,8 +559,8 @@ class BurnCubeProcessingTask:
             "output": self.s3_file_uri,
             "task_table": self.task_table,
             "DEA Burn Cube": version,
-            #"summary_datasets": [e.metadata_doc["label"] for e in self.geomed_datasets]
-            #+ [e.metadata_doc["label"] for e in self.wofs_datasets],
+            # "summary_datasets": [e.metadata_doc["label"] for e in self.geomed_datasets]
+            # + [e.metadata_doc["label"] for e in self.wofs_datasets],
             "ard_datasets": [str(e.id) for e in self.ref_ard_datasets]
             + [str(e.id) for e in self.mapping_ard_datasets],
         }
