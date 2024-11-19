@@ -24,6 +24,10 @@ product:
     - any
     - all
     - majority
+    - rf
+    - bc
+    - rbr
+    - severity
   inherit_skip_properties:
     - eo:cloud_cover
     - fmask:clear
