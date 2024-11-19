@@ -1,0 +1,50 @@
+name: ga_ls8c_nbart_stacking_cyear_3
+description: Geoscience Australia Landsat Nadir BRDF Adjusted Reflectance Terrain, Landsat 8 Stacking 4 Calendar Years Collection 3
+license: CC-BY-4.0
+metadata_type: eo3
+
+metadata:
+  properties:
+    odc:file_format: GeoTIFF
+    odc:product_family: burncube
+  product:
+    name: ga_ls8c_nbart_stacking_cyear_3
+
+measurements:
+  - name: any
+    dtype: int32
+    nodata: -999
+    units: '1'
+  - name: all
+    dtype: int32
+    nodata: -999
+    units: '1'
+  - name: majority
+    dtype: int32
+    nodata: -999
+    units: '1'
+  - name: rf
+    dtype: int16
+    nodata: -999
+    units: '1'
+  - name: bc
+    dtype: float64
+    nodata: -999
+    units: '1'
+  - name: rbr
+    dtype: float64
+    nodata: -999
+    units: '1'
+  - name: severity
+    dtype: float64
+    nodata: -999
+    units: '1'
+
+load:
+  crs: 'epsg:3577'
+  resolution:
+    y: -30
+    x: 30
+  align:
+    y: 0
+    x: 0
