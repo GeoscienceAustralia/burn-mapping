@@ -83,3 +83,5 @@ match_products:
   - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
     extension_name: rbr_pred.tif
     product_weight: 1
+
+task_table: 10-year-historical-processing-4year-geomad.csv
