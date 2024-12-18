@@ -21,13 +21,6 @@ product:
   version: 3.0.0
   product_family: fmc
   bands:
-    - wofsstartdate
-    - wofsseverity
-    - wofssevere
-    - wofsmoderate
-    - wofsduration
-    - wofscorroborate
-    - wofscleaned
     - count
   inherit_skip_properties:
     - eo:cloud_cover
