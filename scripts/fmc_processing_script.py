@@ -185,6 +185,9 @@ def fmc_processing(
 
     logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
 
+    # activate AWS credential from attached service account
+    helper.get_and_set_aws_credentials()
+
     bc_io.upload_object_to_s3(local_tif, s3_file_uri)
 
     logger.info("finish proection object filter: " + str(dataset_uuid))
