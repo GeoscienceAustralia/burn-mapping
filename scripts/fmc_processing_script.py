@@ -1,8 +1,12 @@
 # import modules
+import logging
 import os
+import sys
 
+import click
 import datacube
 import joblib
+import requests
 import xarray as xr
 from datacube.utils.cog import write_cog
 from dea_tools.classification import sklearn_flatten, sklearn_unflatten
@@ -121,6 +125,17 @@ def fmc_processing(
 ):
     logging_setup()
 
+    dc = datacube.Datacube(
+        app=f"fmc_processing",
+        config={
+            "db_hostname": os.getenv("ODC_DB_HOSTNAME"),
+            "db_password": os.getenv("ODC_DB_PASSWORD"),
+            "db_username": os.getenv("ODC_DB_USERNAME"),
+            "db_port": 5432,
+            "db_database": os.getenv("ODC_DB_DATABASE"),
+        },
+    )
+
     # need to set the AWS login so that we can access the data we need
     os.environ["AWS_NO_SIGN_REQUEST"] = "Yes"
 
@@ -128,11 +143,9 @@ def fmc_processing(
 
     measurements_list = process_cfg["input_products"]["input_bands"]
     output_folder = process_cfg["output_folder"]
-    model_url = process_cfg["model_features"]
+    model_url = process_cfg["model_path"]
     product_name = process_cfg["product"]["name"]
     product_version = str(process_cfg["product"]["version"]).replace(".", "-")
-
-    dc = datacube.Datacube(app="fmc_processing")
 
     # Define the path to the saved machine learning model file.
     model_path = "RF_AllBands_noLC_DEA_labeless.joblib"
@@ -142,7 +155,7 @@ def fmc_processing(
     download_file_from_s3_public(model_url, model_path)
 
     # import model: move it to fmc processing cfg file
-    model = joblib.load(model_url)
+    model = joblib.load(model_path)
 
     # find a single S2 dataset: 26cce90f-c8f9-4234-835c-35005454f62b
 
