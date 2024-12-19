@@ -6,6 +6,7 @@ import sys
 import click
 import datacube
 import joblib
+import numpy as np
 import requests
 import xarray as xr
 from datacube.utils.cog import write_cog
