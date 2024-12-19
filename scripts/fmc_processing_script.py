@@ -84,6 +84,16 @@ def classify_FMC(data, model):
     return dataset_result
 
 
+def download_file_from_s3_public(url, file_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(file_path, "wb") as f:
+            f.write(response.content)
+        print(f"File downloaded successfully from: {url}")
+    else:
+        print(f"Failed to download file from: {url}")
+
+
 @click.command(no_args_is_help=True)
 @click.option(
     "--task-id",
@@ -130,6 +140,13 @@ def fmc_processing(
     product_version = str(process_cfg["product"]["version"]).replace(".", "-")
 
     dc = datacube.Datacube(app="fmc_processing")
+
+    # Define the path to the saved machine learning model file.
+    model_path = "RF_AllBands_noLC_DEA_labeless.joblib"
+
+    # auto download Machine Learning model from AWS S3
+
+    download_file_from_s3_public(model_url, model_path)
 
     # import model: move it to fmc processing cfg file
     model = joblib.load(model_url)

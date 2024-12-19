@@ -58,4 +58,4 @@ product:
     - landsat:wrs_row
     - fmask:clear
 
-model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_model_ARDC_version.joblib
+model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_AllBands_noLC_DEA_labeless.joblib
