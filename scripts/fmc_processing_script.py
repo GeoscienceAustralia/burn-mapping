@@ -75,7 +75,7 @@ def classify_fmc(data, model):
     data_flat = sklearn_flatten(data_neworder)
     
     # Replace inf and -inf with no_data_value
-    data_flat = np.where(np.isinf(data_flat), np.nan, data_flat)
+    data_flat = np.where(np.isinf(data_flat), -999, data_flat)
 
     # Classify the data
     out_class = model.predict(data_flat)
