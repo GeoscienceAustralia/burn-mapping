@@ -200,7 +200,7 @@ def fmc_processing(
     local_tif = product_name + f"_{region_code}_{nm_date}_fmc.tif"
 
     # save to file
-    write_cog(masked_data.LFMC, fname=local_tif)
+    write_cog(masked_data.LFMC, fname=local_tif, overwrite=True, nodata=-999)
 
     logger.info("Save result as: " + str(local_tif))
 
