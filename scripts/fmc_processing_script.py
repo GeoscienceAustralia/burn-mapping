@@ -195,7 +195,7 @@ def fmc_processing(dataset_uuid, process_cfg_url, overwrite):
 
     # Upload result to S3
     s3_folder = (
-        f"{output_folder}/{product_name}/{product_version}/{region_code[:2]}/{region_code[2:]}"
+        f"{output_folder}/{product_name}/{product_version}/{region_code[:2]}/{region_code[2:]}/"
         + acquisition_date.replace("-", "/")
     )
     s3_file_uri = f"{s3_folder}/{local_tif}"
