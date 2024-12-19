@@ -73,6 +73,16 @@ def classify_fmc(data, model):
     # Flatten the data for classification
     data_flat = sklearn_flatten(data_neworder)
 
+    # Check and clean the flattened data
+    data_flat = np.where(np.isinf(data_flat), np.nan, data_flat)  # Replace inf with NaN
+    from sklearn.impute import SimpleImputer
+
+    imputer = SimpleImputer(strategy="mean")
+    data_flat = imputer.fit_transform(data_flat)  # Replace NaN with column mean
+    max_value = 1e6
+    data_flat = np.clip(data_flat, -max_value, max_value)  # Cap values
+    data_flat = data_flat.astype("float32")  # Ensure float32
+
     # Classify the data
     out_class = model.predict(data_flat)
 
