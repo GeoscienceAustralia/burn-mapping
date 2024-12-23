@@ -73,7 +73,7 @@ def classify_fmc(data, model):
 
     # Flatten the data for classification
     data_flat = sklearn_flatten(data_neworder)
-    
+
     # Replace inf and -inf with no_data_value
     data_flat = np.where(np.isinf(data_flat), -999, data_flat)
 
@@ -108,7 +108,6 @@ def download_file_from_s3_public(url, file_path):
     "-d",
     type=str,
     required=True,
-    help="Region ID (AU-30 Grid).",
 )
 @click.option(
     "--process-cfg-url",
