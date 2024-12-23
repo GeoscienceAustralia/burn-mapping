@@ -42,12 +42,6 @@ def download_file_from_s3_public(url, file_path):
 
 @click.command(no_args_is_help=True)
 @click.option(
-    "--dataset-url",
-    "-d",
-    type=str,
-    required=True,
-)
-@click.option(
     "--process-cfg-url",
     "-p",
     type=str,
@@ -59,12 +53,11 @@ def download_file_from_s3_public(url, file_path):
     default=False,
     help="Rerun scenes that have already been processed.",
 )
-def dea_rf_training(dataset_url, process_cfg_url, overwrite):
+def dea_rf_training(process_cfg_url, overwrite):
     """
-    Process FMC for a given dataset UUID and configuration.
+    Process FMC for a given configuration.
 
     Args:
-        dataset_url (str): S3 URL of the dataset to train.
         process_cfg_url (str): URL to the process configuration YAML file.
         overwrite (bool): Whether to overwrite existing results.
     """
