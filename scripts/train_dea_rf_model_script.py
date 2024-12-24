@@ -1,4 +1,5 @@
 # Import modules
+import hashlib
 import logging
 import os
 import sys
@@ -68,9 +69,18 @@ def dea_rf_training(process_cfg_url, overwrite):
 
     # Load process configuration
     process_cfg = helper.load_yaml_remote(process_cfg_url)
-    measurements_list = process_cfg["input_products"]["input_bands"]
+    measurements_list = process_cfg["model_features"]
     training_model_url = process_cfg["model_path"]
     training_dataset_url = process_cfg["training_dataset_url"]
+
+    # Convert dictionary to a sorted string representation to ensure consistent hash
+    dict_string = str(sorted(process_cfg.items()))
+
+    # Generate a hash key using SHA-256
+    hash_key = hashlib.sha256(dict_string.encode()).hexdigest()
+
+    # Keep only the last 4 digits of the hash
+    last_4_digits = hash_key[-4:]
 
     training_dataset_file = (
         "RF_training_data_21_tiles_1000m_grid_3000m_to_7000m_buffer.csv"
@@ -141,6 +151,10 @@ def dea_rf_training(process_cfg_url, overwrite):
     model_filename = "dea_ml_ba_rf_with_landcover_rf_model.joblib"
     joblib.dump(best_model, model_filename)
     print(f"Best model saved to {model_filename}")
+
+    training_model_url = training_model_url.replace(
+        ".joblib", f"-{last_4_digits}.joblib"
+    )
 
     helper.get_and_set_aws_credentials()
     bc_io.upload_object_to_s3(model_filename, training_model_url)
