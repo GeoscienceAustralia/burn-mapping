@@ -72,6 +72,7 @@ def dea_rf_training(process_cfg_url, overwrite):
     measurements_list = process_cfg["model_features"]
     training_model_url = process_cfg["model_path"]
     training_dataset_url = process_cfg["training_dataset_url"]
+    param_grid = process_cfg["param_grid"]
 
     # Convert dictionary to a sorted string representation to ensure consistent hash
     dict_string = str(sorted(process_cfg.items()))
@@ -109,7 +110,7 @@ def dea_rf_training(process_cfg_url, overwrite):
     kfold = KFold(n_splits=5, shuffle=True, random_state=random_state)
 
     # Define the parameter grid for RandomForestClassifier
-    param_grid = {"n_estimators": [20, 30, 50, 100], "max_depth": [5, 15, 25]}
+    # param_grid = {"n_estimators": [20, 30, 50, 100], "max_depth": [5, 15, 25]}
 
     # Create a RandomForestClassifier instance
     base_model = RandomForestClassifier()
