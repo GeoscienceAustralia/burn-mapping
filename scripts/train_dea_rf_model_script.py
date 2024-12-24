@@ -3,10 +3,15 @@ import hashlib
 import logging
 import os
 import sys
+import time
 
 import click
+import joblib
 import pandas as pd
 import requests
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, KFold
+from tqdm import tqdm
 
 from dea_burn_cube import bc_io, helper
 
@@ -98,11 +103,6 @@ def dea_rf_training(process_cfg_url, overwrite):
 
     y = data["class"]
 
-    import joblib
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.model_selection import GridSearchCV, KFold
-    from tqdm import tqdm
-
     # Set a random state for reproducibility
     random_state = 1234
 
@@ -116,33 +116,39 @@ def dea_rf_training(process_cfg_url, overwrite):
     base_model = RandomForestClassifier()
 
     # Customize the GridSearchCV progress using a progress bar
-    class TQDMGridSearchCV(GridSearchCV):
-        def fit(self, x, y=None, **fit_params):
-            total_fits = (
-                len(self.cv.split(x, y))
-                * len(self.param_grid["n_estimators"])
-                * len(self.param_grid["max_depth"])
-            )
-            with tqdm(
-                total=total_fits, desc="Grid Search Progress", unit="fit"
-            ) as pbar:
-                self._original_fit = super().fit
-
-                def progress_callback(*args, **kwargs):
-                    pbar.update()
-
-                self.fit_callback = progress_callback
-                result = self._original_fit(x, y, **fit_params)
-                return result
-
-    # Initialize the grid search with TQDMGridSearchCV
-    grid_search = TQDMGridSearchCV(
-        estimator=base_model, param_grid=param_grid, cv=kfold, verbose=0
+    grid_search = GridSearchCV(
+        estimator=base_model, param_grid=param_grid, cv=kfold, verbose=2
     )
 
-    # Fit the model and show progress
-    print("Fitting the model...")
-    grid_search.fit(x, y)
+    # from tqdm import tqdm if not in notebook
+
+    def fit(model, *args, **kwargs):
+        class BarStdout:
+            def write(self, text):
+                if "totalling" in text and "fits" in text:
+                    self.bar_size = int(
+                        text.split("totalling")[1].split("fits")[0][1:-1]
+                    )
+                    self.bar = tqdm(range(self.bar_size))
+                    self.count = 0
+                    return
+                if "CV" in text and hasattr(self, "bar"):
+                    self.count += 1
+                    self.bar.update(n=self.count - self.bar.n)
+                    if self.count % (self.bar_size // 5) == 0:
+                        time.sleep(0.1)
+
+            def flush(self, text=None):
+                pass
+
+        default_stdout = sys.stdout
+        sys.stdout = BarStdout()
+        model.verbose = 2
+        model.fit(*args, **kwargs)
+        sys.stdout = default_stdout
+        return model
+
+    fit(grid_search, x.values, y)
 
     # Retrieve the best model
     best_model = grid_search.best_estimator_
