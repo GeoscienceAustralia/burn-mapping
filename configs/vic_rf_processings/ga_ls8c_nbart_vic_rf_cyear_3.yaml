@@ -213,5 +213,5 @@ param_grid:
     - log2
     - null
   criterion:
-    - gini
-    - entropy
+#    - gini
+#    - entropy
