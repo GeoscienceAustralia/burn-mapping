@@ -3,7 +3,6 @@ import hashlib
 import logging
 import os
 import sys
-import time
 
 import click
 import joblib
@@ -33,6 +32,38 @@ def logging_setup():
     for logger in loggers:
         logger.addHandler(stdout_hdlr)
         logger.propagate = False
+
+
+class TQDMLogger:
+    """Custom logger to integrate tqdm with the logging system."""
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.progress_bar = None
+
+    def write(self, text):
+        if "totalling" in text and "fits" in text:
+            # Initialize tqdm based on the number of fits
+            self.bar_size = int(text.split("totalling")[1].split("fits")[0][1:-1])
+            self.progress_bar = tqdm(total=self.bar_size, desc="Grid Search Progress")
+            return
+        if "CV" in text and self.progress_bar:
+            self.progress_bar.update(1)
+
+    def flush(self):
+        if self.progress_bar:
+            self.progress_bar.close()
+
+
+def fit_with_logging(model, X, y, logger):
+    """Fit a model with progress bar redirected to logger."""
+    default_stdout = sys.stdout
+    sys.stdout = TQDMLogger(logger)
+    try:
+        model.verbose = 2
+        model.fit(X, y)
+    finally:
+        sys.stdout = default_stdout
 
 
 def download_file_from_s3_public(url, file_path):
@@ -120,35 +151,8 @@ def dea_rf_training(process_cfg_url, overwrite):
         estimator=base_model, param_grid=param_grid, cv=kfold, verbose=2
     )
 
-    # from tqdm import tqdm if not in notebook
-
-    def fit(model, *args, **kwargs):
-        class BarStdout:
-            def write(self, text):
-                if "totalling" in text and "fits" in text:
-                    self.bar_size = int(
-                        text.split("totalling")[1].split("fits")[0][1:-1]
-                    )
-                    self.bar = tqdm(range(self.bar_size))
-                    self.count = 0
-                    return
-                if "CV" in text and hasattr(self, "bar"):
-                    self.count += 1
-                    self.bar.update(n=self.count - self.bar.n)
-                    if self.count % (self.bar_size // 5) == 0:
-                        time.sleep(0.1)
-
-            def flush(self, text=None):
-                pass
-
-        default_stdout = sys.stdout
-        sys.stdout = BarStdout()
-        model.verbose = 2
-        model.fit(*args, **kwargs)
-        sys.stdout = default_stdout
-        return model
-
-    fit(grid_search, x.values, y)
+    # Fit the model with progress displayed in the logger
+    fit_with_logging(grid_search, x.values, y, logger)
 
     # Retrieve the best model
     best_model = grid_search.best_estimator_
@@ -163,8 +167,14 @@ def dea_rf_training(process_cfg_url, overwrite):
         ".joblib", f"-{last_4_digits}.joblib"
     )
 
+    # Convert to S3 URI
+    s3_uri = training_model_url.replace(
+        "https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com",
+        "s3://dea-public-data-dev",
+    )
+
     helper.get_and_set_aws_credentials()
-    bc_io.upload_object_to_s3(model_filename, training_model_url)
+    bc_io.upload_object_to_s3(model_filename, s3_uri)
     logger.info(f"Uploaded result to: {training_model_url}")
 
 
