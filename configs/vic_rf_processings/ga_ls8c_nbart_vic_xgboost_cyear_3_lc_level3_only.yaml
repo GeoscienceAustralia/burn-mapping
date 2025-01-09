@@ -13,8 +13,8 @@ input_products:
     - swir2
 
 product:
-  name: dea_ml_ba_rf_with_landcover_level3_rf_model_08_01_2025
-  short_name: dea_ml_ba_rf_with_landcover_level3_rf_model_08_01_2025
+  name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_08_01_2025
+  short_name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_08_01_2025
   version: 3.0.0
   product_family: vic_rf
   bands:
@@ -68,7 +68,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: dea_ml_ba_rf_with_landcover_level3_rf_model_08_01_2025
+    name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_08_01_2025
     needed_bands:
     - wofssevere
     range:
@@ -103,36 +103,31 @@ model_features:
   - level3_216
   - level3_220
 
-model_type: RF
+model_type: XGBOOST
 
 param_grid:
   n_estimators:
-    - 20
-    - 30
     - 50
     - 100
+    - 150
+    - 200
   max_depth:
-    - 5
-    - 15
-    - 25
-  min_samples_split:
-    - 2
-    - 5
     - 10
-  min_samples_leaf:
-    - 1
-    - 2
-    - 4
-  bootstrap:
-    - true
-    - false
-  class_weight:
-    - balanced
-    - null
-  max_features:
-    - sqrt
-    - log2
-    - null
-  criterion:
-    - gini
-    - entropy
+    - 20
+    - 30
+  learning_rate:
+    - 0.01
+    - 0.1
+    - 0.2
+  subsample:
+    - 0.8
+    - 0.9
+    - 1.0
+  colsample_bytree:
+    - 0.8
+    - 0.9
+    - 1.0
+  gamma:
+    - 0
+    - 0.1
+    - 0.2
