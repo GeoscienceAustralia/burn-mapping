@@ -211,7 +211,7 @@ param_grid:
   max_features:
     - sqrt
     - log2
-    - null
-  criterion:
-    - gini
-    - entropy
+#    - null
+#  criterion:
+#    - gini
+#    - entropy
