@@ -11,6 +11,7 @@ import requests
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, KFold
 from tqdm import tqdm
+from xgboost import XGBClassifier  # Import XGBoost
 
 from dea_burn_cube import bc_io, helper
 
@@ -18,7 +19,6 @@ from dea_burn_cube import bc_io, helper
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
-
 
 def logging_setup():
     """Set up logging for all modules except sqlalchemy and boto."""
@@ -32,7 +32,6 @@ def logging_setup():
     for logger in loggers:
         logger.addHandler(stdout_hdlr)
         logger.propagate = False
-
 
 class TQDMLogger:
     """Custom logger to integrate tqdm with the logging system."""
@@ -54,7 +53,6 @@ class TQDMLogger:
         if self.progress_bar:
             self.progress_bar.close()
 
-
 def fit_with_logging(model, X, y, logger):
     """Fit a model with progress bar redirected to logger."""
     default_stdout = sys.stdout
@@ -65,7 +63,6 @@ def fit_with_logging(model, X, y, logger):
     finally:
         sys.stdout = default_stdout
 
-
 def download_file_from_s3_public(url, file_path):
     """Download a file from a public S3 URL."""
     response = requests.get(url)
@@ -75,7 +72,6 @@ def download_file_from_s3_public(url, file_path):
         logger.info(f"File downloaded successfully from: {url}")
     else:
         logger.error(f"Failed to download file from: {url}")
-
 
 @click.command(no_args_is_help=True)
 @click.option(
@@ -110,6 +106,9 @@ def dea_rf_training(process_cfg_url, overwrite):
     training_dataset_url = process_cfg["training_dataset_url"]
     param_grid = process_cfg["param_grid"]
 
+    # Get the model type keyword from the configuration
+    model_type = process_cfg.get("model_type", "RF").upper()
+
     # Convert dictionary to a sorted string representation to ensure consistent hash
     dict_string = str(sorted(process_cfg.items()))
 
@@ -129,9 +128,7 @@ def dea_rf_training(process_cfg_url, overwrite):
 
     # Separate features and target variable
     x = data.drop("class", axis=1)
-
     x = x[measurements_list]
-
     y = data["class"]
 
     # Set a random state for reproducibility
@@ -140,11 +137,16 @@ def dea_rf_training(process_cfg_url, overwrite):
     # Create an instance of KFold cross-validation
     kfold = KFold(n_splits=5, shuffle=True, random_state=random_state)
 
-    # Define the parameter grid for RandomForestClassifier
-    # param_grid = {"n_estimators": [20, 30, 50, 100], "max_depth": [5, 15, 25]}
-
-    # Create a RandomForestClassifier instance
-    base_model = RandomForestClassifier()
+    # Initialize model and GridSearchCV based on the model type
+    if model_type == "RF":
+        base_model = RandomForestClassifier()
+        logger.info("Using RandomForestClassifier.")
+    elif model_type == "XGBOOST":
+        base_model = XGBClassifier(use_label_encoder=False, eval_metric="logloss")
+        logger.info("Using XGBoostClassifier.")
+    else:
+        logger.error(f"Unsupported model type: {model_type}")
+        sys.exit(1)
 
     # Customize the GridSearchCV progress using a progress bar
     grid_search = GridSearchCV(
@@ -159,7 +161,7 @@ def dea_rf_training(process_cfg_url, overwrite):
     print(f"Best parameters: {grid_search.best_params_}")
 
     # Save the best model to a file
-    model_filename = "dea_ml_ba_rf_with_landcover_rf_model.joblib"
+    model_filename = f"dea_ml_ba_{model_type.lower()}_model.joblib"
     joblib.dump(best_model, model_filename)
     print(f"Best model saved to {model_filename}")
 
@@ -176,7 +178,6 @@ def dea_rf_training(process_cfg_url, overwrite):
     helper.get_and_set_aws_credentials()
     bc_io.upload_object_to_s3(model_filename, s3_uri)
     logger.info(f"Uploaded result to: {training_model_url}")
-
 
 if __name__ == "__main__":
     dea_rf_training()

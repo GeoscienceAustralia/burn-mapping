@@ -92,6 +92,7 @@ def load_yaml_remote(yaml_url: str) -> Dict[str, Any]:
     Open a yaml file remotely and return the parsed yaml document
     """
     try:
+        logger.info(f"Try load {yaml_url}")
         with fsspec.open(yaml_url, mode="r") as f:
             return next(yaml.safe_load_all(f))
     except Exception:
