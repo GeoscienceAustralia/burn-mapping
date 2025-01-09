@@ -76,7 +76,7 @@ product:
     - 1
 
 task_table: 10-year-historical-processing-4year-geomad.csv
-training_dataset_url: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_training_data_21_tiles_1000m_grid_3000m_to_7000m_buffer_lc_level3_only.csv.csv
+training_dataset_url: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_training_data_21_tiles_1000m_grid_3000m_to_7000m_buffer_lc_level3_only.csv
 model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/dea_ml_ba_rf_with_landcover_level3_rf_model_08_01_2025.joblib
 model_features:
   - NDVI_post
