@@ -13,8 +13,8 @@ input_products:
     - swir2
 
 product:
-  name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_24_01_2025
-  short_name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_24_01_2025
+  name: dea_ml_ba_rf_with_landcover_level4_rf_model_24_01_2025
+  short_name: dea_ml_ba_rf_with_landcover_level4_rf_model_24_01_2025
   version: 3.0.0
   product_family: vic_rf
   bands:
@@ -68,7 +68,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: dea_ml_ba_rf_with_landcover_level3_xgboost_model_24_01_2025
+    name: dea_ml_ba_rf_with_landcover_level4_rf_model_24_01_2025
     needed_bands:
     - wofssevere
     range:
@@ -77,7 +77,7 @@ product:
 
 task_table: 10-year-historical-processing-4year-geomad.csv
 training_dataset_url: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_training_data_21_tiles_1000m_grid_3000m_to_7000m_buffer_with_2025_lc.csv
-model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/dea_ml_ba_rf_with_landcover_level3_xgboost_model_08_01_2025.joblib
+model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/dea_ml_ba_rf_with_landcover_level3_rf_model_08_01_2025.joblib
 model_features:
   - NDVI_post
   - NBR_post
@@ -95,39 +95,118 @@ model_features:
   - climate_code_1
   - climate_code_3
   - climate_code_2
-  - level3_0
-  - level3_111
-  - level3_112
-  - level3_124
-  - level3_215
-  - level3_216
-  - level3_220
+  - level4_0
+  - level4_1
+  - level4_3
+  - level4_4
+  - level4_5
+  - level4_6
+  - level4_7
+  - level4_8
+  - level4_14
+  - level4_15
+  - level4_16
+  - level4_17
+  - level4_18
+  - level4_19
+  - level4_20
+  - level4_21
+  - level4_22
+  - level4_23
+  - level4_24
+  - level4_25
+  - level4_26
+  - level4_27
+  - level4_28
+  - level4_29
+  - level4_30
+  - level4_31
+  - level4_32
+  - level4_33
+  - level4_34
+  - level4_35
+  - level4_36
+  - level4_55
+  - level4_56
+  - level4_57
+  - level4_58
+  - level4_59
+  - level4_60
+  - level4_61
+  - level4_62
+  - level4_63
+  - level4_64
+  - level4_65
+  - level4_66
+  - level4_67
+  - level4_68
+  - level4_69
+  - level4_70
+  - level4_71
+  - level4_72
+  - level4_73
+  - level4_74
+  - level4_75
+  - level4_76
+  - level4_77
+  - level4_78
+  - level4_79
+  - level4_80
+  - level4_81
+  - level4_82
+  - level4_83
+  - level4_84
+  - level4_85
+  - level4_86
+  - level4_87
+  - level4_88
+  - level4_89
+  - level4_90
+  - level4_91
+  - level4_92
+  - level4_93
+  - level4_94
+  - level4_95
+  - level4_96
+  - level4_97
+  - level4_98
+  - level4_99
+  - level4_100
+  - level4_101
+  - level4_102
+  - level4_103
+  - level4_104
 
-model_type: XGBOOST
+model_type: RF
 
 param_grid:
   n_estimators:
-    - 50
-    - 100
-    - 150
-    - 200
-  max_depth:
-    - 10
     - 20
     - 30
-  learning_rate:
-    - 0.01
-    - 0.1
-    - 0.2
-  subsample:
-    - 0.8
-    - 0.9
-    - 1.0
-  colsample_bytree:
-    - 0.8
-    - 0.9
-    - 1.0
-  gamma:
-    - 0
-    - 0.1
-    - 0.2
+    - 50
+    - 100
+  max_depth:
+    - 5
+    - 15
+    - 25
+  min_samples_split:
+    - 2
+    - 5
+    - 10
+  min_samples_leaf:
+    - 1
+    - 2
+    - 4
+  bootstrap:
+    - true
+    - false
+  class_weight:
+    - balanced
+    - null
+  max_features:
+    - sqrt
+    - log2
+    - null
+  criterion:
+    - gini
+    - entropy
