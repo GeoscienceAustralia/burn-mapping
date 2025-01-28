@@ -80,23 +80,46 @@ def _get_gpgon(
 def feature_layers(
     query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name
 ):
-    # Load ls8 4-year geomedian for the specified time period and query parameters
-    ds_base = hnrs_dc.load(
-        # product="ga_ls8c_nbart_gm_4cyear_3",
-        product=pre_fire_gm_product_name,
-        # time=("2017-01-01", "2017-12-31"),  # calendar year
-        time=time_pre,  # calendar year
-        **query,
-    )
+    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
+    # print(ds_post)
+    
+    base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
+    #query['measurements'] = base_measurements
+    del query['measurements']
+    
+    # Load ls8 geomedians
+    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
+             time=("2017-01-01", "2017-12-31"), #calendar year
+             **query)
+    
+    ds_base = ds_base[base_measurements]
+    
+    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
+    
+    # Dictionary mapping old variable names to new ones
+    rename_dict = {
+        "nbart_blue": "blue",
+        "nbart_green": "green",
+        "nbart_red": "red",
+        "nbart_nir": "nir",
+        "nbart_swir_1": "swir1",
+        "nbart_swir_2": "swir2",
+    }
 
-    # Load post-fire annual geomedian
-    ds_post = dc.load("ga_ls8c_nbart_gm_cyear_3", time=time_post, **query)
+    ds_post = ds_post.rename(rename_dict)
+    
+    # Load ls8 geomedians
+    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
+             time=("2017-01-01", "2017-12-31"), #calendar year
+             **query)
+    
+    ds_post = dc.load('ga_ls8c_nbart_gm_cyear_3', time = time_post, **query)
 
     # Load Land Cover
     # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version
     lc_query = query
     lc_query["measurements"] = ["level3", "level4"]
-
+    
     ds_lc = dc.load("ga_ls_landcover_class_cyear_3", time=time_post, **query)
 
     # the landcover level 3 and level 4 should convert to one-hot encoding data.
