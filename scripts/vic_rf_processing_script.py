@@ -92,12 +92,11 @@ def feature_layers(
     ds_post = dc.load("ga_ls8c_nbart_gm_cyear_3", time=time_post, **query)
 
     # Load Land Cover
-    # NOTE: the ga_ls_landcover_class_fyear_3 is old Collection 3 LC, will chnage it
-    # in the future
+    # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version
     lc_query = query
     lc_query["measurements"] = ["level3", "level4"]
 
-    ds_lc = dc.load("ga_ls_landcover_class_fyear_3", time=time_post, **query)
+    ds_lc = dc.load("ga_ls_landcover_class_cyear_3", time=time_post, **query)
 
     # the landcover level 3 and level 4 should convert to one-hot encoding data.
 
