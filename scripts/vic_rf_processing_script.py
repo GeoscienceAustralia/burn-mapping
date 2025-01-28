@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import sys
+import hashlib
 from typing import Tuple
 
 import click
@@ -376,9 +377,22 @@ def vic_rf_processing(
 
     output_product_name = process_cfg["product"]["name"]
 
+    # Convert dictionary to a sorted string representation to ensure consistent hash
+    dict_string = str(sorted(process_cfg.items()))
+
+    # Generate a hash key using SHA-256
+    hash_key = hashlib.sha256(dict_string.encode()).hexdigest()
+
+    # Keep only the last 4 digits of the hash
+    last_4_digits = hash_key[-4:]
+
     # e.g., "https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/"
     # + "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
     model_url = process_cfg["model_path"]
+
+    model_url = model_url.replace(
+        ".joblib", f"-{last_4_digits}.joblib"
+    )
 
     print(rioxarray.__version__)
 
