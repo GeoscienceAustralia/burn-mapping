@@ -5,12 +5,12 @@ input_products:
   geomed_name: ga_ls8c_nbart_gm_4cyear_2016
   wofs_summary_name: ga_ls_wo_fq_cyear_3
   input_gm_bands:
-    - red
-    - green
-    - blue
-    - nir
-    - swir1
-    - swir2
+    - nbart_red
+    - nbart_green
+    - nbart_blue
+    - nbart_nir
+    - nbart_swir_1
+    - nbart_swir_2
 
 product:
   name: dea_ml_ba_rf_with_landcover_level4_rf_model_24_01_2025
