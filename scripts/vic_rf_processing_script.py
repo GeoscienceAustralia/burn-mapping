@@ -83,17 +83,6 @@ def feature_layers(
     
     ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
 
-    base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
-    #query['measurements'] = base_measurements
-    del query['measurements']
-    
-    # Load ls8 geomedians
-    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
-             time=("2017-01-01", "2017-12-31"), #calendar year
-             **query)
-    
-    ds_base = ds_base[base_measurements]
-    
     # Dictionary mapping old variable names to new ones
     rename_dict = {
         "nbart_blue": "blue",
@@ -105,6 +94,17 @@ def feature_layers(
     }
 
     ds_post = ds_post.rename(rename_dict)
+
+    base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
+    #query['measurements'] = base_measurements
+    del query['measurements']
+    
+    # Load ls8 geomedians
+    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
+             time=("2017-01-01", "2017-12-31"), #calendar year
+             **query)
+    
+    ds_base = ds_base[base_measurements]
 
     # Load Land Cover
     # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version
@@ -454,7 +454,7 @@ def vic_rf_processing(
     output_crs = "epsg:3577"
 
     # Define a list of bands to load
-    measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
+    measurements = ["nbart_blue", "nbart_green", "nbart_red", "nbart_nir", "nbart_swir_1", "nbart_swir_2"]
 
     # Define the analysis year
     time_post = "2020"
