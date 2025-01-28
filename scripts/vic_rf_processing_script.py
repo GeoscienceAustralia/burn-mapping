@@ -80,9 +80,9 @@ def _get_gpgon(
 def feature_layers(
     query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name
 ):
-    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
-    # print(ds_post)
     
+    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
+
     base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
     #query['measurements'] = base_measurements
     del query['measurements']
@@ -93,8 +93,6 @@ def feature_layers(
              **query)
     
     ds_base = ds_base[base_measurements]
-    
-    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
     
     # Dictionary mapping old variable names to new ones
     rename_dict = {
@@ -107,13 +105,6 @@ def feature_layers(
     }
 
     ds_post = ds_post.rename(rename_dict)
-    
-    # Load ls8 geomedians
-    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
-             time=("2017-01-01", "2017-12-31"), #calendar year
-             **query)
-    
-    ds_post = dc.load('ga_ls8c_nbart_gm_cyear_3', time = time_post, **query)
 
     # Load Land Cover
     # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version
