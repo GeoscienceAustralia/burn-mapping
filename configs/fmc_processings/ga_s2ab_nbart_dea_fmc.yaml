@@ -14,6 +14,7 @@ input_products:
     - nbart_swir_2
     - nbart_swir_3
     - oa_fmask
+    - oa_nbart_contiguity
 
 product:
   name: ga_s2ab_nbart_dea_fmc
