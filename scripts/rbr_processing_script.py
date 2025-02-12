@@ -157,7 +157,7 @@ def rbr_processing(
     # load the post fire data, or the year of interest
     post_ds = load_ard(
         dc=dc,
-        products=["ga_ls8c_ard_3"],
+        products=["ga_ls5t_ard_3", "ga_ls7e_ard_3", "ga_ls8c_ard_3"],
         geopolygon=pgon,
         time=("2020-01-01", "2020-12-31"),
         group_by="solar_day",
