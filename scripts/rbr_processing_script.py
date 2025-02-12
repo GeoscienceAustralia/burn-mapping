@@ -23,13 +23,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def logging_setup() -> None:
-    """Set up logging to stream to stdout for all loggers except sqlalchemy and boto."""
+def logging_setup():
+    """Set up logging for all modules except sqlalchemy and boto."""
+    loggers = [
+        logging.getLogger(name)
+        for name in logging.root.manager.loggerDict
+        if not name.startswith("sqlalchemy") and not name.startswith("boto")
+    ]
+
     stdout_hdlr = logging.StreamHandler(sys.stdout)
-    for name, log in logging.root.manager.loggerDict.items():
-        if not str(name).startswith(("sqlalchemy", "boto")):
-            log.addHandler(stdout_hdlr)
-            log.propagate = False
+    for logger in loggers:
+        logger.addHandler(stdout_hdlr)
+        logger.propagate = False
 
 
 def get_geometry_and_geobox(
