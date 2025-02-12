@@ -170,6 +170,22 @@ def rbr_processing(
         product="ga_ls_wo_fq_cyear_3", geopolygon=pgon, time=("2020")
     )  # calendar year
 
+    # common index layers
+
+    # bare soil index
+    post_bsi = (
+        (post_ds.nbart_swir_2 + post_ds.nbart_red)
+        - (post_ds.nbart_nir + post_ds.nbart_blue)
+    ) / (
+        (post_ds.nbart_swir_2 + post_ds.nbart_red)
+        + (post_ds.nbart_nir + post_ds.nbart_blue)
+    )
+
+    # normalised difference vegetation index
+    post_ndvi = (post_ds.nbart_nir - post_ds.nbart_red) / (
+        post_ds.nbart_nir + post_ds.nbart_red
+    )
+
     # normalised burn ratio
     pre_nbr = (ds.nir - ds.swir2) / (ds.nir + ds.swir2)
 
@@ -181,25 +197,20 @@ def rbr_processing(
     # delta normalised burn ratio
     delta_nbr = pre_nbr.squeeze("time") - post_nbr
 
-    RBR = delta_nbr / (pre_nbr.squeeze("time") + 1.001)  # RBR
-
     # masking the water and ocean
     wofs_summary_frequency = wofs_summary.frequency
 
-    # Create a water mask by identifying areas with water frequency greater than or equal to 0.2
-    # water_mask = xr.where(wofs_summary_frequency < 0.2, 1., wofs_summary_frequency*0.)
-    # water_mask.plot()
-    # NEW
     # # Create a water mask by identifying areas with water frequency greater than or equal to 0.2
     water_mask = wofs_summary_frequency > 0.2
     water_mask = water_mask.squeeze("time")
-    # water_mask.plot()
 
-    # mask the delta normalised burn ratio
-    # wo_delta_nbr = water_mask.squeeze("time") * delta_nbr
+    # activate AWS credential from attached service account
+    helper.get_and_set_aws_credentials()
+
+    # 1. Single RBR prediction
+    RBR = delta_nbr / (pre_nbr.squeeze("time") + 1.001)  # RBR
 
     wo_RBR = xr.where(water_mask == 0, RBR, -1)
-    # wo_delta_nbr.plot(col="time", col_wrap=2, vmin=-1, vmax=1, cmap="PiYG")
 
     # finding the most burnt characteristic for each pixel in each dataset for the time period
     RBR_reduced = wo_RBR.max("time")
@@ -219,12 +230,35 @@ def rbr_processing(
 
     logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
 
-    # activate AWS credential from attached service account
-    helper.get_and_set_aws_credentials()
+    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+
+    logger.info("finish single RBR predication: " + str(region_id))
+
+    # 2. Single NBR
+    wo_delta_nbr = xr.where(water_mask == 0, delta_nbr, -1)
+
+    delta_nbr_reduced = wo_delta_nbr.max("time") 
+
+    threshold_dnbr = (delta_nbr_reduced >= 0.44 ) * 1 #USGS #0.44
+
+    threshold_dnbr.attrs["crs"] = wofs_summary.crs
+    threshold_dnbr = threshold_dnbr.astype("float64")
+
+    pred_tif = output_product_name + f"_{region_id}_2020_cyear_single_nbr_pred.tif"
+
+    write_cog(geo_im=threshold_dnbr, fname=pred_tif, overwrite=True, nodata=-999)
+
+    logger.info("Save result as: " + str(pred_tif))
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+
+    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
 
     bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
 
-    logger.info("finish predication: " + str(region_id))
+    logger.info("finish single RBR predication: " + str(region_id))
+
+
 
 
 if __name__ == "__main__":
