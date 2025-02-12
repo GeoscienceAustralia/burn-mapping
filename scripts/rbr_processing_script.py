@@ -96,6 +96,8 @@ def save_and_upload(
     """
     Save the GeoTIFF using write_cog and upload the file to S3.
     """
+    geo_im = prepare_dataarray(geo_im)
+
     pred_tif = f"{output_product_name}_{region_id}_2020_cyear_{product_name}_pred.tif"
     write_cog(geo_im=geo_im, fname=pred_tif, overwrite=True, nodata=-999)
     logger.info(f"Saved result as: {pred_tif}")
