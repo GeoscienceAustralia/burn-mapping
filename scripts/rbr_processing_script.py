@@ -258,6 +258,34 @@ def rbr_processing(
 
     logger.info("finish single RBR predication: " + str(region_id))
 
+    # 3. Single RdNBR
+
+    RdNBR = delta_nbr/(abs(pre_nbr.squeeze("time")) ** 0.5)
+
+    wo_RdNBR = xr.where(water_mask == 0, RdNBR, -1)
+
+    RdNBR_reduced = wo_RdNBR.max("time")
+
+    threshold_RdNBR = (RdNBR_reduced >= 0.33 )*1 #Szajewska 2018
+
+    threshold_RdNBR.attrs["crs"] = wofs_summary.crs
+    threshold_RdNBR = threshold_RdNBR.astype("float64")
+
+    pred_tif = output_product_name + f"_{region_id}_2020_cyear_single_rdnbr_pred.tif"
+
+    write_cog(geo_im=threshold_RdNBR, fname=pred_tif, overwrite=True, nodata=-999)
+
+    logger.info("Save result as: " + str(pred_tif))
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+
+    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
+
+    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+
+    logger.info("finish single Single RdNBR predication: " + str(region_id))
+
+
 
 
 
