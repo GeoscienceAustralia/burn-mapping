@@ -238,6 +238,30 @@ def rbr_processing(
     # delta normalised burn ratio
     delta_nbr = pre_nbr.squeeze("time") - post_nbr
 
+    #Wetness
+    pre_tcw = (0.2578*ds.blue + 0.2305*ds.green + 0.0883*ds.red + 
+            0.1071*ds.nir - 0.7611*ds.swir1 - 0.5308*ds.swir2)
+
+    #Brightness
+    pre_tcb = (0.3510*ds.blue + 0.3813*ds.green + 0.3437*ds.red + 
+            0.7196*ds.nir+ 0.2396*ds.swir1 + 0.1949*ds.swir2)
+
+    #Greenness
+    pre_tcg = (-0.3599*ds.blue - 0.3533*ds.green - 0.4734*ds.red + 
+            0.6633*ds.nir + 0.0087*ds.swir1 - 0.2856*ds.swir2)
+
+    #Wetness
+    post_tcw = (0.2578*post_ds.nbart_blue + 0.2305*post_ds.nbart_green + 0.0883*post_ds.nbart_red + 
+            0.1071*post_ds.nbart_nir - 0.7611*post_ds.nbart_swir_1 - 0.5308*post_ds.nbart_swir_2)
+    
+    #Brightness
+    post_tcb = (0.3510*post_ds.nbart_blue + 0.3813*post_ds.nbart_green + 0.3437*post_ds.nbart_red + 
+            0.7196*post_ds.nbart_nir+ 0.2396*post_ds.nbart_swir_1 + 0.1949*post_ds.nbart_swir_2)
+
+    #Greenness
+    post_tcg = (-0.3599*post_ds.nbart_blue - 0.3533*post_ds.nbart_green - 0.4734*post_ds.nbart_red + 
+            0.6633*post_ds.nbart_nir + 0.0087*post_ds.nbart_swir_1 - 0.2856*post_ds.nbart_swir_2)
+
     # masking the water and ocean
     wofs_summary_frequency = wofs_summary.frequency
 
@@ -338,6 +362,57 @@ def rbr_processing(
     RdNBR_stacked_thresholded = dilrode_Delta_dataset(RdNBR_stacked_thresholded)
 
     save_and_upload(RdNBR_stacked_thresholded, "stacked_rdnbr", region_id, output_folder, output_product_name)
+
+    # 7. stacked dDI
+
+    delta_tcw = pre_tcw.squeeze("time")-post_tcw
+    delta_tcb = pre_tcb.squeeze("time")-post_tcb
+    delta_tcg = pre_tcg.squeeze("time")-post_tcg
+
+    delta_DI = ((delta_tcg + delta_tcw -0.5*delta_tcb)/10000)
+
+    # mask the delta normalised burn ratio
+    wo_dDI = xr.where(water_mask == 0, delta_DI, -1)
+
+    # finding the most burnt characteristic for each pixel in each dataset for the time period
+    delta_nbr_reduced = wo_delta_nbr.max("time") 
+    dDI_reduced = wo_dDI.max("time") 
+    RBR_reduced = wo_RBR.max("time") 
+
+    delta_ndvi_reduced = wo_delta_ndvi.max("time") 
+    delta_bsi_reduced = wo_delta_bsi.min("time") 
+
+    # # standardising so all on same negative to positive scale so that very burnt =1
+    delta_bsi_reduced = delta_bsi_reduced *-1 # 
+
+    # take the threshold of the various characteristics
+    threshold_dbsi = (delta_bsi_reduced >= 0.55 )*1 #Nguyen 2021
+    threshold_dnbr = (delta_nbr_reduced >= 0.44 )*1 #USGS #0.44
+    threshold_dndvi = (delta_ndvi_reduced >= 0.65 )*1 #Szajewska 2018
+
+    threshold_RBR = (RBR_reduced >= 0.3 )*1 #Nguyen 2021
+    #threshold_dnbr = (delta_nbr_reduced >= 0.44 )*1 #USGS #0.44
+    threshold_dDI = (dDI_reduced >= 0.3 )*1 #Szajewska 2018
+
+    dDI_stacked_agreement = threshold_dbsi + threshold_dndvi + threshold_dDI
+    dDI_stacked_thresholded = dDI_stacked_agreement >= 2 
+
+    # only process stacked result?
+    dDI_stacked_thresholded = dilrode_Delta_dataset(dDI_stacked_thresholded)
+
+    save_and_upload(dDI_stacked_thresholded, "stacked_dDI", region_id, output_folder, output_product_name)
+
+    # 8. single dDI
+    save_and_upload(threshold_dDI, "single_dDI", region_id, output_folder, output_product_name)
+
+    # 9. stacked dDI RBR
+    dDI_RBR_stacked_agreement = threshold_dbsi + threshold_dndvi + threshold_RBR + threshold_dDI
+    dDI_RBR_stacked_thresholded = dDI_RBR_stacked_agreement >= 2 
+
+    # only process stacked result?
+    dDI_RBR_stacked_thresholded = dilrode_Delta_dataset(dDI_RBR_stacked_thresholded)
+
+    save_and_upload(dDI_RBR_stacked_thresholded, "stacked_dDI_RBR", region_id, output_folder, output_product_name)
 
 
 if __name__ == "__main__":
