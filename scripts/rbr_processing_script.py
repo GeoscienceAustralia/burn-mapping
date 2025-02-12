@@ -65,6 +65,33 @@ def _get_gpgon(
     return datacube.utils.geometry.Geometry(geobox.extent.geom, crs="epsg:3577"), geobox
 
 
+def dilrode_Delta_dataset(burn_dataset: xr.Dataset)-> xr.DataArray:
+    dilated_data = xr.DataArray(morphology.binary_closing(burn_dataset, morphology.disk(3)).astype(burn_dataset.dtype),
+                                 coords=burn_dataset.coords)
+    erroded_data = xr.DataArray(morphology.erosion(dilated_data, morphology.disk(3)).astype(burn_dataset.dtype),
+                                 coords=burn_dataset.coords)
+    dilated_data = xr.DataArray(ndimage.binary_dilation(erroded_data, morphology.disk(3)).astype(burn_dataset.dtype),
+                                 coords=burn_dataset.coords)
+    return dilated_data
+
+
+def save_and_upload(geo_im, product_name, region_id, output_folder, output_product_name):
+
+    """ Saves GeoTIFF and uploads to S3 """
+    pred_tif = f"{output_product_name}_{region_id}_2020_cyear_{product_name}_pred.tif"
+
+    write_cog(geo_im=geo_im, fname=pred_tif, overwrite=True, nodata=-999)
+    logger.info(f"Save result as: {pred_tif}")
+
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+    logger.info(f"Upload result to AWS S3 file: {s3_file_uri}")
+
+    # Activate AWS credentials and upload
+    helper.get_and_set_aws_credentials()
+    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+    logger.info(f"Finished processing {product_name} for region {region_id}")
+
+
 @click.command(no_args_is_help=True)
 @click.option(
     "--task-id",
@@ -173,12 +200,26 @@ def rbr_processing(
     # common index layers
 
     # bare soil index
+    pre_bsi = (
+        (ds.swir2 + ds.red)
+        - (ds.nir + ds.blue)
+    ) / (
+        (ds.swir2 + ds.red)
+        + (ds.nir + ds.blue)
+    )
+
+    # bare soil index
     post_bsi = (
         (post_ds.nbart_swir_2 + post_ds.nbart_red)
         - (post_ds.nbart_nir + post_ds.nbart_blue)
     ) / (
         (post_ds.nbart_swir_2 + post_ds.nbart_red)
         + (post_ds.nbart_nir + post_ds.nbart_blue)
+    )
+
+    # normalised difference vegetation index
+    pre_ndvi = (ds.nir - ds.red) / (
+        ds.nir + ds.red
     )
 
     # normalised difference vegetation index
@@ -220,19 +261,7 @@ def rbr_processing(
     threshold_RBR.attrs["crs"] = wofs_summary.crs
     threshold_RBR = threshold_RBR.astype("float64")
 
-    pred_tif = output_product_name + f"_{region_id}_2020_cyear_rbr_pred.tif"
-
-    write_cog(geo_im=threshold_RBR, fname=pred_tif, overwrite=True, nodata=-999)
-
-    logger.info("Save result as: " + str(pred_tif))
-
-    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
-
-    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
-
-    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
-
-    logger.info("finish single RBR predication: " + str(region_id))
+    save_and_upload(threshold_RBR, "single_rbr", region_id, output_folder, output_product_name)
 
     # 2. Single NBR
     wo_delta_nbr = xr.where(water_mask == 0, delta_nbr, -1)
@@ -244,19 +273,7 @@ def rbr_processing(
     threshold_dnbr.attrs["crs"] = wofs_summary.crs
     threshold_dnbr = threshold_dnbr.astype("float64")
 
-    pred_tif = output_product_name + f"_{region_id}_2020_cyear_single_nbr_pred.tif"
-
-    write_cog(geo_im=threshold_dnbr, fname=pred_tif, overwrite=True, nodata=-999)
-
-    logger.info("Save result as: " + str(pred_tif))
-
-    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
-
-    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
-
-    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
-
-    logger.info("finish single RBR predication: " + str(region_id))
+    save_and_upload(threshold_dnbr, "single_nbr", region_id, output_folder, output_product_name)
 
     # 3. Single RdNBR
 
@@ -271,22 +288,56 @@ def rbr_processing(
     threshold_RdNBR.attrs["crs"] = wofs_summary.crs
     threshold_RdNBR = threshold_RdNBR.astype("float64")
 
-    pred_tif = output_product_name + f"_{region_id}_2020_cyear_single_rdnbr_pred.tif"
+    save_and_upload(threshold_RdNBR, "single_rdnbr", region_id, output_folder, output_product_name)
 
-    write_cog(geo_im=threshold_RdNBR, fname=pred_tif, overwrite=True, nodata=-999)
+    # 4. Stacked NBR
 
-    logger.info("Save result as: " + str(pred_tif))
+    # delta normalised difference vegetation index
+    delta_ndvi = pre_ndvi.squeeze("time")-post_ndvi
+    # delta bare soil index
+    delta_bsi = pre_bsi.squeeze("time")-post_bsi
 
-    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+    wo_delta_ndvi = xr.where(water_mask == 0, delta_ndvi, -1)
+    wo_delta_bsi = xr.where(water_mask == 0, delta_bsi, 1)
 
-    logger.info("Upload result to AWS S3 file: " + str(s3_file_uri))
+    delta_ndvi_reduced = wo_delta_ndvi.max("time") 
+    delta_bsi_reduced = wo_delta_bsi.min("time") 
 
-    bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
+    # # standardising so all on same negative to positive scale so that very burnt =1
+    delta_bsi_reduced = delta_bsi_reduced *-1 # 
 
-    logger.info("finish single Single RdNBR predication: " + str(region_id))
+    # take the threshold of the various characteristics
+    threshold_dbsi = (delta_bsi_reduced >= 0.55 )*1 #Nguyen 2021
+    threshold_dnbr = (delta_nbr_reduced >= 0.44 )*1 #USGS #0.44
+    threshold_dndvi = (delta_ndvi_reduced >= 0.65 )*1 #Szajewska 2018
 
+    RdNBR_stacked_agreement = threshold_dbsi + threshold_dndvi + threshold_dnbr
+    RdNBR_stacked_thresholded = RdNBR_stacked_agreement >= 2
 
+    # only process stacked result?
+    RdNBR_stacked_thresholded = dilrode_Delta_dataset(RdNBR_stacked_thresholded)
 
+    save_and_upload(RdNBR_stacked_thresholded, "stacked_nbr", region_id, output_folder, output_product_name)
+
+    # 5. Stacked RBR
+
+    RBR_stacked_agreement = threshold_dbsi + threshold_dndvi + threshold_RBR
+    RBR_stacked_thresholded = RBR_stacked_agreement >= 2
+    
+    # only process stacked result?
+    RBR_stacked_thresholded = dilrode_Delta_dataset(RBR_stacked_thresholded)
+
+    save_and_upload(RBR_stacked_thresholded, "stacked_rbr", region_id, output_folder, output_product_name)
+
+    # 6. Stacked RdNBR
+
+    RdNBR_stacked_agreement = threshold_dbsi + threshold_dndvi + threshold_RdNBR
+    RdNBR_stacked_thresholded = RdNBR_stacked_agreement >= 2
+
+    # only process stacked result?
+    RdNBR_stacked_thresholded = dilrode_Delta_dataset(RdNBR_stacked_thresholded)
+
+    save_and_upload(RdNBR_stacked_thresholded, "stacked_rdnbr", region_id, output_folder, output_product_name)
 
 
 if __name__ == "__main__":
