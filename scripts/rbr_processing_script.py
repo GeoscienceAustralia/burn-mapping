@@ -278,11 +278,11 @@ def rbr_processing(
     # -----------------------
     # 1. Single RBR
     # -----------------------
-    RBR = delta_nbr / (pre_nbr.squeeze("time") + 1.001)
-    RBR_masked = xr.where(~water_mask, RBR, -1)
-    RBR_reduced = RBR_masked.max("time")
+    rbr = delta_nbr / (pre_nbr.squeeze("time") + 1.001)
+    rbr_masked = xr.where(~water_mask, rbr, -1)
+    rbr_reduced = rbr_masked.max("time")
     single_rbr = prepare_dataarray(
-        (RBR_reduced >= 0.3).astype("float64"), wofs_summary.crs
+        (rbr_reduced >= 0.3).astype("float64"), wofs_summary.crs
     )
     save_and_upload(
         single_rbr, "single_rbr", region_id, output_folder, output_product_name
@@ -303,11 +303,11 @@ def rbr_processing(
     # -----------------------
     # 3. Single RdNBR
     # -----------------------
-    RdNBR = delta_nbr / (abs(pre_nbr.squeeze("time")) ** 0.5)
-    RdNBR_masked = xr.where(~water_mask, RdNBR, -1)
-    RdNBR_reduced = RdNBR_masked.max("time")
+    rdnbr = delta_nbr / (abs(pre_nbr.squeeze("time")) ** 0.5)
+    rdnbr_masked = xr.where(~water_mask, rdnbr, -1)
+    rdnbr_reduced = rdnbr_masked.max("time")
     single_rdnbr = prepare_dataarray(
-        (RdNBR_reduced >= 0.33).astype("float64"), wofs_summary.crs
+        (rdnbr_reduced >= 0.33).astype("float64"), wofs_summary.crs
     )
     save_and_upload(
         single_rdnbr, "single_rdnbr", region_id, output_folder, output_product_name
@@ -340,9 +340,9 @@ def rbr_processing(
     # -----------------------
     # 5. Stacked RBR
     # -----------------------
-    thresh_RBR = (RBR_reduced >= 0.3).astype("float64")
+    thresh_rbr = (rbr_reduced >= 0.3).astype("float64")
     stacked_rbr = prepare_dataarray(
-        (thresh_dbsi + thresh_dndvi + thresh_RBR >= 2), wofs_summary.crs
+        (thresh_dbsi + thresh_dndvi + thresh_rbr >= 2), wofs_summary.crs
     )
     stacked_rbr = apply_morphological_operations(stacked_rbr)
     save_and_upload(
@@ -352,9 +352,9 @@ def rbr_processing(
     # -----------------------
     # 6. Stacked RdNBR
     # -----------------------
-    thresh_RdNBR = (RdNBR_reduced >= 0.33).astype("float64")
+    thresh_rdnbr = (rdnbr_reduced >= 0.33).astype("float64")
     stacked_rdnbr = prepare_dataarray(
-        (thresh_dbsi + thresh_dndvi + thresh_RdNBR >= 2), wofs_summary.crs
+        (thresh_dbsi + thresh_dndvi + thresh_rdnbr >= 2), wofs_summary.crs
     )
     stacked_rdnbr = apply_morphological_operations(stacked_rdnbr)
     save_and_upload(
@@ -367,38 +367,38 @@ def rbr_processing(
     delta_tcw = pre_tcw.squeeze("time") - post_tcw
     delta_tcb = pre_tcb.squeeze("time") - post_tcb
     delta_tcg = pre_tcg.squeeze("time") - post_tcg
-    delta_DI = (delta_tcg + delta_tcw - 0.5 * delta_tcb) / 10000
+    delta_di = (delta_tcg + delta_tcw - 0.5 * delta_tcb) / 10000
 
-    DI_masked = xr.where(~water_mask, delta_DI, -1)
-    dDI_reduced = DI_masked.max("time")
-    thresh_dDI = (dDI_reduced >= 0.3).astype("float64")
+    di_masked = xr.where(~water_mask, delta_di, -1)
+    ddi_reduced = di_masked.max("time")
+    thresh_ddi = (ddi_reduced >= 0.3).astype("float64")
 
-    stacked_dDI = prepare_dataarray(
-        (thresh_dbsi + thresh_dndvi + thresh_dDI >= 2), wofs_summary.crs
+    stacked_ddi = prepare_dataarray(
+        (thresh_dbsi + thresh_dndvi + thresh_ddi >= 2), wofs_summary.crs
     )
-    stacked_dDI = apply_morphological_operations(stacked_dDI)
+    stacked_ddi = apply_morphological_operations(stacked_ddi)
     save_and_upload(
-        stacked_dDI, "stacked_dDI", region_id, output_folder, output_product_name
+        stacked_ddi, "stacked_ddi", region_id, output_folder, output_product_name
     )
 
     # -----------------------
     # 8. Single dDI
     # -----------------------
-    single_dDI = prepare_dataarray(thresh_dDI, wofs_summary.crs)
+    single_ddi = prepare_dataarray(thresh_ddi, wofs_summary.crs)
     save_and_upload(
-        single_dDI, "single_dDI", region_id, output_folder, output_product_name
+        single_ddi, "single_ddi", region_id, output_folder, output_product_name
     )
 
     # -----------------------
     # 9. Stacked dDI RBR
     # -----------------------
-    stacked_dDI_RBR = prepare_dataarray(
-        (thresh_dbsi + thresh_dndvi + thresh_RBR + thresh_dDI >= 2), wofs_summary.crs
+    stacked_ddi_rbr = prepare_dataarray(
+        (thresh_dbsi + thresh_dndvi + thresh_rbr + thresh_ddi >= 2), wofs_summary.crs
     )
-    stacked_dDI_RBR = apply_morphological_operations(stacked_dDI_RBR)
+    stacked_ddi_rbr = apply_morphological_operations(stacked_ddi_rbr)
     save_and_upload(
-        stacked_dDI_RBR,
-        "stacked_dDI_RBR",
+        stacked_ddi_rbr,
+        "stacked_ddi_rbr",
         region_id,
         output_folder,
         output_product_name,
