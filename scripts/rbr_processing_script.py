@@ -96,7 +96,6 @@ def save_and_upload(
     """
     Save the GeoTIFF using write_cog and upload the file to S3.
     """
-    geo_im = prepare_dataarray(geo_im)
 
     pred_tif = f"{output_product_name}_{region_id}_2020_cyear_{product_name}_pred.tif"
     write_cog(geo_im=geo_im, fname=pred_tif, overwrite=True, nodata=-999)
@@ -340,6 +339,9 @@ def rbr_processing(
         (thresh_dbsi + thresh_dndvi + thresh_dnbr >= 2), wofs_summary.crs
     )
     stacked_nbr = apply_morphological_operations(stacked_nbr)
+
+    stacked_nbr = prepare_dataarray(stacked_nbr, wofs_summary.crs)
+
     save_and_upload(
         stacked_nbr, "stacked_nbr", region_id, output_folder, output_product_name
     )
@@ -352,6 +354,9 @@ def rbr_processing(
         (thresh_dbsi + thresh_dndvi + thresh_rbr >= 2), wofs_summary.crs
     )
     stacked_rbr = apply_morphological_operations(stacked_rbr)
+
+    stacked_rbr = prepare_dataarray(stacked_rbr, wofs_summary.crs)
+
     save_and_upload(
         stacked_rbr, "stacked_rbr", region_id, output_folder, output_product_name
     )
@@ -364,6 +369,9 @@ def rbr_processing(
         (thresh_dbsi + thresh_dndvi + thresh_rdnbr >= 2), wofs_summary.crs
     )
     stacked_rdnbr = apply_morphological_operations(stacked_rdnbr)
+
+    stacked_rdnbr = prepare_dataarray(stacked_rdnbr, wofs_summary.crs)
+
     save_and_upload(
         stacked_rdnbr, "stacked_rdnbr", region_id, output_folder, output_product_name
     )
@@ -384,6 +392,9 @@ def rbr_processing(
         (thresh_dbsi + thresh_dndvi + thresh_ddi >= 2), wofs_summary.crs
     )
     stacked_ddi = apply_morphological_operations(stacked_ddi)
+
+    stacked_ddi = prepare_dataarray(stacked_ddi, wofs_summary.crs)
+
     save_and_upload(
         stacked_ddi, "stacked_ddi", region_id, output_folder, output_product_name
     )
@@ -403,6 +414,9 @@ def rbr_processing(
         (thresh_dbsi + thresh_dndvi + thresh_rbr + thresh_ddi >= 2), wofs_summary.crs
     )
     stacked_ddi_rbr = apply_morphological_operations(stacked_ddi_rbr)
+
+    stacked_ddi_rbr = prepare_dataarray(stacked_ddi_rbr, wofs_summary.crs)
+
     save_and_upload(
         stacked_ddi_rbr,
         "stacked_ddi_rbr",
