@@ -157,6 +157,7 @@ def generate_result_by_study_site_folder(
         Prec = round(100 * accuracy_metrics["precision"], 1)
         PrecStr = "Precision = " + str(Prec) + "%"
     else:
+        Prec = None  # Assign a default value if undefined
         PrecStr = "Precision is undefined"
 
     # Recall = TP/(FN+TP)
@@ -164,6 +165,7 @@ def generate_result_by_study_site_folder(
         Rec = round(100 * accuracy_metrics["recall"], 1)
         RecStr = "Recall = " + str(Rec) + "%"
     else:
+        Rec = None  # Assign a default value if undefined
         RecStr = "Recall is undefined"
 
     # Total pixels
@@ -612,12 +614,15 @@ def run_validation(
 
     overall_df = pd.concat(overall_result)
 
-    overall_df.to_csv(f"performance-report/{algo_name}-{suffix}-overall.csv", index=False)
+    overall_df.to_csv(
+        f"performance-report/{algo_name}-{suffix}-overall.csv", index=False
+    )
 
     overall_climate_df = pd.concat(overall_climate_list)
 
     overall_climate_df.to_csv(
-        f"performance-report/{algo_name}-climate-class-{suffix}-overall.csv", index=False
+        f"performance-report/{algo_name}-climate-class-{suffix}-overall.csv",
+        index=False,
     )
 
     bucket_name, s3_folder = performance_report_output_folder.replace(
