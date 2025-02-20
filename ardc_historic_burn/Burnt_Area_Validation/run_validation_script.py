@@ -147,7 +147,7 @@ def generate_result_by_study_site_folder(
         combine_array = xr.combine_by_coords(combine_list).to_array()
         print("combine_array created by xarray combine_by_coords")
 
-    metric_list = ["precision", "recall", "f1-score"]
+    metric_list = ["precision", "recall", "f1_score"]
     accuracy_metrics = calculate_classification_metrics(
         tp=tp_total, tn=tn_total, fp=fp_total, fn=fn_total, metrics=metric_list
     )
