@@ -75,7 +75,6 @@ def result_visuals(styler: Any, study_site: str, vali_year: str) -> Any:
     styler.background_gradient(subset=["Precision", "Recall"], vmin=0.3, vmax=1, cmap="RdYlGn")
     return styler
 
-
 def generate_result_by_study_site_folder(
     algo_name: str,
     save_folder: str,
@@ -147,12 +146,16 @@ def generate_result_by_study_site_folder(
         combine_array = xr.combine_by_coords(combine_list).to_array()
         print("combine_array created by xarray combine_by_coords")
 
-    metric_list = ["precision", "recall", "f1-score"]
+    # Extend the metrics list to include accuracy, balanced_accuracy, and fpr
+    metric_list = ["accuracy", "balanced_accuracy", "fpr", "precision", "recall", "f1-score"]
     accuracy_metrics = calculate_classification_metrics(
         tp=tp_total, tn=tn_total, fp=fp_total, fn=fn_total, metrics=metric_list
     )
     print(study_site, algo_name, accuracy_metrics)
 
+    total_pixels = tp_total + fp_total + tn_total + fn_total
+
+    # Calculate and format each metric
     if tp_total + fp_total > 0 and tp_total >= 0:
         precision_val = round(100 * accuracy_metrics["precision"], 1)
         precision_str = f"Precision = {precision_val}%"
@@ -167,7 +170,24 @@ def generate_result_by_study_site_folder(
         recall_val = None
         recall_str = "Recall is undefined"
 
-    total_pixels = tp_total + fp_total + tn_total + fn_total
+    # New metrics added:
+    if total_pixels > 0:
+        accuracy_val = round(100 * accuracy_metrics["accuracy"], 1)
+        accuracy_str = f"Accuracy = {accuracy_val}%"
+        balanced_accuracy_val = round(100 * accuracy_metrics["balanced_accuracy"], 1)
+        balanced_accuracy_str = f"Balanced Accuracy = {balanced_accuracy_val}%"
+    else:
+        accuracy_val = None
+        accuracy_str = "Accuracy is undefined"
+        balanced_accuracy_val = None
+        balanced_accuracy_str = "Balanced Accuracy is undefined"
+
+    if (tn_total + fp_total) > 0:
+        fpr_val = round(100 * accuracy_metrics["fpr"], 1)
+        fpr_str = f"FPR = {fpr_val}%"
+    else:
+        fpr_val = None
+        fpr_str = "FPR is undefined"
 
     tp_str = f"True Positive: {100 * tp_total / total_pixels:.2g}%"
     fn_str = f"False Negative: {100 * fn_total / total_pixels:.2g}%"
@@ -183,6 +203,7 @@ def generate_result_by_study_site_folder(
     fig, ax = plt.subplots(figsize=(12, 12))
     plt.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
 
+    # Extend metrics_dict to include the three new metrics (keys 6, 7, 8)
     metrics_dict = {
         0: tp_str,
         1: fn_str,
@@ -190,8 +211,11 @@ def generate_result_by_study_site_folder(
         3: tn_str,
         4: precision_str,
         5: recall_str,
+        6: accuracy_str,
+        7: balanced_accuracy_str,
+        8: fpr_str,
     }
-    for i in range(6):
+    for i in range(9):
         ax.text(1.04, 0.98 - (0.04 * i), metrics_dict[i],
                 ha="left", va="center", fontsize=14, color="k", transform=ax.transAxes)
         if i < 4:
@@ -209,10 +233,13 @@ def generate_result_by_study_site_folder(
     print(combine_array)
     write_cog(geo_im=combine_array, fname=str(tif_filepath), overwrite=True)
 
-    # Write metadata
+    # Write metadata including the new metrics
     metadata: Dict[str, Any] = {
         "Location": study_site.replace("_", " "),
         "Algorithm": algo_name,
+        "Accuracy": accuracy_val,
+        "Balanced Accuracy": balanced_accuracy_val,
+        "FPR": fpr_val,
         "Precision": precision_val,
         "Recall": recall_val,
         "Total Pixels": total_pixels,
@@ -229,6 +256,9 @@ def generate_result_by_study_site_folder(
     result_df = pd.DataFrame.from_dict({
         "Location": [study_site.replace("_", " ")],
         "Algorithm": [algo_name],
+        "Accuracy": [accuracy_val],
+        "Balanced Accuracy": [balanced_accuracy_val],
+        "FPR": [fpr_val],
         "Precision": [precision_val],
         "Recall": [recall_val],
         "Total Pixels": [total_pixels],
