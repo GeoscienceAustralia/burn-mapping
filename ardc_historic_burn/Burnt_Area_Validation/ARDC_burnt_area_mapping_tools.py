@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Improved ARDC Burnt Area Mapping Tools
 
@@ -11,13 +10,10 @@ Improvements:
 - Enhanced performance with list comprehensions and efficient operations.
 - Added type hints for clarity.
 """
-
 import os
 import re
-import math
 import time
 from datetime import datetime
-from typing import List, Tuple, Optional, Union, Dict, Any
 
 import boto3
 import botocore
@@ -34,256 +30,427 @@ from dea_tools.spatial import xr_rasterize
 from rasterio import features
 from shapely.geometry import Polygon, shape
 
-# Set environment variable for AWS S3 access without credentials
 os.environ["AWS_NO_SIGN_REQUEST"] = "yes"
 
+start_time = time.time()
 
-def gen_grid_codes(x_range: Tuple[int, int], y_range: Tuple[int, int]) -> List[str]:
+
+def gen_grid_codes(x_range, y_range):
     """
-    Generate a list of grid codes in the format 'x{num}y{num}' for given x and y ranges.
+    Generate a list of grid codes in the 'x##y##' format based on the
+    provided x and y ranges.
 
-    Args:
-        x_range (Tuple[int, int]): (min_x, max_x) range.
-        y_range (Tuple[int, int]): (min_y, max_y) range.
+    Parameters
+    ----------
+    x_range : tuple
+        A tuple representing the minimum and maximum x values of the grid.
+        The first element of the tuple should be the minimum x value, and
+        the second element should be the maximum x value.
+    y_range : tuple
+        A tuple representing the minimum and maximum y values of the grid.
+        The first element of the tuple should be the minimum y value, and
+        the second element should be the maximum y value.
 
-    Returns:
-        List[str]: List of grid codes.
+    Returns
+    -------
+    list
+        A list of grid codes in the 'x##y##' format, generated based on the
+        provided x and y ranges.
+
     """
-    return [f"x{i}y{j}" for i in range(x_range[0], x_range[1] + 1)
-            for j in range(y_range[0], y_range[1] + 1)]
+    grid_list = []
+    for i in range(x_range[0], x_range[1] + 1):
+        for j in range(y_range[0], y_range[1] + 1):
+            grid_list.append("x" + str(i) + "y" + str(j))
+
+    return grid_list
 
 
-def koppen_import(koppen_fname: str, legend_fname: str) -> Tuple[gpd.GeoDataFrame, pd.DataFrame]:
+def koppen_import(koppen_fname, legend_fname):
     """
-    Import Koppen-Geiger climate zones and legend.
+    Read the Koppen-Geiger climate zone legend from a text file and extract
+    the data into a DataFrame. Load the Koppen-Geiger geopackage as a
+    GeoDataFrame and merge it with the legend DataFrame based on the
+    gridcode. Scale the colors for use in matplotlib plots.
 
-    Args:
-        koppen_fname (str): Path to the Koppen-Geiger GeoPackage.
-        legend_fname (str): Path to the Koppen-Geiger legend text file.
+    Parameters
+    ----------
+    koppen_fname : str
+        The path to the Koppen-Geiger GeoPackage.
+    legend_fname : str
+        The path to the Koppen-Geiger legend text file.
 
-    Returns:
-        Tuple[gpd.GeoDataFrame, pd.DataFrame]: Merged GeoDataFrame and legend DataFrame.
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        A GeoDataFrame containing the climate data from the shapefile,
+        merged with the legend information.
+
     """
-    # Read legend file
-    with open(legend_fname, 'r') as f:
+    # Read in Koppen-Geiger legend text file
+    with open(legend_fname) as f:
         lines = f.readlines()
 
+    # Define regular expression patterns to extract the gridcode, climate zone name, description and color
     pattern = re.compile(r"(\d+):\s+(\w+)\s+(.*)\s+\[(\d+)\s+(\d+)\s+(\d+)\]")
-    codes, names, descriptions, colors = [], [], [], []
 
-    for line in lines[3:]:  # Skip header lines
+    # Initialize lists to store the extracted data
+    codes = []
+    names = []
+    descriptions = []
+    colors = []
+
+    # Loop through the lines of the file and extract the data
+    for line in lines[3:]:  # Start from the fourth line
         match = pattern.search(line)
         if match:
-            codes.append(int(match.group(1)))
-            names.append(match.group(2))
-            descriptions.append(match.group(3))
-            colors.append(tuple(int(v) / 255.0 for v in (match.group(4), match.group(5), match.group(6))))
+            code = int(match.group(1))
+            name = match.group(2)
+            description = match.group(3)
+            color = (int(match.group(4)), int(match.group(5)), int(match.group(6)))
+            codes.append(code)
+            names.append(name)
+            descriptions.append(description)
+            colors.append(color)
 
-    legend_df = pd.DataFrame({
-        "gridcode": codes,
-        "Name": names,
-        "Description": descriptions,
-        "Color": colors
-    })
+    # Create a DataFrame from the extracted data
+    legend_df = pd.DataFrame(
+        {"gridcode": codes, "Name": names, "Description": descriptions, "Color": colors}
+    )
 
+    # Scale the values in the color data from 0-255 to 0-1 for use in matplotlib plots
+    legend_df["Color"] = legend_df["Color"].apply(lambda x: tuple(v / 255.0 for v in x))
+
+    # Read the Climate file using geopandas, and join with the legend_df
     climate_gdf = gpd.read_file(koppen_fname)
     climate_gdf = pd.merge(climate_gdf, legend_df, on="gridcode")
+
     return climate_gdf, legend_df
 
 
-def download_s3_files(bucket_name: str, path_to_download: str, save_as: Optional[str] = None) -> None:
+def download_s3_files(bucket_name, path_to_download, save_as=None):
     """
-    Download a file from an Amazon S3 bucket.
+    Download files from an Amazon S3 bucket to a local directory.
 
-    Args:
-        bucket_name (str): S3 bucket name.
-        path_to_download (str): File path in the S3 bucket.
-        save_as (Optional[str]): Local filename to save as. Defaults to original name.
+    Parameters
+    ----------
+    bucket_name : str
+        The name of the Amazon S3 bucket.
+    path_to_download : str
+        The path of the file in the S3 bucket to download.
+    save_as : str, optional
+        The local path and filename to save the downloaded file. If not
+        specified, the file will be saved with its original name.
+
     """
-    client = boto3.client("s3", config=botocore.client.Config(signature_version=botocore.UNSIGNED))
-    target = save_as if save_as else path_to_download
-    client.download_file(bucket_name, path_to_download, target)
+    # Create an S3 client
+    client = boto3.client(
+        "s3", config=botocore.client.Config(signature_version=botocore.UNSIGNED)
+    )
+
+    # Download the file from the S3 bucket
+    if save_as:
+        client.download_file(bucket_name, path_to_download, save_as)
+    else:
+        client.download_file(bucket_name, path_to_download, path_to_download)
 
 
-def ardc_year_calc(year_basis: str, year: int, extra_months: int = 0) -> Tuple[str, str]:
+def ardc_year_calc(year_basis, year, extra_months=0):
     """
-    Calculate start and end dates for a validation period based on year basis.
+    Calculate the required start and end dates for a validation period for use
+    in extracting ARDC data in datetime format.
 
-    Args:
-        year_basis (str): "FY" for Fiscal Year or "CY" for Calendar Year.
-        year (int): Year value.
-        extra_months (int, optional): Extra months for CY basis. Defaults to 0.
+    Parameters
+    ----------
+    year_basis : str
+        Either "FY" (Fiscal Year) or "CY" (Calendar Year). Note that "CY" additionally
+        includes the preceding December.
+    year : int
+        The year to extract data from. For example, for the fiscal year 2020-2021,
+        or the calendar year 2020, enter 2020.
+    extra_months : int, optional
+        Number of extra months to include when year_basis is "CY". Default is 0.
 
-    Returns:
-        Tuple[str, str]: (start_date, end_date) formatted as "%Y-%m-%d".
+    Returns
+    -------
+    tuple
+        A tuple containing the start date and end date of the validation period
+        in the format ("%Y-%m-%d").
 
-    Raises:
-        ValueError: If year_basis is not "FY" or "CY".
+    Raises
+    ------
+    ValueError
+        If an invalid year basis is provided. The year basis must be either "FY" or "CY".
+
     """
-    if year_basis not in ("FY", "CY"):
+    if year_basis not in ["FY", "CY"]:
         raise ValueError("Invalid year basis. Must be 'FY' or 'CY'.")
 
     if year_basis == "FY":
         start_date = datetime(year=year, month=7, day=1)
         end_date = datetime(year=year + 1, month=6, day=30)
     else:
-        start_date = datetime(year=year, month=1, day=1) if extra_months == 0 else datetime(year=year - 1, month=13 - extra_months, day=1)
+        if extra_months == 0:
+            start_date = datetime(year=year, month=1, day=1)
+        else:
+            start_date = datetime(year=year - 1, month=13 - extra_months, day=1)
         end_date = datetime(year=year, month=12, day=31)
 
-    formatted_start = start_date.strftime("%Y-%m-%d")
-    formatted_end = end_date.strftime("%Y-%m-%d")
-    print(f"Start Date: {formatted_start}")
-    print(f"End Date: {formatted_end}")
-    return formatted_start, formatted_end
+    start_date = start_date.strftime("%Y-%m-%d")
+    end_date = end_date.strftime("%Y-%m-%d")
+
+    print(f"Start Date: {start_date}")
+    print(f"End Date: {end_date}")
+
+    return (start_date, end_date)
 
 
-def raster_folder_bbox(save_folder: str) -> Tuple[Polygon, Any]:
+def raster_folder_bbox(save_folder):
     """
-    Compute bounding box polygon and CRS from all TIFF files in a folder.
+    Open every TIFF file in a folder directory and return a polygon bounding box
+    that encompasses all the TIFF files, as well as the CRS of the polygons.
 
-    Args:
-        save_folder (str): Directory path containing TIFF files.
+    Parameters
+    ----------
+    save_folder : str
+        The folder path where the TIFF files are stored.
 
-    Returns:
-        Tuple[Polygon, Any]: Bounding box polygon and CRS.
+    Returns
+    -------
+    tuple
+        A tuple containing the polygon bounding box and the CRS of the polygons.
+
     """
-    min_x, min_y = float("inf"), float("inf")
-    max_x, max_y = float("-inf"), float("-inf")
-    poly_crs = None
-
+    min_x, min_y, max_x, max_y = (
+        float("inf"),
+        float("inf"),
+        float("-inf"),
+        float("-inf"),
+    )
     for filename in os.listdir(save_folder):
-        if filename.lower().endswith(".tif"):
+        if filename.endswith(".tif"):
             file_path = os.path.join(save_folder, filename)
             with rasterio.open(file_path) as src:
                 bounds = src.bounds
+                # Update the minimum and maximum coordinates
                 min_x = min(min_x, bounds.left)
                 min_y = min(min_y, bounds.bottom)
                 max_x = max(max_x, bounds.right)
                 max_y = max(max_y, bounds.top)
                 poly_crs = src.crs
 
-    bbox = Polygon([(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)])
-    return bbox, poly_crs
+            polygon = Polygon(
+                [
+                    (min_x, min_y),
+                    (max_x, min_y),
+                    (max_x, max_y),
+                    (min_x, max_y),
+                    (min_x, min_y),
+                ]
+            )
+
+    return polygon, poly_crs
 
 
 def read_shapes(
-    ground_truth_file: str,
-    coast_line_file: str,
-    state_bndry_file: Optional[str] = None,
-    state: str = "",
-    column_filter: Optional[str] = None,
-    filter_entries: Optional[List] = None
-) -> Tuple[Union[gpd.GeoDataFrame, xr.DataArray], gpd.GeoDataFrame, Union[gpd.GeoDataFrame, str]]:
+    ground_truth_file,
+    coast_line_file,
+    state_bndry_file=None,
+    state="",
+    column_filter=None,
+    filter_entries=None,
+):
     """
-    Read shapefiles and optionally subset based on given criteria.
+    Read shapefiles and perform subsetting based on specified criteria.
 
-    Args:
-        ground_truth_file (str): Path to the ground truth file (shapefile or GeoTIFF).
-        coast_line_file (str): Path to the coast line shapefile.
-        state_bndry_file (Optional[str], optional): Path to the state boundary file. Defaults to None.
-        state (str, optional): State name for subsetting. Defaults to "".
-        column_filter (Optional[str], optional): Column name for filtering. Defaults to None.
-        filter_entries (Optional[List], optional): List of filter entries. Defaults to None.
+    Parameters
+    ----------
+    ground_truth_file : str
+        Path to the Ground Truth File (shapefile or geotiff).
+    coast_line_file : str
+        Path to the Coast Line Shape File (shapefile).
+    state_bndry_file : str or None, optional
+        Path to the State Boundary File (shapefile), by default None.
+    state : str, optional
+        Name of the state for subsetting, by default "".
+    column_filter : str or None, optional
+        The name of the column in the Ground Truth File to use as a filter criterion, by default None.
+    filter_entries : list or None, optional
+        List of entries to filter the Ground Truth File based on the specified column, by default None.
 
-    Returns:
-        Tuple: (subset ground truth, coastline shapefile, state boundary or empty string)
+    Returns
+    -------
+    tuple
+        A tuple containing the subsetted Ground Truth File (gtf_sub),
+        the Coast Line Shape File (clsf), and the State Boundary (StateBndry).
+
+    Notes
+    -----
+    This function reads in shapefiles and performs subsetting based on the specified criteria.
+    The function can handle both shapefiles and GeoTIFF files. The Ground Truth File is
+    subsetted based on the provided filter criteria, specified by the column_filter and
+    filter_entries parameters. The Coast Line Shape File is read and returned as is. If a
+    State name is provided, the State Boundary File is read and subsetted to the specified
+    State, then reprojected to the EPSG:3577 coordinate reference system. If State is not
+    provided, the StateBndry variable will be an empty string.
     """
-    _, ext = os.path.splitext(ground_truth_file.lower())
+
+    # Create Ground Truth File and subset only the relevant burn event in 2019
+    dirpath, ext = os.path.splitext(ground_truth_file)
     if ext == ".gpkg":
         gtf = gpd.read_file(ground_truth_file)
     elif ext == ".tif":
         gtf = rio_slurp_xarray(ground_truth_file)
-        if getattr(gtf, "spatial_ref", None) == 3111:
+        if gtf.spatial_ref == 3111:
             gtf = gtf.rio.reproject("EPSG:3577")
     else:
-        raise ValueError("Ground Truth File must be a geopackage or GeoTIFF.")
+        print("Ground Truth File not a shapefile or geotif")
 
-    if column_filter and filter_entries is not None and column_filter in gtf.columns:
-        gtf_sub = gtf[gtf[column_filter].isin(filter_entries)]
-    else:
+    try:
+        if column_filter in gtf.columns:
+            gtf_sub = gtf[gtf.ColumnFilter.isin(filter_entries)]
+        else:
+            gtf_sub = gtf
+    except AttributeError:
         gtf_sub = gtf
 
+    # Read in coast line file
     clsf = gpd.read_file(coast_line_file)
 
-    if state and state_bndry_file:
+    # Read in State boundary, if necessary
+    if state:
         bndry = gpd.read_file(state_bndry_file)
-        state_bndry = bndry[bndry.STE_NAME21 == state].to_crs("EPSG:3577")
+        state_bndry = bndry[bndry.STE_NAME21 == state]
+        state_bndry = state_bndry.to_crs("EPSG:3577")
     else:
         state_bndry = ""
+
     return gtf_sub, clsf, state_bndry
 
 
 def validation_stats(
-    product: str,
-    gtf_sub: Union[gpd.GeoDataFrame, xr.DataArray],
-    clsf: gpd.GeoDataFrame,
-    state_bndry: Union[gpd.GeoDataFrame, str],
-    input_type: str,
-    colpac: List,
-    graph_out: bool = True
-) -> Tuple[xr.DataArray, int, int, int, int]:
+    product, gtf_sub, clsf, state_bndry, input_type, colpac, graph_out=True
+):
     """
-    Compute validation statistics comparing a product raster with ground truth data.
+    Perform validation statistics on a product by comparing it with ground truth data.
 
-    Args:
-        product (str): Path to the product file.
-        gtf_sub (Union[gpd.GeoDataFrame, xr.DataArray]): Ground truth subset.
-        clsf (gpd.GeoDataFrame): Coastline shapefile.
-        state_bndry (Union[gpd.GeoDataFrame, str]): State boundary data.
-        input_type (str): Type of input ('tif' or other).
-        colpac (List): Color palette list.
-        graph_out (bool, optional): Whether to output graphs. Defaults to True.
+    Parameters
+    ----------
+    product : str
+        Path to the product file (geotiff or other supported format).
+    gtf_sub : geopandas.GeoDataFrame or xarray.DataArray
+        Subsetted ground truth data.
+    clsf : geopandas.GeoDataFrame
+        Coast Line Shape File.
+    state_bndry : geopandas.GeoDataFrame or str
+        State boundary data or empty string.
+    input_type : str
+        Type of the input file ('tif' for geotiff or other supported formats).
+    colpac : list
+        List of colors for plotting.
+    graph_out : bool, optional
+        Flag indicating whether to generate a comparison graph, by default True.
 
-    Returns:
-        Tuple: (combined result, TP, FN, FP, TN)
+    Returns
+    -------
+    tuple
+        A tuple containing the combined result data array, true positives (TP),
+        false negatives (FN), false positives (FP), and true negatives (TN).
+
     """
+    # Create xarray of product
     if input_type == "tif":
         prod_array = rio_slurp_xarray(product)
     else:
         prod_array = rioxarray.open_rasterio(product).Moderate
 
-    if isinstance(state_bndry, (gpd.GeoDataFrame, gpd.GeoSeries)) and not state_bndry.empty:
+    if len(state_bndry) != 0:
+        # Mask outside State boundary
         state_mask = xr_rasterize(state_bndry, prod_array)
+
+        # Mask out ocean
         oc_mask = xr_rasterize(clsf, prod_array)
+
         ocean_mask = np.logical_and(oc_mask, state_mask)
     else:
+        # Mask out ocean
         ocean_mask = xr_rasterize(clsf, prod_array)
 
     masked_ocean = prod_array.where(ocean_mask)
 
-    if isinstance(gtf_sub, (pd.DataFrame, gpd.GeoDataFrame)):
+    # Mask out all areas outside of the GTSFsub area
+    if isinstance(gtf_sub, pd.DataFrame):
         gtf_sub_array = xr_rasterize(gtf_sub, prod_array)
-        mask = gtf_sub_array
         temp_mask = masked_ocean.where(gtf_sub_array == 1)
+        mask = xr_rasterize(gtf_sub, masked_ocean)
     else:
         temp_mask = gtf_sub.rio.reproject_match(prod_array)
         mask = temp_mask.where(temp_mask == 0, 1)
 
-    tp = int(masked_ocean.where((masked_ocean == 1) & (mask == 1)).count())
-    fn = int(masked_ocean.where((masked_ocean == 0) & (mask == 1)).count())
-    fp = int(masked_ocean.where((masked_ocean == 1) & (mask == 0)).count())
-    tn = int(masked_ocean.where((masked_ocean == 0) & (mask == 0)).count())
+    tp = int(masked_ocean.where(np.logical_and(masked_ocean == 1, mask == 1)).count())
 
-    prec_str = (f"\nPrecision = {round(100 * tp / (tp + fp), 1)}%"
-                if (tp + fp > 0 and tp > 0) else "\nPrecision is undefined")
-    rec_str = (f"\nRecall = {round(100 * tp / (tp + fn), 1)}%"
-               if (tp + fn > 0 and tp > 0) else "\nRecall is undefined")
-    print_string = (f"True Positives = {tp}\nTrue Negatives = {tn}\n"
-                    f"False Positives = {fp}\nFalse Negatives = {fn}\n"
-                    f"{prec_str}{rec_str}")
+    # Number of pixels within Ground Truth shapefile that are identified as unburnt (False Negatives)
+    fn = int(masked_ocean.where(np.logical_and(masked_ocean == 0, mask == 1)).count())
 
-    # Merge arrays for visualization
-    tru_pos = masked_ocean.where((masked_ocean == 1) & (mask == 1))
-    fal_neg = (masked_ocean.where((masked_ocean == 0) & (mask == 1)) + 1) * 2
-    fal_pos = masked_ocean.where((masked_ocean == 1) & (mask == 0)) * 3
-    tru_neg = (masked_ocean.where((masked_ocean == 0) & (mask == 0)) + 1) * 4
-    tru_pos.name, fal_neg.name, fal_pos.name, tru_neg.name = "TP", "FN", "FP", "TN"
-    merged = xr.merge([tru_pos.fillna(0), fal_neg.fillna(0), fal_pos.fillna(0), tru_neg.fillna(0)])
-    comby = merged.TP + merged.FN + merged.FP + merged.TN
+    # Number of pixels outside of the Ground Truth shapefile that are identified as burnt (False Positives)
+    fp = int(masked_ocean.where(np.logical_and(masked_ocean == 1, mask == 0)).count())
+
+    # Number of pixels outside of Ground Truth shapefile that are identified as unburnt (True Negatives)
+    tn = int(masked_ocean.where(np.logical_and(masked_ocean == 0, mask == 0)).count())
+
+    # Precision = TP/(TP+FP)
+    if tp + fp > 0 and tp > 0:
+        prec_str = "\nPrecision = " + str(round(100 * tp / (tp + fp), 1)) + "%"
+    else:
+        prec_str = "\nPrecision is undefined"
+
+    # Recall = TP/(FN+TP)
+    if fn + tp > 0 and tp > 0:
+        rec_str = "\nRecall = " + str(round(100 * tp / (fn + tp), 1)) + "%"
+    else:
+        rec_str = "\nRecall is undefined"
+
+    print_string = (
+        "True Positives = "
+        + str(tp)
+        + "\nTrue Negatives = "
+        + str(tn)
+        + "\nFalse Positives = "
+        + str(fp)
+        + "\nFalse Negatives = "
+        + str(fn)
+        + "\n"
+        + prec_str
+        + rec_str
+    )
+
+    tru_pos = masked_ocean.where(np.logical_and(masked_ocean == 1, mask == 1))
+    fal_neg = (masked_ocean.where(np.logical_and(masked_ocean == 0, mask == 1)) + 1) * 2
+    fal_pos = masked_ocean.where(np.logical_and(masked_ocean == 1, mask == 0)) * 3
+    tru_neg = (masked_ocean.where(np.logical_and(masked_ocean == 0, mask == 0)) + 1) * 4
+    tru_pos.name = "TP"
+    fal_neg.name = "FN"
+    fal_pos.name = "FP"
+    tru_neg.name = "TN"
+    meggy = xr.merge(
+        [tru_pos.fillna(0), fal_neg.fillna(0), fal_pos.fillna(0), tru_neg.fillna(0)]
+    )
+    comby = meggy.TP + meggy.FN + meggy.FP + meggy.TN
 
     if graph_out:
-        uniq_vals = np.unique(comby.values[~np.isnan(comby.values)]).astype(int)
-        colors = [colpac[i] for i in uniq_vals if i < len(colpac)]
+        #
+        # Select only those colours that are represented in the data
+        #
+
+        # select unique values
+        uniq_vals = np.unique(comby)
+
+        # Remove nan from unique values and convert remaining floats to ints
+        colnums = uniq_vals[~np.isnan(uniq_vals)].astype(int)
+
+        # Select only colours that correspond to data values in array
+        colpac = [colpac[i] for i in colnums]
+
         fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(9, 12))
         fig.suptitle("Comparison of Product and Ground Truth")
         plt.tight_layout(pad=2.5, w_pad=2.0, h_pad=3.5)
@@ -291,216 +458,346 @@ def validation_stats(
         masked_ocean.plot(ax=axes[0, 1], add_colorbar=False)
         temp_mask.plot(ax=axes[1, 0], add_colorbar=False)
         mask.plot(ax=axes[1, 1], add_colorbar=False)
-        comby.plot(ax=axes[2, 0], levels=[0.5, 1.5, 2.5, 3.5, 4.5],
-                   colors=colors, add_colorbar=False)
+
+        comby.plot(
+            ax=axes[2, 0],
+            levels=[0.5, 1.5, 2.5, 3.5, 4.5],
+            colors=colpac,
+            add_colorbar=False,
+        )
         axes[2, 1].axis("off")
-        axes[2, 1].text(0.0, 0.5, print_string, fontsize=16,
-                        verticalalignment="center", horizontalalignment="left")
-        axes[0, 0].set_title("Full Product: Blue=No Burn, Yellow=Burn")
+        axes[0, 0].set_title("        Full Product: Blue=No Burn, Yellow=Burn")
         axes[0, 1].set_title("Ocean mask applied")
-        axes[1, 0].set_title("Ground Truth area")
-        axes[1, 1].set_title("Ground Truth mask")
+        axes[1, 0].set_title("Only Ground Truth area shown")
+        axes[1, 1].set_title("Only Ground Truth area mask shown")
         axes[2, 0].set_title("Combined result")
-        plt.show()
+        axes[2, 1].text(
+            0.0,
+            0.5,
+            print_string,
+            horizontalalignment="left",
+            verticalalignment="center",
+            fontsize=16,
+        )
 
     return comby, tp, fn, fp, tn
 
 
-def get_tifs(save_folder: str, suffix: str) -> List[str]:
+def get_tifs(save_folder, suffix):
     """
-    Retrieve sorted list of TIFF files with a specific suffix.
+    Retrieve a list of file paths for TIFF files in a specified directory
+    with a given suffix.
 
-    Args:
-        save_folder (str): Directory containing TIFF files.
-        suffix (str): Suffix to filter files.
+    Parameters
+    ----------
+    save_folder : str
+        The directory path where the TIFF files are located.
+    suffix : str
+        The suffix that the TIFF files should have. Only files with this
+        suffix will be included in the returned list.
 
-    Returns:
-        List[str]: Sorted list of TIFF file paths.
+    Returns
+    -------
+    list
+        A sorted list of file paths for TIFF files in the specified directory
+        that match the given suffix.
     """
-    directory = os.path.join(save_folder, "")
-    tifs = [os.path.join(directory, file) for root, dirs, files in os.walk(directory)
-            for file in sorted(files) if file.endswith(f"{suffix}.tif")]
+
+    tifs = []
+    directory = save_folder + "/"
+    for root, dirs, files in sorted(os.walk(directory)):
+        for file in files:
+            if file.endswith(suffix + ".tif"):
+                tifs.append(directory + file)
     return sorted(tifs)
 
 
-def extract_xy(path: str) -> Optional[Tuple[str, str]]:
+def extract_xy(path):
     """
-    Extract x and y values from a path using pattern 'x<number>y<number>'.
+    Extract the x and y values from a given path using regular expressions.
 
-    Args:
-        path (str): File path string.
+    The path should contain a substring in the format 'x{number}y{number}'.
+    The function will search for this pattern and extract the x and y values
+    separately.
 
-    Returns:
-        Optional[Tuple[str, str]]: (x_value, y_value) if pattern found; otherwise, None.
+    Parameters
+    ----------
+    path : str
+        The path string from which to extract the x and y values.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the extracted x and y values as separate strings.
+        If the pattern is not found in the path, None is returned.
+
+    Raises
+    ------
+    None
+
     """
-    match = re.search(r"(x\d+y\d+)", path)
+    match = re.search(r"x\d+y\d+", path)
     if match:
-        extracted = match.group(0)
-        matchx = re.search(r"x\d+", extracted)
-        matchy = re.search(r"y\d+", extracted)
-        if matchx and matchy:
-            return matchx.group(0), matchy.group(0)
-    print(f"No match for x, y found in {path}")
-    return None
+        extracted_string = match.group(0)
+        matchx = re.search(r"x\d+", extracted_string)
+        matchy = re.search(r"y\d+", extracted_string)
+        extractx = matchx.group(0)
+        extracty = matchy.group(0)
+        return extractx, extracty
+    else:
+        print("No match for x, y found in", path)
 
 
-def safe_division(numerator: float, denominator: float) -> float:
+import math
+
+def safe_division(numerator, denominator):
+    """Return numerator/denominator if denominator is not zero; otherwise return NaN."""
+    return numerator / denominator if denominator != 0 else float('nan')
+
+def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
     """
-    Safely divide two numbers.
-
-    Args:
-        numerator (float): Numerator.
-        denominator (float): Denominator.
-
-    Returns:
-        float: Division result or NaN if denominator is zero.
+    Calculate classification metrics based on the provided TP, TN, FP, and FN values.
+    
+    Parameters
+    ----------
+    tp : int or float
+        Number of true positives.
+    tn : int or float
+        Number of true negatives.
+    fp : int or float
+        Number of false positives.
+    fn : int or float
+        Number of false negatives.
+    metrics : list, optional
+        List of metrics to calculate. If not provided, all available metrics will be calculated.
+    
+    Returns
+    -------
+    dict
+        A dictionary containing the calculated metrics.
+    
+    Raises
+    ------
+    TypeError
+        If TP, TN, FP, or FN are not numeric values.
+    ValueError
+        If TP, TN, FP, or FN are not positive values greater than or equals to 0.
     """
-    return numerator / denominator if denominator != 0 else float("nan")
-
-
-def calculate_classification_metrics(tp: float, tn: float, fp: float, fn: float,
-                                     metrics: Optional[List[str]] = None) -> Dict[str, float]:
-    """
-    Calculate various classification metrics.
-
-    Args:
-        tp (float): True positives.
-        tn (float): True negatives.
-        fp (float): False positives.
-        fn (float): False negatives.
-        metrics (Optional[List[str]], optional): Specific metrics to calculate. Defaults to all.
-
-    Returns:
-        Dict[str, float]: Dictionary of calculated metrics.
-
-    Raises:
-        TypeError: If inputs are non-numeric.
-        ValueError: If inputs are negative.
-    """
+    # Validate inputs
     if not all(isinstance(val, (int, float)) for val in [tp, tn, fp, fn]):
         raise TypeError("TP, TN, FP, and FN should be numeric values.")
-    if any(val < 0 for val in [tp, tn, fp, fn]):
-        raise ValueError("TP, TN, FP, and FN must be non-negative.")
-
+    if not all(val >= 0 for val in [tp, tn, fp, fn]):
+        raise ValueError("TP, TN, FP, and FN should be positive values greater than or equals to 0.")
+    
+    print("tp, tn, fp, fn", tp, tn, fp, fn)
+    
+    # Calculate each metric safely
     total = tp + tn + fp + fn
     accuracy = safe_division(tp + tn, total)
+    
+    # Balanced accuracy: average of recall (sensitivity) and specificity
     recall = safe_division(tp, tp + fn)
     specificity = safe_division(tn, tn + fp)
     balanced_accuracy = 0.5 * (recall + specificity)
+    
     precision = safe_division(tp, tp + fp)
-    npv = safe_division(tn, tn + fn)
-    fpr = safe_division(fp, tn + fp)
-    fnr = safe_division(fn, tp + fn)
+    npv = safe_division(tn, tn + fn)  # Negative Predictive Value
+    fpr = safe_division(fp, tn + fp)  # False Positive Rate
+    fnr = safe_division(fn, tp + fn)  # False Negative Rate
+    
+    # For Cohen Kappa and MCC, check the complex denominators
     cohen_den = (tp + fp) * (fp + tn) * (tp + fn) * (fn + tn)
     cohen_kappa = safe_division(2 * (tp * tn - fp * fn), cohen_den)
+    
     mcc_den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
     mcc = safe_division((tp * tn - fp * fn), mcc_den)
+    
     f1_score = safe_division(2 * tp, 2 * tp + fp + fn)
-
+    
     available_metrics = {
         "accuracy": accuracy,
-        "balanced_accuracy": balanced_accuracy,
+        "balanced-accuracy": balanced_accuracy,
         "precision": precision,
         "recall": recall,
         "specificity": specificity,
-        "negative_predictive_value": npv,
-        "false_positive_rate": fpr,
-        "false_negative_rate": fnr,
-        "cohen_kappa": cohen_kappa,
-        "matthews_correlation_coefficient": mcc,
-        "f1_score": f1_score,
+        "negative-predictive-value": npv,
+        "false-positive-rate": fpr,
+        "false-negative-rate": fnr,
+        "cohen-kappa": cohen_kappa,
+        "matthews-correlation-coefficient": mcc,
+        "f1-score": f1_score,
     }
-
+    
+    # If no specific metrics are requested, return all available metrics
     if not metrics:
         return available_metrics
-    else:
-        results = {}
-        for metric in metrics:
-            if metric in available_metrics:
-                results[metric] = available_metrics[metric]
-            else:
-                print(f"Metric '{metric}' is not available. Available metrics: {', '.join(available_metrics.keys())}")
-        return results
+    
+    # Otherwise, return only the requested metrics (with a warning if a metric is not found)
+    results = {}
+    for metric in metrics:
+        if metric in available_metrics:
+            results[metric] = available_metrics[metric]
+        else:
+            available_metric_names = list(available_metrics.keys())
+            print(
+                f"Metric '{metric}' is not available. Available metrics: {', '.join(available_metric_names)}"
+            )
+    return results
 
 
-def validation_climate_analysis(fname: str, climate_zone_file: str,
-                                climate_legend_fname: str, loc_name: str,
-                                vali_year: str) -> pd.DataFrame:
+def validation_climate_analysis(
+    fname, climate_zone_file, climate_legend_fname, loc_name, vali_year
+):
     """
-    Perform climate analysis using Koppen-Geiger climate data.
+    Perform climate analysis using Koppen-Geiger climate data and calculate precision and recall for each climate class.
 
-    Args:
-        fname (str): Filepath of the validation GeoTIFF.
-        climate_zone_file (str): Filepath of the climate zone shapefile.
-        climate_legend_fname (str): Filepath of the climate legend text file.
-        loc_name (str): Location name for plotting.
-        vali_year (str): Validation year string.
-
+    Parameters:
+        fname (str): Filepath of the validation raster in GeoTIFF format.
+        climate_zone_file (str): Filepath of the Climate Zone shapefile in GeoJSON format.
+        climate_legend_fname (str): Filepath of the Climate Zone legend data in CSV format.
+        loc_name (str): Name of the location for plotting purposes.
+        vali_year (str): String of Validation Year and year basis
     Returns:
-        pd.DataFrame: DataFrame with climate class results including area percentage, precision, and recall.
+        pandas.DataFrame: A DataFrame containing the results of climate analysis, including climate class names,
+        description, area percentage, precision, and recall.
+
+    The function reads the validation raster data and creates a mask to extract polygons representing valid data.
+    It reads the Climate Zone shapefile and clips the polygons based on their intersection with the validation data.
+    After calculating the counts for each climate class, it computes precision and recall values for each class.
+    The final results are returned as a DataFrame with area percentages, precision, and recall for each climate class.
+    The function also saves the plot of the climate classification map as a PNG image in the current working directory.
     """
+    # Use rasterio to read in the validation raster. Create variables for the transform.
+    # Then create a mask for nodata values, and loop through each feature to create a polygon object of data coverage
+
     with rasterio.open(fname) as src:
         metadata = src.meta
         validation_raster = src.read()
+        # transform = src.transform
         is_valid = (validation_raster != 0).astype(np.uint8)
-        raster_polygons = [shape(coords) for coords, value in features.shapes(
-            is_valid, transform=src.transform) if value != 0]
+        raster_polygons = []
+        for coords, value in features.shapes(is_valid, transform=src.transform):
+            # ignore polygons corresponding to nodata
+            if value != 0:
+                # convert geojson to shapely geometry
+                geom = shape(coords)
+                raster_polygons.append(geom)
 
+    # Call the koppen_import function to create a dataframe with the koppen legend data joined.
     czsf, legend_df = koppen_import(climate_zone_file, climate_legend_fname)
-    czsf = czsf.to_crs(epsg=3577)
-    raster_poly = gpd.GeoDataFrame(geometry=raster_polygons, crs="EPSG:3577")
+
+    # Set crs for CZSF gdf
+    czsf = czsf.to_crs(3577)
+
+    # Convert to polygon object into a gdf
+    raster_poly = gpd.GeoDataFrame(crs="epsg:3577", geometry=raster_polygons)
+
+    # Clip polygons from the Climate Zone shapefile that intersect this polygon
     czsf_clip = gpd.overlay(raster_poly, czsf, how="intersection")
-    czsf_clip = czsf_clip.drop(columns=["Shape_Area"], errors="ignore")
+
+    # remove the 'Shape_Area' column and recalculate to adjust for polygons whos area has been clipped
+    czsf_clip = czsf_clip.drop(columns="Shape_Area")
     czsf_clip["Shape_Area"] = czsf_clip.geometry.area
 
-    fig, ax = plt.subplots(figsize=(10, 10))
+    # Plot Climate geodataframe with the climate gridcode symbolised.
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     czsf_clip.plot(ax=ax, color=czsf_clip["Color"], legend=True)
     ax.set_title(f"Koppen-Geiger Climate Classification Map of {loc_name}")
     handles = [mpatches.Patch(color=color) for color in czsf_clip["Color"].unique()]
     plt.legend(handles, czsf_clip["Name"].unique().tolist(), loc="lower right")
-    save_folder = os.path.dirname(fname)
-    save_name = os.path.splitext(os.path.basename(fname))[0]
-    plt.savefig(os.path.join(save_folder, f"{save_name}_climate_classification_map.png"))
+
+    # Save the plot as a PNG image. First calculate the folder and raster name frmo the fname variable.
+    save_folder = "/".join(fname.split("/")[:-1])
+    save_name = fname.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    plt.savefig(f"{save_folder}/{save_name}_climate_classification_map.png")
+
+    # Display the plot
     plt.show()
 
-    counts_dict: Dict[int, Dict[Any, int]] = {}
-    for idx, row in czsf_clip.iterrows():
-        mask = features.geometry_mask([row.geometry],
-                                      out_shape=validation_raster.shape[-2:],
-                                      transform=metadata["transform"],
-                                      invert=True)
+    # Create a dictionary to store the counts for each categorical value for each polygon
+    counts_dict = {}
+
+    # Loop through the rows of the gdf
+    for index, row in czsf_clip.iterrows():
+        # Create a mask for the polygon being looped through
+        mask = rasterio.features.geometry_mask(
+            [row.geometry],
+            out_shape=validation_raster.shape[-2:],
+            transform=metadata["transform"],
+            invert=True,
+        )
+
+        # Flatten the array and get the unique values and their counts using np.unique
         values, counts = np.unique(validation_raster[0, :, :][mask], return_counts=True)
-        counts_dict[idx] = dict(zip(values, counts))
 
-    for idx, row in czsf_clip.iterrows():
+        # Add the counts to the dictionary with the index of the current row as the key
+        counts_dict[index] = dict(zip(values, counts))
+
+    # Add the counts data to the gdf
+    for index, row in czsf_clip.iterrows():
+        # Get the counts dictionary for the current row
+        counts = counts_dict[index]
+
+        # Loop through the categorical values and add a new column for each value with its count
         for value in [1, 2, 3, 4]:
-            col_name = str(value)
-            czsf_clip.at[idx, col_name] = counts_dict.get(idx, {}).get(value, 0)
+            column_name = f"{value}"
+            if value in counts:
+                count = counts[value]
+            else:
+                count = 0
+            czsf_clip.at[index, column_name] = count
 
-    df = czsf_clip.groupby("gridcode")[["1", "2", "3", "4", "Shape_Area"]].sum().rename(
-        columns={"1": "TP", "2": "FN", "3": "FP", "4": "TN"}
-    )
-    df["Precision"] = df.apply(
-        lambda row: row["TP"] / (row["TP"] + row["FP"])
-        if (row["TP"] + row["FP"]) > 0 else None, axis=1)
-    df["Recall"] = df.apply(
-        lambda row: row["TP"] / (row["TP"] + row["FN"])
-        if (row["TP"] + row["FN"]) > 0 else None, axis=1)
+    # Group by each unique gridcode and sum count statistics
+    df = czsf_clip.groupby("gridcode")[["1", "2", "3", "4", "Shape_Area"]].sum()
 
-    for idx, row in df.iterrows():
-        climate_name = legend_df.loc[legend_df["gridcode"] == idx, "Name"].values[0]
-        if row["Precision"] is not None:
-            print(f"\nPrecision is {round(row['Precision'] * 100, 2)}% for Climate Class {climate_name}")
+    # Rename df columns to their respecive validation result
+    df = df.rename(columns={"1": "TP", "2": "FN", "3": "FP", "4": "TN"})
+
+    # Create columns for Precision and Recall, and set values to None
+    df["Precision"] = None
+    df["Recall"] = None
+
+    # Update df with Climate class legend data
+    df = pd.merge(df, legend_df, on="gridcode")
+
+    # For each climate class, calculate Precision and Recall with handling for 0 values
+    # Precision = TP/(TP+FP)
+    for index, row in df.iterrows():
+        if row["TP"] + row["FP"] > 0 and row["TP"] > 0:
+            df.loc[index, "Precision"] = row["TP"] / (row["TP"] + row["FP"])
+            print(
+                "\nPrecision is {}% for Climate Class {}".format(
+                    round(df.loc[index, "Precision"] * 100, 2), row["Name"]
+                )
+            )
         else:
-            print(f"\nPrecision is undefined for Climate Class {climate_name}")
-        if row["Recall"] is not None:
-            print(f"\nRecall is {round(row['Recall'] * 100, 2)}% for Climate Class {climate_name}")
-        else:
-            print(f"\nRecall is undefined for Climate Class {climate_name}")
+            print("\nPrecision is undefined for Climate Class {}".format(row["Name"]))
 
-    df = df.dropna(subset=["Precision", "Recall"])
+        # Recall = TP/(FN+TP)
+        if row["FN"] + row["TP"] > 0 and row["TP"] > 0:
+            df.loc[index, "Recall"] = row["TP"] / (row["FN"] + row["TP"])
+            print(
+                "\nRecall is {}% for Climate Class {}".format(
+                    round(df.loc[index, "Recall"] * 100, 2), row["Name"]
+                )
+            )
+
+        else:
+            print("\nRecall is undefined for Climate Class {}".format(row["Name"]))
+
+    # drop rows that have nan values for Precision and Recall
+    df = df.dropna()
+
+    # Calculate area for each climate class as a percentage of total area
     total_area = df["Shape_Area"].sum()
     df["Area_Percent"] = df["Shape_Area"].apply(lambda x: x / total_area)
-    results_df = df.drop(columns=["TP", "FN", "FP", "TN", "gridcode", "Color", "Shape_Area"], errors="ignore")
-    results_df = results_df.reindex(columns=["Name", "Description", "Area_Percent", "Precision", "Recall"])
+
+    # Create a new results_df and reformat to visualsie the results
+    results_df = df.drop(
+        ["TP", "FN", "FP", "TN", "gridcode", "Color", "Shape_Area"], axis=1
+    )
+    results_df = results_df.reindex(
+        columns=["Name", "Description", "Area_Percent", "Precision", "Recall"]
+    )
+
     return results_df
