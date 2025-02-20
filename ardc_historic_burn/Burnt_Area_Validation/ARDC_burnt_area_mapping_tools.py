@@ -392,7 +392,7 @@ def calculate_classification_metrics(tp: float, tn: float, fp: float, fn: float,
     fnr = safe_division(fn, tp + fn)
     cohen_den = (tp + fp) * (fp + tn) * (tp + fn) * (fn + tn)
     cohen_kappa = safe_division(2 * (tp * tn - fp * fn), cohen_den)
-    mcc_den = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    mcc_den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
     mcc = safe_division((tp * tn - fp * fn), mcc_den)
     f1_score = safe_division(2 * tp, 2 * tp + fp + fn)
 
