@@ -368,7 +368,7 @@ def run_validation(method_result_folder: str, performance_report_output_folder: 
             with fs.open(s3_file_path, "rb") as s3_file, open(local_file_path, "wb") as local_file:
                 local_file.write(s3_file.read())
 
-    study_sites = ["Esperance_WA", "Port_Hedland_WA", "kangaroo_Island_SA", "East_Vic", "Cairns_QLD", "Cooktown_QlD"]
+    study_sites = ["Esperance_WA", "Port_Hedland_WA", "kangaroo_Island_SA", "East_Vic", "Cairns_QLD", "Cooktown_QLD"]
     for site in study_sites:
         site_folder = f"performance-report/{site}_{algo_name}"
         generate_result_by_study_site_folder(
