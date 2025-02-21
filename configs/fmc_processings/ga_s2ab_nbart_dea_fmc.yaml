@@ -19,7 +19,7 @@ input_products:
 product:
   name: ga_s2ab_nbart_dea_fmc
   short_name: ga_s2ab_nbart_dea_fmc
-  version: 3.0.0
+  version: 3.0.1
   product_family: fmc
   bands:
     - count
