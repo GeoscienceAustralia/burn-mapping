@@ -19,44 +19,7 @@ input_products:
 product:
   name: ga_s2ab_nbart_dea_fmc
   short_name: ga_s2ab_nbart_dea_fmc
-  version: 3.0.0
+  version: 3.0.1
   product_family: fmc
-  bands:
-    - count
-  inherit_skip_properties:
-    - eo:cloud_cover
-    - fmask:clear
-    - fmask:snow
-    - fmask:cloud
-    - fmask:water
-    - fmask:cloud_shadow
-    - eo:sun_elevation
-    - eo:sun_azimuth
-    - gqa:iterative_stddev_x
-    - gqa:iterative_stddev_y
-    - gqa:iterative_stddev_xy
-    - gqa:stddev_xy
-    - gqa:stddev_x
-    - gqa:stddev_y
-    - gqa:mean_xy
-    - gqa:mean_x
-    - gqa:mean_y
-    - gqa:abs_xy
-    - gqa:abs_x
-    - gqa:abs_y
-    - gqa:abs_iterative_mean_y
-    - gqa:abs_iterative_mean_x
-    - gqa:abs_iterative_mean_xy
-    - gqa:iterative_mean_xy
-    - gqa:iterative_mean_x
-    - gqa:iterative_mean_y
-    - gqa:cep90
-    - landsat:landsat_product_id
-    - landsat:landsat_scene_id
-    - landsat:collection_category
-    - landsat:collection_number
-    - landsat:wrs_path
-    - landsat:wrs_row
-    - fmask:clear
 
 model_path: https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/RF_AllBands_noLC_DEA_labeless.joblib
