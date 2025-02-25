@@ -434,7 +434,7 @@ class BurnCubeProcessingTask:
 
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
-        self.s3_file_uri = f"s3://{self.s3_bucket_name}/{self.s3_object_key}"
+        self.s3_file_uri = f"s3:/{self.s3_bucket_name}/{self.s3_object_key}"
 
         self.proc_info_path = self.s3_file_uri + self.PROD_INFO_EXT
         self.odc_metadata_path = self.s3_file_uri + self.ODC_META_EXT
@@ -742,7 +742,7 @@ class BurnCubeProcessingTask:
         stac_meta = eo3stac.to_stac_item(
             dataset=meta,
             stac_item_destination_url=self.stac_metadata_path,
-            dataset_location=str(Path(self.s3_file_uri).parent),
+            dataset_location=str(Path(self.s3_file_uri)),
             odc_dataset_metadata_url=self.odc_metadata_path,
             explorer_base_url=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
         )
