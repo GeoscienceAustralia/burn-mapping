@@ -1,19 +1,20 @@
 output_folder: s3://dea-public-data-dev/projects/burn_cube/derivative
 
-input_products:
-  platform: ls
-  geomed_name: ga_ls8c_nbart_gm_4cyear_2016
-  wofs_summary_name: ga_ls_wo_fq_cyear_3
-  ard_names:
-    - ga_ls8c_ard_3
-  input_ard_bands:
-    - nbart_green
-    - nbart_nir
-    - nbart_swir_2
-  input_gm_bands:
-    - nbart_green
-    - nbart_nir
-    - nbart_swir_2
+match_products:
+  - product_name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_24_01_2025
+    extension_name: prediction_object.tif
+    product_weight: 1
+    product_short_name: rf
+  - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
+    extension_name: wofssevere.tif
+    product_weight: 1
+    product_short_name: bc
+  - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
+    extension_name: single_rbr_pred.tif
+    product_weight: 1
+    product_short_name: rbr
+
+task_table: 10-year-historical-processing-4year-geomad.csv
 
 product:
   name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
@@ -76,19 +77,4 @@ product:
     range:
     - 0
     - 1
-
-match_products:
-  - product_name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_24_01_2025
-    extension_name: prediction_object.tif
-    product_weight: 1
-    product_short_name: rf
-  - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
-    extension_name: wofssevere.tif
-    product_weight: 1
-    product_short_name: bc
-  - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
-    extension_name: single_rbr_pred.tif
-    product_weight: 1
-    product_short_name: rbr
-
-task_table: 10-year-historical-processing-4year-geomad.csv
+    
