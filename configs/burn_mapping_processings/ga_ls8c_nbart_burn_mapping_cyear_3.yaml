@@ -16,8 +16,8 @@ input_products:
     - nbart_swir_2
 
 product:
-  name: ga_ls8c_nbart_burn_mapping_cyear_3
-  short_name: ga_ls8c_nbart_burn_mapping_cyear_3
+  name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
+  short_name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
   version: 3.0.0
   product_family: burn_mapping
   bands:
@@ -70,7 +70,7 @@ product:
         band: any
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_ls8c_nbart_burn_mapping_cyear_3
+    name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
     needed_bands:
     - any
     range:
@@ -78,7 +78,7 @@ product:
     - 1
 
 match_products:
-  - product_name: dea_ml_ba_rf_with_landcover_xgb_model_02_08_2024
+  - product_name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_24_01_2025
     extension_name: prediction_object.tif
     product_weight: 1
     product_short_name: rf
@@ -87,7 +87,7 @@ match_products:
     product_weight: 1
     product_short_name: bc
   - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
-    extension_name: rbr_pred.tif
+    extension_name: single_rbr_pred.tif
     product_weight: 1
     product_short_name: rbr
 
