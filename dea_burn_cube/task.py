@@ -434,7 +434,7 @@ class BurnCubeProcessingTask:
 
         self.ancillary_folder = f"{self.output_folder}/ancillary_file"
 
-        self.s3_file_uri = f"s3:/{self.s3_bucket_name}/{self.s3_object_key}"
+        self.s3_file_uri = f"s3://{self.s3_bucket_name}/{self.s3_object_key}"
 
         self.proc_info_path = self.s3_file_uri + self.PROD_INFO_EXT
         self.odc_metadata_path = self.s3_file_uri + self.ODC_META_EXT
