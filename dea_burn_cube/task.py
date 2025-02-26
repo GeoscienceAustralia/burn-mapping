@@ -748,9 +748,9 @@ class BurnCubeProcessingTask:
         )
 
         for band_name in self.output_product.bands:
-            odc_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
-        odc_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
-        odc_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
+            stac_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
+        stac_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
+        stac_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
 
         stac_meta = json.dumps(
             stac_meta,
