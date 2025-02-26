@@ -746,6 +746,12 @@ class BurnCubeProcessingTask:
             odc_dataset_metadata_url=self.odc_metadata_path,
             explorer_base_url=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
         )
+
+        for band_name in self.output_product.bands:
+            odc_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
+        odc_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
+        odc_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
+
         stac_meta = json.dumps(
             stac_meta,
             default=json_fallback,
@@ -763,12 +769,6 @@ class BurnCubeProcessingTask:
         meta_stream = io.StringIO("")  # too short, not worth to move to another method.
         serialise.to_stream(meta_stream, meta)
         odc_meta = meta_stream.getvalue()  # odc_meta is Python str
-
-        for band_name in self.output_product.bands:
-            odc_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
-        odc_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
-        odc_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
-
 
         local_odc_metadata_path = self.title + self.ODC_META_EXT
 
