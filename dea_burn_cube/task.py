@@ -742,10 +742,16 @@ class BurnCubeProcessingTask:
         stac_meta = eo3stac.to_stac_item(
             dataset=meta,
             stac_item_destination_url=self.stac_metadata_path,
-            dataset_location=str(Path(self.s3_file_uri).parent),
+            dataset_location=str(Path(self.s3_file_uri)),
             odc_dataset_metadata_url=self.odc_metadata_path,
             explorer_base_url=f"https://explorer.dea.ga.gov.au/product/{self.output_product.name}",
         )
+
+        for band_name in self.output_product.bands:
+            stac_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
+        stac_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
+        stac_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
+
         stac_meta = json.dumps(
             stac_meta,
             default=json_fallback,

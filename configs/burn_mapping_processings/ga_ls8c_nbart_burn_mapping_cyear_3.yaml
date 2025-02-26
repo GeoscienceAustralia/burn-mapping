@@ -15,9 +15,25 @@ input_products:
     - nbart_nir
     - nbart_swir_2
 
+match_products:
+  - product_name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_24_01_2025
+    extension_name: prediction_object.tif
+    product_weight: 1
+    product_short_name: rf
+  - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
+    extension_name: wofssevere.tif
+    product_weight: 1
+    product_short_name: bc
+  - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
+    extension_name: single_rbr_pred.tif
+    product_weight: 1
+    product_short_name: rbr
+
+task_table: 10-year-historical-processing-4year-geomad.csv
+
 product:
-  name: ga_ls8c_nbart_burn_mapping_cyear_3
-  short_name: ga_ls8c_nbart_burn_mapping_cyear_3
+  name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
+  short_name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
   version: 3.0.0
   product_family: burn_mapping
   bands:
@@ -70,25 +86,10 @@ product:
         band: any
       mapped_bands: true
     mpl_ramp: Oranges
-    name: ga_ls8c_nbart_burn_mapping_cyear_3
+    name: ga_ls8c_nbart_burn_mapping_cyear_3_demo
     needed_bands:
     - any
     range:
     - 0
     - 1
-
-match_products:
-  - product_name: dea_ml_ba_rf_with_landcover_xgb_model_02_08_2024
-    extension_name: prediction_object.tif
-    product_weight: 1
-    product_short_name: rf
-  - product_name: ga_ls8c_nbart_bc_7bands_4years_cyear_3
-    extension_name: wofssevere.tif
-    product_weight: 1
-    product_short_name: bc
-  - product_name: ga_ls8c_nbart_dea_rbr_cyear_3
-    extension_name: rbr_pred.tif
-    product_weight: 1
-    product_short_name: rbr
-
-task_table: 10-year-historical-processing-4year-geomad.csv
+    
