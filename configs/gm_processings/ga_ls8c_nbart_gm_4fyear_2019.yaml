@@ -47,21 +47,6 @@ product:
     - landsat:wrs_path
     - landsat:wrs_row
 
-  preview_image_ows_style:
-    name: simple_rgb
-    title: Simple RGB
-    abstract: Simple true-colour image, using the red, green and blue bands
-    components:
-      red:
-        red: 1
-      green:
-        green: 1
-      blue:
-        blue: 1
-    scale_range:
-    - 0
-    - 3000
-
 aws_unsigned: True
 
 max_processing_time: 2400
