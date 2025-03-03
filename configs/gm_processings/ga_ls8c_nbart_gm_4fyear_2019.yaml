@@ -53,8 +53,10 @@ max_processing_time: 2400
 job_queue_max_lease: 300
 renew_safety_margin: 60
 future_poll_interval: 2
-s3_acl: public-read
 # Generic product attributes
 cog_opts:
   zlevel: 9
 apply_eodatasets3: True
+
+output_location: >-
+  s3://dea-public-data-dev/derivative/ga_ls8c_nbart_gm_4fyear_2019/3-0-0
