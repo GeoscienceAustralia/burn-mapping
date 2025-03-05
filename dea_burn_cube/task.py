@@ -102,7 +102,7 @@ def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
         formatted as strings in the format "YYYY-MM-DD".
     """
 
-    _ = s3fs.S3FileSystem(anon=True)
+    fs = s3fs.S3FileSystem(anon=True)
 
     periods_columns = [
         "Period Start",
