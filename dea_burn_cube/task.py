@@ -113,7 +113,7 @@ def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
 
     with fs.open(f"s3://dea-public-data-dev/projects/burn_cube/configs/{task_table}", mode='r') as f:
         # Read the CSV file into a pandas DataFrame
-        task_map = pd.read_csv(f)
+        task_map = pd.read_csv(f, parse_dates=periods_columns, dayfirst=True)
 
     result_dict = {}
 
