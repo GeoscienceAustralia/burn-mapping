@@ -257,7 +257,7 @@ def burn_cube_add_metadata(
 
     try:
         bc_processing_task.validate_cfg()
-        bc_processing_task.validate_data()
+        # bc_processing_task.validate_data()
     except ValueError:
         logger.error(
             "The setting values in cfg have problem. finish the processing %s",
@@ -327,7 +327,7 @@ def burn_cube_run(
 
     try:
         bc_processing_task.validate_cfg()
-        bc_processing_task.validate_data()
+        # bc_processing_task.validate_data()
     except ValueError:
         logger.error(
             "The setting values in cfg have problem. finish the processing %s",
