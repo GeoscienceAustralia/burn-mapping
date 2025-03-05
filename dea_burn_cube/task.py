@@ -221,7 +221,7 @@ def generate_task(task_id: str, task_table: str) -> Dict[str, str]:
 
     # Determine if the task falls within a dynamic or static time range and generate the
     # corresponding dictionary of time ranges
-    if dtime.year > 2023:
+    if dtime.year > 2030:
         result_dict = dynamic_task_to_ranges(dtime)
     else:
         result_dict = task_to_ranges(task_id, task_table)
