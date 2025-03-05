@@ -506,7 +506,7 @@ class BurnCubeProcessingTask:
             time=self.period_start,
         )
 
-        if len(self.geomed_datasets) != 1:
+        if len(self.geomed_datasets) < 1:
             raise IncorrectInputDataError(
                 "Found " + str(len(self.geomed_datasets)) + " GeoMAD dataset"
             )
@@ -517,7 +517,7 @@ class BurnCubeProcessingTask:
             time=self.mapping_period_start,
         )
 
-        if len(self.wofs_datasets) != 1:
+        if len(self.wofs_datasets) < 1:
             raise IncorrectInputDataError(
                 "Found " + str(len(self.wofs_datasets)) + " WOfS dataset"
             )
