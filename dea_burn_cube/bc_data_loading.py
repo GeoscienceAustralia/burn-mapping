@@ -106,6 +106,7 @@ def load_ard_ds(
         dask_chunks={},
         time=period,
         group_by="solar_day",
+        dataset_maturity="final",
     )
 
     ard = ard[ard_bands].to_array(dim="band").to_dataset(name="ard")
