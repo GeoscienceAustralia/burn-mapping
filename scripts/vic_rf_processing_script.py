@@ -1,8 +1,8 @@
+import hashlib
 import logging
 import os
 import re
 import sys
-import hashlib
 from typing import Tuple
 
 import click
@@ -78,10 +78,17 @@ def _get_gpgon(
 # Define the feature_layers function
 # This function generates the data required by the RF model to map burnt area
 def feature_layers(
-    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name, post_geomed_name
+    query,
+    hnrs_dc,
+    dc,
+    time_pre,
+    time_post,
+    climate_dataset,
+    pre_fire_gm_product_name,
+    post_geomed_name,
 ):
-    
-    ds_post = dc.load(post_geomed_name, time = time_post, **query)
+
+    ds_post = dc.load(post_geomed_name, time=time_post, **query)
 
     # Dictionary mapping old variable names to new ones
     rename_dict = {
@@ -96,21 +103,19 @@ def feature_layers(
     ds_post = ds_post.rename(rename_dict)
 
     base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
-    #query['measurements'] = base_measurements
-    del query['measurements']
-    
+    # query['measurements'] = base_measurements
+    del query["measurements"]
+
     # Load ls8 geomedians
-    ds_base = hnrs_dc.load(product=pre_fire_gm_product_name,
-             time=time_pre,
-             **query)
-    
+    ds_base = hnrs_dc.load(product=pre_fire_gm_product_name, time=time_pre, **query)
+
     ds_base = ds_base[base_measurements]
 
     # Load Land Cover
     # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version
     lc_query = query
     lc_query["measurements"] = ["level3", "level4"]
-    
+
     ds_lc = dc.load("ga_ls_landcover_class_cyear_3", time=time_post, **query)
 
     # the landcover level 3 and level 4 should convert to one-hot encoding data.
@@ -442,7 +447,9 @@ def vic_rf_processing(
     last_4_digits = hash_key[-4:]
 
     # Define the path to the saved machine learning model file.
-    model_path = f"RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer-{last_4_digits}.joblib"
+    model_path = (
+        f"RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer-{last_4_digits}.joblib"
+    )
 
     # auto download Machine Learning model from AWS S3
 
@@ -473,7 +480,7 @@ def vic_rf_processing(
         time_post,
         climate_dataset,
         pre_fire_gm_product_name,
-        post_geomed_name
+        post_geomed_name,
     ).squeeze()
 
     logger.info("Finish data loading")

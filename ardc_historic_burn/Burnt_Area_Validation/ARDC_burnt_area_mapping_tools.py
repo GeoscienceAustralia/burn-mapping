@@ -550,14 +550,16 @@ def extract_xy(path):
 
 import math
 
+
 def safe_division(numerator, denominator):
     """Return numerator/denominator if denominator is not zero; otherwise return NaN."""
-    return numerator / denominator if denominator != 0 else float('nan')
+    return numerator / denominator if denominator != 0 else float("nan")
+
 
 def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
     """
     Calculate classification metrics based on the provided TP, TN, FP, and FN values.
-    
+
     Parameters
     ----------
     tp : int or float
@@ -570,12 +572,12 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
         Number of false negatives.
     metrics : list, optional
         List of metrics to calculate. If not provided, all available metrics will be calculated.
-    
+
     Returns
     -------
     dict
         A dictionary containing the calculated metrics.
-    
+
     Raises
     ------
     TypeError
@@ -587,33 +589,35 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
     if not all(isinstance(val, (int, float)) for val in [tp, tn, fp, fn]):
         raise TypeError("TP, TN, FP, and FN should be numeric values.")
     if not all(val >= 0 for val in [tp, tn, fp, fn]):
-        raise ValueError("TP, TN, FP, and FN should be positive values greater than or equals to 0.")
-    
+        raise ValueError(
+            "TP, TN, FP, and FN should be positive values greater than or equals to 0."
+        )
+
     print("tp, tn, fp, fn", tp, tn, fp, fn)
-    
+
     # Calculate each metric safely
     total = tp + tn + fp + fn
     accuracy = safe_division(tp + tn, total)
-    
+
     # Balanced accuracy: average of recall (sensitivity) and specificity
     recall = safe_division(tp, tp + fn)
     specificity = safe_division(tn, tn + fp)
     balanced_accuracy = 0.5 * (recall + specificity)
-    
+
     precision = safe_division(tp, tp + fp)
     npv = safe_division(tn, tn + fn)  # Negative Predictive Value
     fpr = safe_division(fp, tn + fp)  # False Positive Rate
     fnr = safe_division(fn, tp + fn)  # False Negative Rate
-    
+
     # For Cohen Kappa and MCC, check the complex denominators
     cohen_den = (tp + fp) * (fp + tn) * (tp + fn) * (fn + tn)
     cohen_kappa = safe_division(2 * (tp * tn - fp * fn), cohen_den)
-    
+
     mcc_den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
     mcc = safe_division((tp * tn - fp * fn), mcc_den)
-    
+
     f1_score = safe_division(2 * tp, 2 * tp + fp + fn)
-    
+
     available_metrics = {
         "accuracy": accuracy,
         "balanced-accuracy": balanced_accuracy,
@@ -627,11 +631,11 @@ def calculate_classification_metrics(tp, tn, fp, fn, metrics=[]):
         "matthews-correlation-coefficient": mcc,
         "f1-score": f1_score,
     }
-    
+
     # If no specific metrics are requested, return all available metrics
     if not metrics:
         return available_metrics
-    
+
     # Otherwise, return only the requested metrics (with a warning if a metric is not found)
     results = {}
     for metric in metrics:

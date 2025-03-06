@@ -20,6 +20,7 @@ logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
+
 def logging_setup():
     """Set up logging for all modules except sqlalchemy and boto."""
     loggers = [
@@ -32,6 +33,7 @@ def logging_setup():
     for logger in loggers:
         logger.addHandler(stdout_hdlr)
         logger.propagate = False
+
 
 class TQDMLogger:
     """Custom logger to integrate tqdm with the logging system."""
@@ -53,6 +55,7 @@ class TQDMLogger:
         if self.progress_bar:
             self.progress_bar.close()
 
+
 def fit_with_logging(model, X, y, logger):
     """Fit a model with progress bar redirected to logger."""
     default_stdout = sys.stdout
@@ -63,6 +66,7 @@ def fit_with_logging(model, X, y, logger):
     finally:
         sys.stdout = default_stdout
 
+
 def download_file_from_s3_public(url, file_path):
     """Download a file from a public S3 URL."""
     response = requests.get(url)
@@ -72,6 +76,7 @@ def download_file_from_s3_public(url, file_path):
         logger.info(f"File downloaded successfully from: {url}")
     else:
         logger.error(f"Failed to download file from: {url}")
+
 
 @click.command(no_args_is_help=True)
 @click.option(
@@ -178,6 +183,7 @@ def dea_rf_training(process_cfg_url, overwrite):
     helper.get_and_set_aws_credentials()
     bc_io.upload_object_to_s3(model_filename, s3_uri)
     logger.info(f"Uploaded result to: {training_model_url}")
+
 
 if __name__ == "__main__":
     dea_rf_training()

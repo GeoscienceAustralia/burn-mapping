@@ -618,12 +618,15 @@ def run_validation(
 
     overall_df = pd.concat(overall_result)
 
-    overall_df.to_csv(f"performance-report/{algo_name}-{suffix}-overall.csv", index=False)
+    overall_df.to_csv(
+        f"performance-report/{algo_name}-{suffix}-overall.csv", index=False
+    )
 
     overall_climate_df = pd.concat(overall_climate_list)
 
     overall_climate_df.to_csv(
-        f"performance-report/{algo_name}-climate-class-{suffix}-overall.csv", index=False
+        f"performance-report/{algo_name}-climate-class-{suffix}-overall.csv",
+        index=False,
     )
 
     bucket_name, s3_folder = performance_report_output_folder.replace(

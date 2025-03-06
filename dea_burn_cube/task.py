@@ -111,7 +111,9 @@ def task_to_ranges(task_id: str, task_table: str) -> Dict[str, str]:
         "Mapping Period End",
     ]
 
-    with fs.open(f"s3://dea-public-data-dev/projects/burn_cube/configs/{task_table}", mode='r') as f:
+    with fs.open(
+        f"s3://dea-public-data-dev/projects/burn_cube/configs/{task_table}", mode="r"
+    ) as f:
         # Read the CSV file into a pandas DataFrame
         task_map = pd.read_csv(f, parse_dates=periods_columns, dayfirst=True)
 
@@ -746,8 +748,12 @@ class BurnCubeProcessingTask:
         )
 
         for band_name in self.output_product.bands:
-            stac_meta["assets"][band_name]["href"] = self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
-        stac_meta["assets"]["metadata:processor"]["href"] = self.s3_file_uri + self.PROD_INFO_EXT
+            stac_meta["assets"][band_name]["href"] = (
+                self.s3_file_uri + f"_{band_name}{self.BAND_EXT}"
+            )
+        stac_meta["assets"]["metadata:processor"]["href"] = (
+            self.s3_file_uri + self.PROD_INFO_EXT
+        )
         stac_meta["assets"]["thumbnail"]["href"] = self.s3_file_uri + self.THUMBNAIL_EXT
 
         stac_meta = json.dumps(

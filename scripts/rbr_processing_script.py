@@ -206,8 +206,8 @@ def rbr_processing(
 
     # Load water frequency summary and create a water mask.
     wofs_summary = dc.load(
-        product=wo_product, 
-        geopolygon=pgon, 
+        product=wo_product,
+        geopolygon=pgon,
         time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
     )
     water_mask = (
