@@ -438,7 +438,16 @@ def vic_rf_processing(
     # + "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
     model_url = process_cfg["model_path"]
 
-    print(rioxarray.__version__)
+    # Compute file names for output using task details.
+    nm_xy = region_id  # dynamic build from data loading process
+    nm_date = time_post[0]  # get year information
+    pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
+    s3_file_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{pred_tif}"
+
+    # Check if the S3 file exists and if overwrite is disabled, then exit early.
+    if not overwrite and helper.check_s3_file_exists(s3_file_uri):
+        logger.info(f"File already exists in S3: {s3_file_uri}. Exiting as overwrite is disabled.")
+        sys.exit(0)
 
     box = _get_gpgon(region_id)
     pgon = box[0]  # it always only one polygon there
