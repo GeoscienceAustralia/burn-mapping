@@ -13,8 +13,8 @@ input_products:
     - swir2
 
 product:
-  name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_06_03_2025
-  short_name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_06_03_2025
+  name: dea_ml_ba_rf_fyear_3
+  short_name: dea_ml_ba_rf_fyear_3
   version: 3.0.0
   product_family: vic_rf
   bands:
@@ -68,7 +68,7 @@ product:
         band: wofssevere
       mapped_bands: true
     mpl_ramp: Oranges
-    name: dea_ml_ba_rf_with_landcover_level4_xgboost_model_06_03_2025
+    name: dea_ml_ba_rf_fyear_3
     needed_bands:
     - wofssevere
     range:
