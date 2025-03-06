@@ -181,7 +181,7 @@ def rbr_processing(
     gm_product = process_cfg["input_products"]["geomed_name"]
     wo_product = process_cfg["input_products"]["wofs_summary_name"]
 
-    task_detail = task.task_to_ranges(task_id, task_table)
+    result_dict = task.task_to_ranges(task_id, task_table)
 
     pgon, _ = get_geometry_and_geobox(region_id)
     output_crs = "epsg:3577"

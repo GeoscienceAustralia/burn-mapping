@@ -78,7 +78,7 @@ def _get_gpgon(
 # Define the feature_layers function
 # This function generates the data required by the RF model to map burnt area
 def feature_layers(
-    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name, post_geomed_name, time_pre, time_post
+    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name, post_geomed_name
 ):
     
     ds_post = dc.load(post_geomed_name, time = time_post, **query)
@@ -101,7 +101,7 @@ def feature_layers(
     
     # Load ls8 geomedians
     ds_base = hnrs_dc.load(product=pre_fire_gm_product_name,
-             time=time_pre, #calendar year
+             time=time_pre,
              **query)
     
     ds_base = ds_base[base_measurements]
@@ -394,7 +394,7 @@ def vic_rf_processing(
     wo_product = process_cfg["input_products"]["wofs_summary_name"]
     gm_measurements = process_cfg["input_products"]["input_gm_bands"]
 
-    task_detail = task.task_to_ranges(task_id, task_table)
+    result_dict = task.task_to_ranges(task_id, task_table)
 
     time_pre = (result_dict["Period Start"], result_dict["Period End"])
     time_post = (result_dict["Mapping Period Start"], result_dict["Mapping Period End"])
@@ -473,9 +473,7 @@ def vic_rf_processing(
         time_post,
         climate_dataset,
         pre_fire_gm_product_name,
-        post_geomed_name,
-        time_pre,
-        time_post,
+        post_geomed_name
     ).squeeze()
 
     logger.info("Finish data loading")
