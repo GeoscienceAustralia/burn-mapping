@@ -89,7 +89,7 @@ def feature_layers(
     region_id,
 ):
 
-    ds_post = dc.load(post_geomed_name, time=time_post, **query)
+    ds_post = dc.load(post_geomed_name, time=time_post[0].split("-")[0], **query)
 
     # Dictionary mapping old variable names to new ones
     rename_dict = {
@@ -316,6 +316,21 @@ def feature_layers(
 
     # Drop the original 'climate_code' variable
     ds_climate = ds_climate.drop_vars("climate_code")
+
+    da_post= da_post.drop_vars("time")
+    dnbr = dnbr.drop_vars("time")
+    dndvi = dndvi.drop_vars("time")
+    dndmi = dndmi.drop_vars("time")
+    dvari = dvari.drop_vars("time")
+
+    print(da_post)
+    print(da_base)
+    print(ds_lc)
+    print(dnbr)
+    print(dndvi)
+    print(dvari)
+    print(dndmi)
+    print(ds_climate)
 
     # Merge all the datasets into a single result dataset
     result = xr.merge(
