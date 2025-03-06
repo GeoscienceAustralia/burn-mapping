@@ -15,7 +15,7 @@ from scipy.ndimage import binary_dilation
 # Import missing dependencies for morphology operations
 from skimage import morphology
 
-from dea_burn_cube import bc_io, helper
+from dea_burn_cube import bc_io, helper, task
 
 # Set logging level for botocore and basic logging configuration.
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
@@ -177,15 +177,20 @@ def rbr_processing(
     process_cfg = helper.load_yaml_remote(process_cfg_url)
     output_folder = process_cfg["output_folder"]
     output_product_name = process_cfg["product"]["name"]
+    task_table = process_cfg["task_table"]
+    gm_product = process_cfg["input_products"]["geomed_name"]
+    wo_product = process_cfg["input_products"]["wofs_summary_name"]
+
+    task_detail = task.task_to_ranges(task_id, task_table)
 
     pgon, _ = get_geometry_and_geobox(region_id)
     output_crs = "epsg:3577"
 
     # Load pre-fire (4-cycle geomedian) and post-fire data
     ds = hnrs_dc.load(
-        product="ga_ls8c_nbart_gm_4cyear_3",
+        product=gm_product,
         geopolygon=pgon,
-        time=("2017-01-01", "2017-12-31"),
+        time=(result_dict["Period Start"], result_dict["Period End"]),
         output_crs=output_crs,
     )
 
@@ -193,7 +198,7 @@ def rbr_processing(
         dc=dc,
         products=["ga_ls5t_ard_3", "ga_ls7e_ard_3", "ga_ls8c_ard_3"],
         geopolygon=pgon,
-        time=("2020-01-01", "2020-12-31"),
+        time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
         group_by="solar_day",
         min_gooddata=0.7,
         output_crs=output_crs,
@@ -201,7 +206,9 @@ def rbr_processing(
 
     # Load water frequency summary and create a water mask.
     wofs_summary = dc.load(
-        product="ga_ls_wo_fq_cyear_3", geopolygon=pgon, time=("2020",)
+        product=wo_product, 
+        geopolygon=pgon, 
+        time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
     )
     water_mask = (
         wofs_summary.frequency.squeeze("time") > 0.2
