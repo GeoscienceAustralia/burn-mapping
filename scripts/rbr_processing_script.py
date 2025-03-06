@@ -229,7 +229,7 @@ def rbr_processing(
 
     # Compute common indices
     pre_bsi = ((ds.nbart_swir_2 + ds.nbart_red) - (ds.nbart_nir + ds.nbart_blue)) / (
-        (ds.nbart_swir_2 + ds.nbart_red) + (ds.nir + ds.nbart_blue)
+        (ds.nbart_swir_2 + ds.nbart_red) + (ds.nbart_nir + ds.nbart_blue)
     )
     post_bsi = (
         (post_ds.nbart_swir_2 + post_ds.nbart_red)

@@ -86,6 +86,7 @@ def feature_layers(
     climate_dataset,
     pre_fire_gm_product_name,
     post_geomed_name,
+    region_id,
 ):
 
     ds_post = dc.load(post_geomed_name, time=time_post, **query)
@@ -105,6 +106,16 @@ def feature_layers(
     base_measurements = ["nbart_blue", "nbart_green", "nbart_red", "nbart_nir", "nbart_swir_1", "nbart_swir_2"]
     # query['measurements'] = base_measurements
     del query["measurements"]
+
+    geomed_datasets = hnrs_dc.find_datasets(
+        product=pre_fire_gm_product_name,
+        geopolygon=query["geopolygon"],
+        time=time_pre,
+    )
+
+    if len(geomed_datasets) == 0:
+        logger.info(f"Cannot find 4 Year GM dataset: {region_id}")
+        sys.exit(0)
 
     # Load ls8 geomedians
     ds_base = hnrs_dc.load(product=pre_fire_gm_product_name, time=time_pre, **query)
@@ -481,6 +492,7 @@ def vic_rf_processing(
         climate_dataset,
         pre_fire_gm_product_name,
         post_geomed_name,
+        region_id
     ).squeeze()
 
     logger.info("Finish data loading")
