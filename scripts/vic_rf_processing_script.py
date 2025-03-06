@@ -504,7 +504,7 @@ def vic_rf_processing(
         output_crs="EPSG:3577",
         x=x_range,
         y=y_range,
-        time=time_post,
+        time=time_post[0].split("-")[0],
     )
 
     # Create water mask to mask pixels that have more than 20% wet observations

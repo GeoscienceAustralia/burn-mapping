@@ -208,7 +208,7 @@ def rbr_processing(
     wofs_summary = dc.load(
         product=wo_product,
         geopolygon=pgon,
-        time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
+        time=result_dict["Mapping Period Start"].split("-")[0],
     )
     water_mask = (
         wofs_summary.frequency.squeeze("time") > 0.2
