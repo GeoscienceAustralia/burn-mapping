@@ -194,18 +194,6 @@ def rbr_processing(
         output_crs=output_crs,
     )
 
-    rename_dict = {
-        "nbart_blue": "blue",
-        "nbart_green": "green",
-        "nbart_red": "red",
-        "nbart_nir": "nir",
-        "nbart_swir_1": "swir1",
-        "nbart_swir_2": "swir2",
-    }
-
-    # fix the 4 year GM band names
-    ds = ds.rename(rename_dict)
-
     post_ds = load_ard(
         dc=dc,
         products=["ga_ls5t_ard_3", "ga_ls7e_ard_3", "ga_ls8c_ard_3"],
@@ -229,8 +217,8 @@ def rbr_processing(
     helper.get_and_set_aws_credentials()  # ensure AWS credentials are set
 
     # Compute common indices
-    pre_bsi = ((ds.swir2 + ds.red) - (ds.nir + ds.blue)) / (
-        (ds.swir2 + ds.red) + (ds.nir + ds.blue)
+    pre_bsi = ((ds.nbart_swir_2 + ds.nbart_red) - (ds.nir + ds.nbart_blue)) / (
+        (ds.nbart_swir_2 + ds.nbart_red) + (ds.nir + ds.nbart_blue)
     )
     post_bsi = (
         (post_ds.nbart_swir_2 + post_ds.nbart_red)
@@ -239,11 +227,11 @@ def rbr_processing(
         (post_ds.nbart_swir_2 + post_ds.nbart_red)
         + (post_ds.nbart_nir + post_ds.nbart_blue)
     )
-    pre_ndvi = (ds.nir - ds.red) / (ds.nir + ds.red)
+    pre_ndvi = (ds.nbart_nir - ds.nbart_red) / (ds.nbart_nir + ds.nbart_red)
     post_ndvi = (post_ds.nbart_nir - post_ds.nbart_red) / (
         post_ds.nbart_nir + post_ds.nbart_red
     )
-    pre_nbr = (ds.nir - ds.swir2) / (ds.nir + ds.swir2)
+    pre_nbr = (ds.nbart_nir - ds.nbart_swir_2) / (ds.nbart_nir + ds.nbart_swir_2)
     post_nbr = (post_ds.nbart_nir - post_ds.nbart_swir_2) / (
         post_ds.nbart_nir + post_ds.nbart_swir_2
     )
@@ -251,28 +239,28 @@ def rbr_processing(
 
     # Additional indices for dDI calculation
     pre_tcw = (
-        0.2578 * ds.blue
-        + 0.2305 * ds.green
-        + 0.0883 * ds.red
-        + 0.1071 * ds.nir
-        - 0.7611 * ds.swir1
-        - 0.5308 * ds.swir2
+        0.2578 * ds.nbart_blue
+        + 0.2305 * ds.nbart_green
+        + 0.0883 * ds.nbart_red
+        + 0.1071 * ds.nbart_nir
+        - 0.7611 * ds.nbart_swir_1
+        - 0.5308 * ds.nbart_swir_2
     )
     pre_tcb = (
-        0.3510 * ds.blue
-        + 0.3813 * ds.green
-        + 0.3437 * ds.red
-        + 0.7196 * ds.nir
-        + 0.2396 * ds.swir1
-        + 0.1949 * ds.swir2
+        0.3510 * ds.nbart_blue
+        + 0.3813 * ds.nbart_green
+        + 0.3437 * ds.nbart_red
+        + 0.7196 * ds.nbart_nir
+        + 0.2396 * ds.nbart_swir_1
+        + 0.1949 * ds.nbart_swir_2
     )
     pre_tcg = (
-        -0.3599 * ds.blue
-        - 0.3533 * ds.green
-        - 0.4734 * ds.red
-        + 0.6633 * ds.nir
-        + 0.0087 * ds.swir1
-        - 0.2856 * ds.swir2
+        -0.3599 * ds.nbart_blue
+        - 0.3533 * ds.nbart_green
+        - 0.4734 * ds.nbart_red
+        + 0.6633 * ds.nbart_nir
+        + 0.0087 * ds.nbart_swir_1
+        - 0.2856 * ds.nbart_swir_2
     )
 
     post_tcw = (
