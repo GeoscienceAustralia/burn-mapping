@@ -186,6 +186,16 @@ def rbr_processing(
     pgon, _ = get_geometry_and_geobox(region_id)
     output_crs = "epsg:3577"
 
+    geomed_datasets = hnrs_dc.find_datasets(
+        product=gm_product,
+        geopolygon=pgon,
+        time=(result_dict["Period Start"], result_dict["Period End"]),
+    )
+
+    if len(geomed_datasets) == 0:
+        logger.info(f"Cannot find 4 Year GM dataset: {region_id}")
+        sys.exit(0)
+
     # Load pre-fire (4-cycle geomedian) and post-fire data
     ds = hnrs_dc.load(
         product=gm_product,
