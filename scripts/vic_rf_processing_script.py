@@ -21,7 +21,7 @@ from scipy.ndimage._measurements import _stats
 from skimage import morphology
 from skimage.segmentation import quickshift
 
-from dea_burn_cube import bc_io, helper
+from dea_burn_cube import bc_io, helper, task
 
 logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
