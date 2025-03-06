@@ -102,14 +102,14 @@ def feature_layers(
 
     ds_post = ds_post.rename(rename_dict)
 
-    base_measurements = ["blue", "green", "red", "nir", "swir1", "swir2"]
+    base_measurements = ["nbart_blue", "nbart_green", "nbart_red", "nbart_nir", "nbart_swir_1", "nbart_swir_2"]
     # query['measurements'] = base_measurements
     del query["measurements"]
 
     # Load ls8 geomedians
     ds_base = hnrs_dc.load(product=pre_fire_gm_product_name, time=time_pre, **query)
-
     ds_base = ds_base[base_measurements]
+    ds_base = ds_base.rename(rename_dict)
 
     # Load Land Cover
     # NOTE: the ga_ls_landcover_class_cyear_3 is 2025 LC version

@@ -202,6 +202,7 @@ def rbr_processing(
         group_by="solar_day",
         min_gooddata=0.7,
         output_crs=output_crs,
+        dataset_maturity="final",
     )
 
     # Load water frequency summary and create a water mask.
