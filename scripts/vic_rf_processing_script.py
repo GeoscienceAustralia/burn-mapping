@@ -89,6 +89,16 @@ def feature_layers(
     region_id,
 ):
 
+    geomed_datasets = dc.find_datasets(
+        product=post_geomed_name,
+        geopolygon=query["geopolygon"],
+        time=time_post[0].split("-")[0],
+    )
+
+    if len(geomed_datasets) == 0:
+        logger.info(f"Cannot find 1 Year GM dataset: {region_id}")
+        sys.exit(0)
+
     ds_post = dc.load(post_geomed_name, time=time_post[0].split("-")[0], **query)
 
     # Dictionary mapping old variable names to new ones
@@ -322,15 +332,6 @@ def feature_layers(
     dndvi = dndvi.drop_vars("time")
     dndmi = dndmi.drop_vars("time")
     dvari = dvari.drop_vars("time")
-
-    print(da_post)
-    print(da_base)
-    print(ds_lc)
-    print(dnbr)
-    print(dndvi)
-    print(dvari)
-    print(dndmi)
-    print(ds_climate)
 
     # Merge all the datasets into a single result dataset
     result = xr.merge(
