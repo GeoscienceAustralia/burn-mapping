@@ -78,10 +78,10 @@ def _get_gpgon(
 # Define the feature_layers function
 # This function generates the data required by the RF model to map burnt area
 def feature_layers(
-    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name
+    query, hnrs_dc, dc, time_pre, time_post, climate_dataset, pre_fire_gm_product_name, post_geomed_name, time_pre, time_post
 ):
     
-    ds_post = dc.load('ga_ls8cls9c_gm_cyear_3', time = time_post, **query)
+    ds_post = dc.load(post_geomed_name, time = time_post, **query)
 
     # Dictionary mapping old variable names to new ones
     rename_dict = {
@@ -100,8 +100,8 @@ def feature_layers(
     del query['measurements']
     
     # Load ls8 geomedians
-    ds_base = hnrs_dc.load(product="ga_ls8c_nbart_gm_4cyear_3",
-             time=("2017-01-01", "2017-12-31"), #calendar year
+    ds_base = hnrs_dc.load(product=pre_fire_gm_product_name,
+             time=time_pre, #calendar year
              **query)
     
     ds_base = ds_base[base_measurements]
@@ -385,28 +385,26 @@ def vic_rf_processing(
     process_cfg = helper.load_yaml_remote(process_cfg_url)
 
     pre_fire_gm_product_name = process_cfg["input_products"]["geomed_name"]
-    output_folder = process_cfg["output_folder"]
-    time_pre = ("2017-01-01", "2017-12-31")
     feature_list = process_cfg["model_features"]
-
+    output_folder = process_cfg["output_folder"]
     output_product_name = process_cfg["product"]["name"]
+    task_table = process_cfg["task_table"]
+    gm_product = process_cfg["input_products"]["geomed_name"]
+    post_geomed_name = process_cfg["input_products"]["post_geomed_name"]
+    wo_product = process_cfg["input_products"]["wofs_summary_name"]
+    gm_measurements = process_cfg["input_products"]["input_gm_bands"]
+
+    task_detail = task.task_to_ranges(task_id, task_table)
+
+    time_pre = (result_dict["Period Start"], result_dict["Period End"])
+    time_post = (result_dict["Mapping Period Start"], result_dict["Mapping Period End"])
 
     # Convert dictionary to a sorted string representation to ensure consistent hash
     dict_string = str(sorted(process_cfg.items()))
 
-    # Generate a hash key using SHA-256
-    hash_key = hashlib.sha256(dict_string.encode()).hexdigest()
-
-    # Keep only the last 4 digits of the hash
-    last_4_digits = hash_key[-4:]
-
     # e.g., "https://dea-public-data-dev.s3.ap-southeast-2.amazonaws.com/projects/burn_cube/configs/"
     # + "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
     model_url = process_cfg["model_path"]
-
-    model_url = model_url.replace(
-        ".joblib", f"-{last_4_digits}.joblib"
-    )
 
     print(rioxarray.__version__)
 
@@ -437,8 +435,14 @@ def vic_rf_processing(
         climate_dataset["climate_code"] != 2147483647
     )
 
+    # Generate a hash key using SHA-256
+    hash_key = hashlib.sha256(dict_string.encode()).hexdigest()
+
+    # Keep only the last 4 digits of the hash
+    last_4_digits = hash_key[-4:]
+
     # Define the path to the saved machine learning model file.
-    model_path = "RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer.joblib"
+    model_path = f"RF_model_21_tiles_1000m_grid_3000m_to_7000m_buffer-{last_4_digits}.joblib"
 
     # auto download Machine Learning model from AWS S3
 
@@ -453,17 +457,11 @@ def vic_rf_processing(
     # Define the output coordinate reference system (CRS).
     output_crs = "epsg:3577"
 
-    # Define a list of bands to load
-    measurements = ["nbart_blue", "nbart_green", "nbart_red", "nbart_nir", "nbart_swir_1", "nbart_swir_2"]
-
-    # Define the analysis year
-    time_post = "2020"
-
     # Create a dictionary query object to pass to the `feature_layers` function
     query = {
         "resolution": resolution,
         "output_crs": output_crs,
-        "measurements": measurements,
+        "measurements": gm_measurements,
         "geopolygon": pgon,
     }
 
@@ -475,6 +473,9 @@ def vic_rf_processing(
         time_post,
         climate_dataset,
         pre_fire_gm_product_name,
+        post_geomed_name,
+        time_pre,
+        time_post,
     ).squeeze()
 
     logger.info("Finish data loading")
@@ -493,12 +494,12 @@ def vic_rf_processing(
 
     # Load the water observations data over the processed tile and analysis year
     wo = dc.load(
-        product="ga_ls_wo_fq_cyear_3",
+        product=wo_product,
         crs="EPSG:3577",
         output_crs="EPSG:3577",
         x=x_range,
         y=y_range,
-        time="2020",
+        time=time_post,
     )
 
     # Create water mask to mask pixels that have more than 20% wet observations
@@ -539,7 +540,7 @@ def vic_rf_processing(
     all_burn_cleaned.attrs["crs"] = wo.crs
 
     nm_xy = region_id  # dynamic build from data loading process
-    nm_date = "2020"  # see what is in bc, based upon nm_yeartype decision from above
+    nm_date = time_post[0]  # get year information
 
     pred_tif = output_product_name + f"_{nm_xy}_{nm_date}_pred.tif"
 
