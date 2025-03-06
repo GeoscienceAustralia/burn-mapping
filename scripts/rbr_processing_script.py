@@ -194,6 +194,18 @@ def rbr_processing(
         output_crs=output_crs,
     )
 
+    rename_dict = {
+        "nbart_blue": "blue",
+        "nbart_green": "green",
+        "nbart_red": "red",
+        "nbart_nir": "nir",
+        "nbart_swir_1": "swir1",
+        "nbart_swir_2": "swir2",
+    }
+
+    # fix the 4 year GM band names
+    ds = ds.rename(rename_dict)
+
     post_ds = load_ard(
         dc=dc,
         products=["ga_ls5t_ard_3", "ga_ls7e_ard_3", "ga_ls8c_ard_3"],
