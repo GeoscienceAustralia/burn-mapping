@@ -228,7 +228,7 @@ def rbr_processing(
     helper.get_and_set_aws_credentials()  # ensure AWS credentials are set
 
     # Compute common indices
-    pre_bsi = ((ds.nbart_swir_2 + ds.nbart_red) - (ds.nir + ds.nbart_blue)) / (
+    pre_bsi = ((ds.nbart_swir_2 + ds.nbart_red) - (ds.nbart_nir + ds.nbart_blue)) / (
         (ds.nbart_swir_2 + ds.nbart_red) + (ds.nir + ds.nbart_blue)
     )
     post_bsi = (
