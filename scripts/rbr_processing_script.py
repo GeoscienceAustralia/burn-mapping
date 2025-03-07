@@ -183,6 +183,16 @@ def rbr_processing(
 
     result_dict = task.task_to_ranges(task_id, task_table)
 
+    # --- Early Check: Verify if a representative output already exists ---
+    # Here we check for the "single_rbr" product file. If it exists and overwrite is disabled,
+    # we exit early to save processing costs.
+    rep_product = "single_rbr"
+    rep_pred_tif = f"{output_product_name}_{region_id}_2020_cyear_{rep_product}_pred.tif"
+    rep_s3_uri = f"{output_folder}/{output_product_name}/3-0-0/{region_id[:3]}/{region_id[3:]}/{rep_pred_tif}"
+    if not overwrite and helper.check_s3_file_exists(rep_s3_uri):
+        logger.info(f"Representative output already exists in S3: {rep_s3_uri}. Exiting as overwrite is disabled.")
+        sys.exit(0)
+
     pgon, _ = get_geometry_and_geobox(region_id)
     output_crs = "epsg:3577"
 
