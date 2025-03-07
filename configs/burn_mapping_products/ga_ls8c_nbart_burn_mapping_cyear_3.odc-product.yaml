@@ -6,7 +6,7 @@ metadata_type: eo3
 metadata:
   properties:
     odc:file_format: GeoTIFF
-    odc:product_family: burncube
+    odc:product_family: burn_mapping
   product:
     name: ga_ls8c_nbart_burn_mapping_cyear_3
 
