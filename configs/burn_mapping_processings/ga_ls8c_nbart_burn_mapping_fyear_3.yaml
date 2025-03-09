@@ -83,12 +83,12 @@ product:
     index_function:
       function: datacube_ows.band_utils.single_band
       kwargs:
-        band: any
+        band: all
       mapped_bands: true
     mpl_ramp: Oranges
     name: ga_ls8c_nbart_burn_mapping_fyear_3
     needed_bands:
-    - any
+    - all
     range:
     - 0
     - 1
