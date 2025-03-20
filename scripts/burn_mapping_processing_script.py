@@ -80,8 +80,13 @@ def fetch_raster_data(match_products, region_id, output_folder):
 
     # If no files matched the criteria, exit
     if not pair_files:
-        logger.info(f"Cannot find any matching files.")
-        sys.exit("Cannot find any files from product folders")
+        logger.info("Cannot find any matching files from: " + region_id)
+        sys.exit("Cannot find any matching files from: " + region_id)
+
+    if len(pair_files) != len(match_products):
+        logger.info("Cannot find all matching files from: " + region_id)
+        sys.exit("Cannot find all matching files from: " + region_id)
+
 
     # Initialize a dictionary to store raster data with metadata
     raster_data = {}
