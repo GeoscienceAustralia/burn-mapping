@@ -223,7 +223,7 @@ def rbr_processing(
         # min_gooddata=0.7,
         output_crs=output_crs,
         dataset_maturity="final",
-        gqa_iterative_mean_xy<=1,
+        gqa_iterative_mean_xy=[-1, 1],
     )
 
     # Load water frequency summary and create a water mask.
