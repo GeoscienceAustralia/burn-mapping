@@ -107,6 +107,7 @@ def load_ard_ds(
         time=period,
         group_by="solar_day",
         dataset_maturity="final",
+        gqa_iterative_mean_xy<=1,
     )
 
     ard = ard[ard_bands].to_array(dim="band").to_dataset(name="ard")

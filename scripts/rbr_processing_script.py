@@ -220,9 +220,10 @@ def rbr_processing(
         geopolygon=pgon,
         time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
         group_by="solar_day",
-        min_gooddata=0.7,
+        # min_gooddata=0.7,
         output_crs=output_crs,
         dataset_maturity="final",
+        gqa_iterative_mean_xy<=1,
     )
 
     # Load water frequency summary and create a water mask.
@@ -231,11 +232,46 @@ def rbr_processing(
         geopolygon=pgon,
         time=result_dict["Mapping Period Start"].split("-")[0],
     )
+    
     water_mask = (
         wofs_summary.frequency.squeeze("time") > 0.2
     )  # areas with frequency > 0.2 are water
 
     helper.get_and_set_aws_credentials()  # ensure AWS credentials are set
+
+    # Check if post_ds is None
+    if post_ds is None:
+        # Use a reference array for dimensions and coordinates; here we use wofs_summary.frequency as an example.
+        ref_array = wofs_summary.frequency.squeeze("time")
+        # Create an array with the same shape filled with np.nan
+        nan_array = np.full(ref_array.shape, np.nan)
+        # Convert to an xarray DataArray while preserving coordinate information
+        dummy_da = xr.DataArray(nan_array, coords=ref_array.coords, dims=ref_array.dims)
+        # Ensure that the dummy dataarray has the correct CRS using your helper function
+        dummy_da = prepare_dataarray(dummy_da, wofs_summary.crs)
+
+        logger.info(f"Cannot find any available ARD data at : {region_id}. Generate empty GeoTIFF placeholder files.")
+
+        # List of all output product names for which we need placeholder files
+        product_list = [
+            "single_rbr",
+            "single_nbr",
+            "single_rdnbr",
+            "stacked_nbr",
+            "stacked_rbr",
+            "stacked_rdnbr",
+            "stacked_ddi",
+            "single_ddi",
+            "stacked_ddi_rbr",
+        ]
+        
+        # Upload a placeholder file for each product
+        for product_name in product_list:
+            save_and_upload(dummy_da, product_name, region_id, output_folder, output_product_name)
+
+        # stop processing
+        sys.exit(0)
+
 
     # Compute common indices
     pre_bsi = ((ds.nbart_swir_2 + ds.nbart_red) - (ds.nbart_nir + ds.nbart_blue)) / (
