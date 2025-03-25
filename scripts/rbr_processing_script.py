@@ -217,6 +217,7 @@ def rbr_processing(
     post_ds = load_ard(
         dc=dc,
         products=["ga_ls5t_ard_3", "ga_ls7e_ard_3", "ga_ls8c_ard_3"],
+        cloud_mask="fmask",
         geopolygon=pgon,
         time=(result_dict["Mapping Period Start"], result_dict["Mapping Period End"]),
         group_by="solar_day",
@@ -224,6 +225,7 @@ def rbr_processing(
         output_crs=output_crs,
         dataset_maturity="final",
         gqa_iterative_mean_xy=[-1, 1],
+        skip_broken_datasets=True,
     )
 
     # Load water frequency summary and create a water mask.
