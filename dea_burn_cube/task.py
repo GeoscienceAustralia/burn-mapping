@@ -945,43 +945,6 @@ class BurnCubeFilterTask:
             str(len(region_gdf)),
         )
 
-        # we assume the formats are always same, with columns: region_code, i_x, i_y, utc_offset, geometry
-        # also the geometry are always Polygon
-        logger.info("Filter regions by Hot Spot %s", self.hotspot_csv_s3_uri)
-
-        hotspot_df = pd.read_csv(self.hotspot_csv_s3_uri)
-        latitude = hotspot_df.latitude.values
-        longitude = hotspot_df.longitude.values
-
-        reverse_transformer = pyproj.Transformer.from_crs("EPSG:4283", "EPSG:3577")
-        easting, northing = reverse_transformer.transform(latitude, longitude)
-
-        patch = [
-            Point(easting[i], northing[i]).buffer(4000)
-            for i in range(0, len(hotspot_df))
-        ]
-        hotspot_polygons = unary_union(patch)
-
-        filter_by_hotspot = []
-
-        for region_index in region_gdf.index:
-            region_id = region_gdf.region_code[region_index]
-            region_geometry = region_gdf.geometry[region_index]
-            if region_geometry.intersects(hotspot_polygons):
-                filter_by_hotspot.append(region_id)
-
-        region_gdf = region_gdf[
-            region_gdf["region_code"].isin(filter_by_hotspot)
-        ].reindex()
-
-        # shuffle the region list to aviod data skew
-        region_gdf = region_gdf.sample(frac=1).reset_index(drop=True)
-
-        logger.info(
-            "The number of region changes to %s after Hot Spot filter",
-            str(len(region_gdf)),
-        )
-
         return region_gdf
 
     def filter_by_output(self, overwrite) -> gpd.GeoDataFrame:
