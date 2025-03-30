@@ -134,7 +134,7 @@ def apply_post_processing_by_wo_summary(
     wofs_severity = not_water_mask * burn_cube_result["Severity"]
     wofs_startdate = not_water_mask * burn_cube_result["StartDate"]
     wofs_duration = not_water_mask * burn_cube_result["Duration"]
-    wofs_corroborate = not_water_mask * burn_cube_result["Corroborate"]
+    # wofs_corroborate = not_water_mask * burn_cube_result["Corroborate"]
     wofs_cleaned = not_water_mask * burn_cube_result["Cleaned"]
 
     # ocean_moderate = ocean_mask * wofs_moderate
@@ -152,7 +152,7 @@ def apply_post_processing_by_wo_summary(
             "Severity": burn_cube_result["Severity"],
             "Severe": burn_cube_result["Severe"],
             "Moderate": burn_cube_result["Moderate"],
-            "Corroborate": burn_cube_result["Corroborate"],
+            # "Corroborate": burn_cube_result["Corroborate"],
             "Cleaned": burn_cube_result["Cleaned"],
             "Count": burn_cube_result["Count"],
             "WOfSModerate": wofs_moderate,
@@ -160,7 +160,7 @@ def apply_post_processing_by_wo_summary(
             "WOfSSeverity": wofs_severity,
             "WOfSStartDate": wofs_startdate,
             "WOfSDuration": wofs_duration,
-            "WOfSCorroborate": wofs_corroborate,
+            # "WOfSCorroborate": wofs_corroborate,
             "WOfSCleaned": wofs_cleaned,
             # "OceanModerate": ocean_moderate,
             # "OceanSevere": ocean_severe,

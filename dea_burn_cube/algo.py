@@ -729,12 +729,12 @@ def _create_variable_attributes(dataset):
         "standard_name": "Moderate",
         "coverage_content_type": "model results",
     }
-    dataset["Corroborate"].attrs = {
-        "units": "1",
-        "long_name": "Corrorborate evidence",
-        "standard_name": "Corroborate",
-        "coverage_content_type": "model results",
-    }
+    #dataset["Corroborate"].attrs = {
+    #    "units": "1",
+    #    "long_name": "Corrorborate evidence",
+    #    "standard_name": "Corroborate",
+    #    "coverage_content_type": "model results",
+    #}
     dataset["Cleaned"].attrs = {
         "units": "month",
         "long_name": "Cleaned",
@@ -1061,10 +1061,10 @@ def severitymapping(
     out["Count"] = count
 
     if burnt.sum() == 0:
-        out["Corroborate"] = (
-            ("y", "x"),
-            np.zeros((len(dists.y), len(dists.x))).astype("int16"),
-        )
+        #out["Corroborate"] = (
+        #    ("y", "x"),
+        #    np.zeros((len(dists.y), len(dists.x))).astype("int16"),
+        #)
         out["Moderate"] = (
             ("y", "x"),
             np.zeros((len(dists.y), len(dists.x))).astype("int16"),
@@ -1113,7 +1113,7 @@ def severitymapping(
             hot_spot_mask = outline_to_mask(polygons.exterior, coords["x"], coords["y"])
             hot_spot_mask = xr.DataArray(hot_spot_mask, coords=coords, dims=("y", "x"))
 
-        out["Corroborate"] = (("y", "x"), hot_spot_mask.data.astype("int16"))
+        #out["Corroborate"] = (("y", "x"), hot_spot_mask.data.astype("int16"))
         out = post_filtering(out, hotspots_filtering=True, date_filtering=False)
     return create_attributes(out, "Burned Area Map", "v1.0", method)
 
