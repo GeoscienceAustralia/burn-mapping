@@ -32,7 +32,6 @@ product:
     - wofssevere
     - wofsmoderate
     - wofsduration
-    - wofscorroborate
     - wofscleaned
     - count
   inherit_skip_properties:
