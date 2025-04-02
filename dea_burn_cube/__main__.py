@@ -357,7 +357,13 @@ def burn_cube_run(
             bc_processing_task,
             n_procs,
         )
+    except Exception as e:
+        logger.error(
+            f"Generate Burn Cube result to S3 object {bc_processing_task.s3_file_uri} failed: {str(e)}"
+        )
+        sys.exit(0)
 
+    try:
         bc_io.result_file_saving_and_uploading(
             burn_cube_result,
             bc_processing_task.title,
@@ -366,7 +372,7 @@ def burn_cube_run(
         )
     except Exception as e:
         logger.error(
-            f"Generate and upload Burn Cube result to S3 object {bc_processing_task.s3_file_uri} failed: {str(e)}"
+            f"Upload Burn Cube result to S3 object {bc_processing_task.s3_file_uri} failed: {str(e)}"
         )
         sys.exit(0)
 

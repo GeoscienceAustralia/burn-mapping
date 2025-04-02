@@ -735,12 +735,12 @@ def _create_variable_attributes(dataset):
     #    "standard_name": "Corroborate",
     #    "coverage_content_type": "model results",
     #}
-    dataset["Cleaned"].attrs = {
-        "units": "month",
-        "long_name": "Cleaned",
-        "standard_name": "Cleaned",
-        "coverage_content_type": "model results",
-    }
+    #dataset["Cleaned"].attrs = {
+    #    "units": "month",
+    #    "long_name": "Cleaned",
+    #    "standard_name": "Cleaned",
+    #    "coverage_content_type": "model results",
+    #}
     dataset["Count"].attrs = {
         "units": "Number of available pixels in ARD",
         "long_name": "Count",
@@ -1114,7 +1114,7 @@ def severitymapping(
             hot_spot_mask = xr.DataArray(hot_spot_mask, coords=coords, dims=("y", "x"))
 
         #out["Corroborate"] = (("y", "x"), hot_spot_mask.data.astype("int16"))
-        out = post_filtering(out, hotspots_filtering=True, date_filtering=False)
+        out = post_filtering(out, hotspots_filtering=False, date_filtering=False)
     return create_attributes(out, "Burned Area Map", "v1.0", method)
 
 
