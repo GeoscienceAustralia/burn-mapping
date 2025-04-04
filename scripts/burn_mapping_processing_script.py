@@ -7,6 +7,7 @@ import s3fs
 import xarray as xr
 from datacube.utils import geometry
 from datacube.utils.cog import write_cog
+from dea_tools.spatial import xr_vectorize
 
 from dea_burn_cube import bc_io, helper, task
 
@@ -268,6 +269,27 @@ def burn_mapping_processing(task_id, region_id, process_cfg_url, overwrite):
         # Upload the output GeoTIFF to the specified S3 location
         bc_io.upload_object_to_s3(pred_tif, s3_file_uri)
         logger.info(f"Uploaded to S3: {s3_file_uri}")
+
+        # Define the output GeoJSON file name pattern
+        geojson_file = f"{condition}.geojson"
+
+        # generate the relative vector file next to raster file
+        gdf = xr_vectorize(da=binary_mask, mask=binary_mask.values == 1)
+
+        gdf.to_file(geojson_file, driver="GeoJSON")
+
+        logger.info(f"Saved result as: {geojson_file}")
+
+        # Construct the S3 file URI for the output file
+        s3_file_uri = f"s3://{processing_task.s3_bucket_name}/{processing_task.s3_object_key}_{geojson_file}"
+
+        # Activate AWS credentials from the service account attached
+        helper.get_and_set_aws_credentials()
+
+        # Upload the output GeoTIFF to the specified S3 location
+        bc_io.upload_object_to_s3(geojson_file, s3_file_uri)
+        logger.info(f"Uploaded to S3: {s3_file_uri}")
+
 
     # processing_task.s3_object_key
     processing_task.upload_processing_log()
