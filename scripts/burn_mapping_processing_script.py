@@ -274,7 +274,7 @@ def burn_mapping_processing(task_id, region_id, process_cfg_url, overwrite):
         geojson_file = f"{condition}.geojson"
 
         # generate the relative vector file next to raster file
-        gdf = xr_vectorize(da=binary_mask, mask=binary_mask.values == 0)
+        gdf = xr_vectorize(da=binary_mask, mask=binary_mask.values == 1)
 
         gdf.to_file(geojson_file, driver="GeoJSON")
 
