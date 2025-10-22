@@ -261,6 +261,17 @@ def process_single_fire(fire_series: pd.Series,
     # Create a single-row GeoDataFrame for clipping and metadata
     poly = gpd.GeoDataFrame([fire_series], crs=poly_crs)
 
+    fire_id = fire_series.fire_id
+    name = fire_series.get('fire_name', f"fire_id_{fire_id}")
+
+    output_geojson_name = os.path.join(
+        OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}.geojson')
+    
+    if os.path.exists(output_geojson_name):
+        print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
+        return  # Skip this fire
+
+
     # FIXME: 'fire_date' was used in the original script but not defined.
     # I am assuming it comes from an 'ignition_date' column.
     # Please check your GeoJSON and update this column name if incorrect.
@@ -280,9 +291,6 @@ def process_single_fire(fire_series: pd.Series,
     except (AttributeError, KeyError):
         print("No 'extinguish' date column found. Will use default buffer.")
         extinguish_date = 'None'
-
-    fire_id = fire_series.fire_id
-    name = fire_series.get('fire_name', f"fire_id_{fire_id}")
     
     print(f"  Fire ID: {fire_id}")
     print(f"  Ignition: {fire_date}")
@@ -337,7 +345,7 @@ def process_single_fire(fire_series: pd.Series,
         output_crs=OUTPUT_CRS,
         resolution=RESOLUTION,
         group_by='solar_day',
-        dask_chunks={},  # <-- FIX 2: Use Dask for memory-efficient loading
+        dask_chunks={},
     )
     if landcover.time.size == 0:
         print(f"Error: No landcover data found for year {landcover_year}. Skipping.")
@@ -366,7 +374,7 @@ def process_single_fire(fire_series: pd.Series,
     print("Vectorizing severity raster...")
     severity_vectors = xr_vectorize(final_severity, 
                                     attribute_col='severity', 
-                                    crs=OUTPUT_CRS,  # <-- FIX 1: Changed to all-caps
+                                    crs=OUTPUT_CRS,
                                     mask=final_severity != 0)
     
     if severity_vectors.empty:
@@ -384,11 +392,12 @@ def process_single_fire(fire_series: pd.Series,
 
     # --- Save Vector Files ---
     base_output_name = os.path.join(OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}')
-    #output_shp_name = f'{base_output_name}.shp'
-    #aggregated_severity.to_file(output_shp_name)
+    
+    output_shp_name = f'{base_output_name}.shp'
+    aggregated_severity.to_file(output_shp_name)
     print(f"Saved severity shapefile to: {output_shp_name}")
     
-    output_geojson_name = f'{base_output_name}.geojson'
+    # The output_geojson_name variable is already defined at the top
     aggregated_severity.to_file(output_geojson_name, driver='GeoJSON')
     print(f"Saved severity GeoJSON to: {output_geojson_name}")
 
@@ -406,6 +415,13 @@ def process_single_fire(fire_series: pd.Series,
               fname=output_cog_severity,
               overwrite=True)
     print(f"Saved severity raster COG to: {output_cog_severity}")
+
+    output_cog_debug = os.path.join(
+        OUTPUT_PRODUCT_DIR, f'debug_mask_raster_{name}.tif')
+    write_cog(new_debug.compute(), 
+              fname=output_cog_debug,
+              overwrite=True)
+    print(f"Saved debug mask raster COG to: {output_cog_debug}")
     
     print(f"Successfully processed fire: {name}")
 
@@ -431,6 +447,7 @@ def main():
     
     success_count = 0
     fail_count = 0
+    skip_count = 0 
     
     for i in range(num_to_process):
         fire_series = all_polys.iloc[i]
@@ -441,8 +458,18 @@ def main():
         print("="*80)
         
         try:
+            output_geojson_name = os.path.join(
+                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{fire_name}.geojson')
+            
+            if os.path.exists(output_geojson_name):
+                print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
+                skip_count += 1
+                continue # Go to the next loop iteration
+                
+            # If it doesn't exist, proceed with processing
             process_single_fire(fire_series, all_polys.crs, dc)
             success_count += 1
+            
         except Exception as e:
             fail_count += 1
             print(f"!!! FAILED to process fire {fire_name}: {e}")
@@ -452,6 +479,7 @@ def main():
     print("\n" + "="*80)
     print("Batch processing complete.")
     print(f"  Successfully processed: {success_count}")
+    print(f"  Skipped (already complete): {skip_count}")
     print(f"  Failed: {fail_count}")
     print("="*80)
 
