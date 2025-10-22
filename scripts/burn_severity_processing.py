@@ -148,7 +148,7 @@ def load_ard_with_fallback(dc: datacube.Datacube,
         "resolution": RESOLUTION,
         "group_by": 'solar_day',
         "cloud_mask": 's2cloudless',
-        "dask_chunks": {},  # <-- FIX 2: Use Dask for memory-efficient loading
+        "dask_chunks": {},
         **kwargs
     }
     
@@ -264,13 +264,14 @@ def process_single_fire(fire_series: pd.Series,
     fire_id = fire_series.fire_id
     name = fire_series.get('fire_name', f"fire_id_{fire_id}")
 
+    # --- Check if output file already exists ---
     output_geojson_name = os.path.join(
         OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}.geojson')
     
     if os.path.exists(output_geojson_name):
-        print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
-        return  # Skip this fire
-
+        # This check is now handled in main() to allow for better skip counting
+        # This function assumes it needs to run
+        pass
 
     # FIXME: 'fire_date' was used in the original script but not defined.
     # I am assuming it comes from an 'ignition_date' column.
@@ -284,10 +285,10 @@ def process_single_fire(fire_series: pd.Series,
 
     # Safely extract extinguish date
     try:
-        if pd.isna(fire_series.extinguish_date):
+        if pd.isna(fire_series.extinguish):
             extinguish_date = 'None'
         else:
-            extinguish_date = str(fire_series.extinguish_date)[:10]
+            extinguish_date = str(fire_series.extinguish)[:10]
     except (AttributeError, KeyError):
         print("No 'extinguish' date column found. Will use default buffer.")
         extinguish_date = 'None'
@@ -369,6 +370,16 @@ def process_single_fire(fire_series: pd.Series,
     new_debug = create_debug_mask(closest_bl, post)
     final_severity = severity.where(new_debug == 0, 6)
     final_severity.name = 'burn_severity'
+
+    # Operations like .where() and arithmetic can drop attributes.
+    # We explicitly copy them back from a known good source (landcover)
+    # before trying to save the rasters.
+    final_severity.attrs['crs'] = landcover.attrs['crs']
+    final_severity.attrs['transform'] = landcover.attrs['transform']
+    
+    new_debug.attrs['crs'] = landcover.attrs['crs']
+    new_debug.attrs['transform'] = landcover.attrs['transform']
+    # --- End of new fix ---
 
     # --- 6. Vectorize and Save ---
     print("Vectorizing severity raster...")
