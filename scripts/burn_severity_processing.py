@@ -284,10 +284,10 @@ def process_single_fire(fire_series: pd.Series,
 
     # Safely extract extinguish date
     try:
-        if pd.isna(fire_series.extinguish):
+        if pd.isna(fire_series.extinguish_date):
             extinguish_date = 'None'
         else:
-            extinguish_date = str(fire_series.extinguish)[:10]
+            extinguish_date = str(fire_series.extinguish_date)[:10]
     except (AttributeError, KeyError):
         print("No 'extinguish' date column found. Will use default buffer.")
         extinguish_date = 'None'
