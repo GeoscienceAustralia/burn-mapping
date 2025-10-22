@@ -127,10 +127,10 @@ def load_and_prepare_polygons(path: str) -> gpd.GeoDataFrame | None:
 
 
 def load_ard_with_fallback(dc: datacube.Datacube, 
-                             gpgon: Geometry, 
-                             time: tuple, 
-                             min_gooddata_thresholds: list = [0.99, 0.90],
-                             **kwargs) -> xr.Dataset:
+                           gpgon: Geometry, 
+                           time: tuple, 
+                           min_gooddata_thresholds: list = [0.99, 0.90],
+                           **kwargs) -> xr.Dataset:
     """
     Loads ARD data, trying a list of 'min_gooddata' thresholds in order.
     
@@ -245,24 +245,28 @@ def create_debug_mask(pre_fire_scene: xr.Dataset,
 
 def process_single_fire(fire_series: pd.Series, 
                         poly_crs: CRS, 
-                        dc: datacube.Datacube):
+                        dc: datacube.Datacube,
+                        unique_fire_name: str):
     """
     Runs the full burn mapping workflow for a single fire polygon.
     
     Args:
-        fire_series: A single row (pd.Series) from the dissolved GeoDataFrame.
+        fire_series: A single row (pd.Series) from the *exploded* GeoDataFrame.
         poly_crs: The CRS of the input polygons.
         dc: An active Datacube instance.
+        unique_fire_name: A unique name for this specific (poly) part.
     """
     
     # --- 1. Extract Metadata and Geometry ---
+    # fire_series.geometry is now guaranteed to be a single Polygon
     gpgon = Geometry(fire_series.geometry, crs=poly_crs)
     
     # Create a single-row GeoDataFrame for clipping and metadata
     poly = gpd.GeoDataFrame([fire_series], crs=poly_crs)
 
     fire_id = fire_series.fire_id
-    name = fire_series.get('fire_name', f"fire_id_{fire_id}")
+    
+    name = unique_fire_name
 
     # --- Check if output file already exists ---
     output_geojson_name = os.path.join(
@@ -371,15 +375,11 @@ def process_single_fire(fire_series: pd.Series,
     final_severity = severity.where(new_debug == 0, 6)
     final_severity.name = 'burn_severity'
 
-    # Operations like .where() and arithmetic can drop attributes.
-    # We explicitly copy them back from a known good source (landcover)
-    # before trying to save the rasters.
-    final_severity.attrs['crs'] = landcover.attrs['crs']
-    final_severity.attrs['transform'] = landcover.attrs['transform']
+    # We explicitly copy them back from a known good source.
+    # We'll use a DataArray from the 'closest_bl' dataset (e.g., nbart_red)
+    # as the Dataset's (closest_bl) attrs may be empty.
+    source_attrs = closest_bl.nbart_red.attrs
     
-    new_debug.attrs['crs'] = landcover.attrs['crs']
-    new_debug.attrs['transform'] = landcover.attrs['transform']
-    # --- End of new fix ---
 
     # --- 6. Vectorize and Save ---
     print("Vectorizing severity raster...")
@@ -397,7 +397,7 @@ def process_single_fire(fire_series: pd.Series,
     aggregated_severity = clipped_severity_vectors.dissolve(by='severity')
     
     aggregated_severity['fire_id'] = fire_id
-    aggregated_severity['fire_name'] = name
+    aggregated_severity['fire_name'] = name # This will be the unique_fire_name
     aggregated_severity['ignition_date'] = fire_date
     aggregated_severity['extinguish_date'] = extinguish_date
 
@@ -434,7 +434,7 @@ def process_single_fire(fire_series: pd.Series,
               overwrite=True)
     print(f"Saved debug mask raster COG to: {output_cog_debug}")
     
-    print(f"Successfully processed fire: {name}")
+    print(f"Successfully processed fire part: {name}")
 
 
 def main():
@@ -453,45 +453,81 @@ def main():
         return
 
     # --- 1. Start Loop ---
-    num_to_process = min(MAX_POLYGONS_TO_PROCESS, len(all_polys))
-    print(f"Found {len(all_polys)} fires. Processing the first {num_to_process}.")
+    
+    # Get the slice of *fires* we want to process
+    num_fires_to_process = min(MAX_POLYGONS_TO_PROCESS, len(all_polys))
+    print(f"Found {len(all_polys)} total fires. Selecting first {num_fires_to_process} for processing.")
+    
+    # Get the subset of *fires* BEFORE exploding
+    polys_to_process = all_polys.iloc[:num_fires_to_process]
+    
+    # --- NEW: Explode MultiPolygons ---
+    # This turns any MultiPolygon row into multiple rows, one for each Polygon.
+    # index_parts=True creates a MultiIndex, e.g., (original_index, part_num)
+    # which we use to create a unique name.
+    try:
+        all_polys_exploded = polys_to_process.explode(index_parts=True)
+    except TypeError:
+        # Fallback for older geopandas versions that don't have 'index_parts'
+        print("Using fallback for geopandas.explode().")
+        all_polys_exploded = polys_to_process.explode()
+
+    num_parts_to_process = len(all_polys_exploded)
+    print(f"The {num_fires_to_process} selected fires contain {num_parts_to_process} individual polygons (parts). Processing all parts.")
     
     success_count = 0
     fail_count = 0
-    skip_count = 0 
+    skip_count = 0  
     
-    for i in range(num_to_process):
-        fire_series = all_polys.iloc[i]
-        fire_name = fire_series.get('fire_name', f"fire_id_{fire_series.get('fire_id', i)}")
+    # Loop over the *exploded* polygons
+    for i in range(num_parts_to_process):
+        fire_series = all_polys_exploded.iloc[i]
+        
+        # --- NEW: Create a unique name for this polygon part ---
+        # Get the original name
+        original_fire_name = fire_series.get('fire_name', f"fire_id_{fire_series.get('fire_id', i)}")
+        
+        # The series index (fire_series.name) will be a tuple (original_index, part_index)
+        # if it came from an exploded MultiPolygon.
+        if isinstance(fire_series.name, tuple):
+            # fire_series.name[0] is original index (e.g., fire_id)
+            # fire_series.name[1] is the part number (0, 1, 2...)
+            unique_fire_name = f"{original_fire_name}_part_{fire_series.name[1]}"
+        else:
+            # It was a simple Polygon, index is not a tuple
+            unique_fire_name = original_fire_name
+        # ---
         
         print("\n" + "="*80)
-        print(f"Processing fire {i+1}/{num_to_process}: {fire_name}")
+        print(f"Processing polygon {i+1}/{num_parts_to_process}: {unique_fire_name}")
         print("="*80)
         
         try:
+            # Check for existing file using the new unique name
             output_geojson_name = os.path.join(
-                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{fire_name}.geojson')
+                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{unique_fire_name}.geojson')
             
             if os.path.exists(output_geojson_name):
                 print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
                 skip_count += 1
                 continue # Go to the next loop iteration
                 
-            # If it doesn't exist, proceed with processing
-            process_single_fire(fire_series, all_polys.crs, dc)
+            # Pass the unique_fire_name to the processing function
+            process_single_fire(fire_series, all_polys.crs, dc, unique_fire_name)
             success_count += 1
             
         except Exception as e:
+            # Use unique_fire_name in error message
             fail_count += 1
-            print(f"!!! FAILED to process fire {fire_name}: {e}")
+            print(f"!!! FAILED to process {unique_fire_name}: {e}")
             traceback.print_exc() # Print full error trace
-            print("Continuing to next fire...")
+            print("Continuing to next polygon...")
     
     print("\n" + "="*80)
     print("Batch processing complete.")
-    print(f"  Successfully processed: {success_count}")
-    print(f"  Skipped (already complete): {skip_count}")
-    print(f"  Failed: {fail_count}")
+    print(f"  Successfully processed: {success_count} (polygon parts)")
+    print(f"  Skipped (already complete): {skip_count} (polygon parts)")
+    print(f"  Failed: {fail_count} (polygon parts)")
     print("="*80)
 
 
