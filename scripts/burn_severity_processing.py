@@ -1,13 +1,20 @@
 """
-Burnt Severity Classification Script
+Burnt Severity Classification Script (Grouped MultiPolygon Output)
 
 This script processes Sentinel-2 ARD (Analysis Ready Data) to map the extent
 and severity of a bushfire. It compares a pre-fire baseline image with a
 post-fire time series to calculate the delta Normalized Burn Ratio (dNBR).
 
 It classifies severity differently for woody vs. grassy landcover types,
-masks out bad data (clouds, water), and saves the final classification
-as both a GeoJSON shapefile and a preview GeoTIFF.
+masks out bad data (clouds, water), and writes:
+  - ONE combined MultiPolygon GeoJSON per original feature (named by fire_name)
+  - Optional per-part GeoJSON/COG previews (off by default)
+
+Key implementation detail:
+- Uses GeoPandas `explode(index_parts=True)` so each MultiPolygon becomes
+  multiple polygon rows with a MultiIndex (original_row_id, part_id).
+- Groups parts back with `groupby(level=0)` and dissolves by `severity`
+  to produce MultiPolygon geometries per severity class.
 """
 
 # Standard library imports
@@ -15,48 +22,49 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from tempfile import TemporaryDirectory
-import traceback # For detailed error logging in main loop
+import traceback  # For detailed error logging
 
 # Third-party imports
 import datacube
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from affine import Affine
 from datacube.utils.cog import write_cog
 from datacube.utils.geometry import CRS, Geometry
-from scipy import ndimage
-from skimage import morphology
 
 # Local/custom tool imports
 # Assumes 'dea-tools' is in a relative path
 sys.path.insert(1, '../../Temp_branch/dea-notebooks/Tools')
 try:
     from dea_tools.datahandling import load_ard
-    from dea_tools.plotting import display_map, rgb
     from dea_tools.bandindices import calculate_indices
     from dea_tools.spatial import xr_vectorize
 except ImportError as e:
-    print(f"Error: Could not import 'dea-tools'.")
-    print("Please ensure the path in 'sys.path.insert' is correct.")
+    print("Error: Could not import 'dea-tools'.")
+    print("       Please ensure the path added to sys.path is correct.")
     print(f"Details: {e}")
     sys.exit(1)
 
-# --- Constants ---
+# =========================
+# ======= CONSTANTS =======
+# =========================
 
 # Input data
 POLYGON_PATH = '10k_sampled_fires.geojson'
 
-# --- NEW: Batch processing setting ---
-MAX_POLYGONS_TO_PROCESS = 10  # Process the first N fires from the file
+# Batch processing setting
+MAX_POLYGONS_TO_PROCESS = 10  # Process the first N features
 
 # Output directory
 OUTPUT_PRODUCT_DIR = 'products'
 
-# Datacube parameters
+# Output toggles
+SAVE_PER_PART_GEOJSON = True         # Per-part vector outputs (debug)
+SAVE_PER_PART_RASTERS = True         # Per-part COG rasters (debug)
+SAVE_COMBINED_PER_FIRE_GEOJSON = True # The new grouped output
+
+# Datacube / product parameters
 OUTPUT_CRS = 'EPSG:3577'
 RESOLUTION = (-10, 10)
 S2_PRODUCTS = ['ga_s2am_ard_3', 'ga_s2bm_ard_3', 'ga_s2cm_ard_3']
@@ -68,13 +76,13 @@ S2_MEASUREMENTS = [
 
 # Analysis parameters
 PRE_FIRE_BUFFER_DAYS = 50
-POST_FIRE_START_DAYS = 15  # Used if no extinguish date
+POST_FIRE_START_DAYS = 15   # Used if no extinguish date
 POST_FIRE_WINDOW_DAYS = 60
 
 # Landcover class definitions for "grass"
 GRASS_CLASSES = [
-    3, 14, 15, 16, 17, 18, 21, 32, 33, 34, 35, 36, 39, 50, 51, 52, 
-    53, 54, 57, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 
+    3, 14, 15, 16, 17, 18, 21, 32, 33, 34, 35, 36, 39, 50, 51, 52,
+    53, 54, 57, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
     90, 91, 92, 94, 95, 96, 97
 ]
 
@@ -88,56 +96,48 @@ GRASS_CLASSES = [
 # 6 = Masked (Cloud, Water, NoData)
 
 
+# =============================
+# ======= CORE HELPERS ========
+# =============================
+
 def load_and_prepare_polygons(path: str) -> gpd.GeoDataFrame | None:
     """
     Loads the fire polygon GeoJSON and prepares it for processing.
-    
-    This includes dissolving by 'fire_id' to ensure one row per fire.
-    
-    Args:
-        path: File path to the GeoJSON.
+    Dissolves by 'fire_id' if available to ensure one row per fire.
 
     Returns:
-        A GeoDataFrame, or None if the file is not found.
+        GeoDataFrame | None
     """
-    print(f"Loading all polygons from: {path}")
+    print(f"Loading polygons from: {path}")
     try:
         poly_gdf = gpd.read_file(path)
     except FileNotFoundError:
         print(f"Error: Input polygon file not found at {path}")
         return None
-    
-    # Dissolve if multiple polygons (e.g., from a sample)
+
     try:
         if len(poly_gdf) > 1 and 'fire_id' in poly_gdf.columns:
             print("Dissolving polygons by 'fire_id'...")
-            poly_gdf = poly_gdf.dissolve(by='fire_id')
+            poly_gdf = poly_gdf.dissolve(by='fire_id', aggfunc='first')
         elif 'fire_id' not in poly_gdf.columns:
-            print("Warning: 'fire_id' not in columns. Not dissolving.")
+            print("Warning: 'fire_id' not in columns. Skipping dissolve.")
     except TypeError as e:
         print(f"Warning: Could not dissolve polygon ({e}). Continuing with loaded data.")
-        pass
 
-    # Copy index (which is 'fire_id' after dissolve) to a column
-    # This is for metadata; the geometry is the important part
     if 'fire_id' not in poly_gdf.columns:
-         poly_gdf["fire_id"] = list(poly_gdf.index)
-    
+        poly_gdf["fire_id"] = list(poly_gdf.index)
+
     return poly_gdf
 
 
-def load_ard_with_fallback(dc: datacube.Datacube, 
-                           gpgon: Geometry, 
-                           time: tuple, 
-                           min_gooddata_thresholds: list = [0.99, 0.90],
+def load_ard_with_fallback(dc: datacube.Datacube,
+                           gpgon: Geometry,
+                           time: tuple,
+                           min_gooddata_thresholds: list = (0.99, 0.90),
                            **kwargs) -> xr.Dataset:
     """
     Loads ARD data, trying a list of 'min_gooddata' thresholds in order.
-    
-    This avoids duplicating the 'load_ard' call and ensures data is
-    loaded if the primary threshold (e.g., 99%) finds no images.
     """
-    
     base_params = {
         "dc": dc,
         "products": S2_PRODUCTS,
@@ -151,198 +151,167 @@ def load_ard_with_fallback(dc: datacube.Datacube,
         "dask_chunks": {},
         **kwargs
     }
-    
+
+    data = xr.Dataset()
     for threshold in min_gooddata_thresholds:
-        print(f"Attempting to load data with min_gooddata = {threshold}...")
+        print(f"Attempting load_ard with min_gooddata={threshold} ...")
         base_params['min_gooddata'] = threshold
         data = load_ard(**base_params)
-        
-        if data.time.size > 0:
-            print(f"Success: Loaded {data.time.size} time-slices.")
+        if getattr(data, "time", xr.DataArray()).size > 0:
+            print(f"Success: Loaded {data.time.size} time slices.")
             return data
-            
+
     print(f"Warning: No data found for time range {time} "
-          f"even with min_gooddata = {min_gooddata_thresholds[-1]}")
+          f"even with min_gooddata={min_gooddata_thresholds[-1]}")
     return data
 
 
-def calculate_severity(delta_nbr: xr.DataArray, 
-                       landcover: xr.DataArray,
+def calculate_severity(delta_nbr: xr.DataArray,
+                       landcover: xr.Dataset,
                        grass_classes: list) -> xr.DataArray:
     """
     Calculates burn severity using different thresholds for woody vs. grass.
     """
     print("Calculating severity based on landcover...")
-    
-    # 1. Create a binary grass mask
+
+    # 1) Grass mask from DEA landcover product
     grass_mask = landcover.level4.isin(grass_classes)
 
-    # 2. Calculate woody severity
+    # 2) Woody severity thresholds on dNBR (delta_nbr.NBR)
     sev_woody = xr.zeros_like(delta_nbr.NBR, dtype=np.uint8)
-    sev_woody = xr.where(delta_nbr.NBR >= 0.1,  2, sev_woody) # Low
-    sev_woody = xr.where(delta_nbr.NBR >= 0.27, 3, sev_woody) # Medium
-    sev_woody = xr.where(delta_nbr.NBR >= 0.44, 4, sev_woody) # High
-    sev_woody = xr.where(delta_nbr.NBR >= 0.66, 5, sev_woody) # Very High
-    
+    sev_woody = xr.where(delta_nbr.NBR >= 0.10, 2, sev_woody)  # Low
+    sev_woody = xr.where(delta_nbr.NBR >= 0.27, 3, sev_woody)  # Medium
+    sev_woody = xr.where(delta_nbr.NBR >= 0.44, 4, sev_woody)  # High
+    sev_woody = xr.where(delta_nbr.NBR >= 0.66, 5, sev_woody)  # Very High
+
     severity_woody_masked = sev_woody.where(grass_mask == 0, 0)
 
-    # 3. Calculate grass severity
-    severity_grass = grass_mask.where(delta_nbr.NBR >= 0.1, 0)
+    # 3) Grass severity: binary (class 1)
+    severity_grass = grass_mask.where(delta_nbr.NBR >= 0.10, 0)
 
-    # 4. Combine
+    # 4) Combine
     severity = severity_woody_masked + severity_grass
     severity.name = 'severity'
     return severity
 
 
-def create_debug_mask(pre_fire_scene: xr.Dataset, 
+def create_debug_mask(pre_fire_scene: xr.Dataset,
                       post_fire_stack: xr.Dataset) -> xr.DataArray:
     """
     Creates a mask for pixels to be excluded from the analysis.
+    Encodes classes as additive flags (1, 10, 100, 1000, 10000).
     """
     print("Creating debug/masking layer...")
-    
+
     debug_layer_blank = xr.ones_like(pre_fire_scene.nbart_red, dtype=np.uint16)
-    
-    # --- 1. Water Mask (Post-fire) ---
-    post_mndwi = calculate_indices(post_fire_stack, 
-                                   index='MNDWI', 
-                                   collection='ga_s2_3', 
-                                   drop=True)
+
+    # 1) Water (post-fire): MNDWI > 0
+    post_mndwi = calculate_indices(post_fire_stack, index='MNDWI',
+                                   collection='ga_s2_3', drop=True)
     max_mndwi = post_mndwi.max('time')
-    post_water = debug_layer_blank.where(max_mndwi.MNDWI > 0, 0) # Class 1
+    post_water = debug_layer_blank.where(max_mndwi.MNDWI > 0, 0)  # class 1
     new_debug = post_water
 
-    # --- 2. Pre-fire Cloud Mask ---
+    # 2) Pre-fire cloud
     pre_cloud = (debug_layer_blank.where(
-        pre_fire_scene.oa_s2cloudless_mask == 2, 0)) * 10 # Class 10
+        pre_fire_scene.oa_s2cloudless_mask == 2, 0)) * 10  # class 10
     new_debug = new_debug + pre_cloud
 
-    # --- 3. Post-fire Persistent Cloud Mask ---
+    # 3) Persistent cloud (post-fire)
     post_cloud = post_fire_stack.oa_s2cloudless_mask.where(
         post_fire_stack.oa_s2cloudless_mask >= 1, 1)
-    persistent_cloud = post_cloud.min('time') 
-    post_cloud_mask = (debug_layer_blank.where(
-        persistent_cloud == 2, 0)) * 100 # Class 100
+    persistent_cloud = post_cloud.min('time')
+    post_cloud_mask = (debug_layer_blank.where(persistent_cloud == 2, 0)) * 100
     new_debug = new_debug + post_cloud_mask
-    
-    # --- 4. Pre-fire Contiguity Mask ---
+
+    # 4) Pre-fire contiguity
     pre_contiguity = (debug_layer_blank.where(
-        pre_fire_scene.oa_nbart_contiguity != 1, 0)) * 1000 # Class 1000
+        pre_fire_scene.oa_nbart_contiguity != 1, 0)) * 1000
     new_debug = new_debug + pre_contiguity
 
-    # --- 5. Post-fire Persistent Contiguity Mask ---
+    # 5) Persistent contiguity (post-fire)
     post_contiguity = post_fire_stack.oa_nbart_contiguity.where(
         post_fire_stack.oa_nbart_contiguity == 1, 0)
-    persistent_cont = post_contiguity.max('time') 
-    post_contiguity_mask = (debug_layer_blank.where(
-        persistent_cont != 1, 0)) * 10000 # Class 10000
+    persistent_cont = post_contiguity.max('time')
+    post_contiguity_mask = (debug_layer_blank.where(persistent_cont != 1, 0)) * 10000
     new_debug = new_debug + post_contiguity_mask
-    
+
     new_debug.name = 'debug_mask'
     return new_debug
 
 
-def process_single_fire(fire_series: pd.Series, 
-                        poly_crs: CRS, 
-                        dc: datacube.Datacube,
-                        unique_fire_name: str):
+def process_single_fire(
+    fire_series: pd.Series,
+    poly_crs: CRS,
+    dc: datacube.Datacube,
+    unique_fire_name: str,
+    save_per_part_vectors: bool = SAVE_PER_PART_GEOJSON,
+    save_per_part_rasters: bool = SAVE_PER_PART_RASTERS
+) -> gpd.GeoDataFrame | None:
     """
-    Runs the full burn mapping workflow for a single fire polygon.
-    
-    Args:
-        fire_series: A single row (pd.Series) from the *exploded* GeoDataFrame.
-        poly_crs: The CRS of the input polygons.
-        dc: An active Datacube instance.
-        unique_fire_name: A unique name for this specific (poly) part.
+    Full burn mapping workflow for a single polygon (part).
+    Returns:
+        GeoDataFrame dissolved by 'severity' (with 'severity' column),
+        reprojected to 'EPSG:4283', or None if nothing to save.
     """
-    
-    # --- 1. Extract Metadata and Geometry ---
-    # fire_series.geometry is now guaranteed to be a single Polygon
+    # --- Geometry and metadata
     gpgon = Geometry(fire_series.geometry, crs=poly_crs)
-    
-    # Create a single-row GeoDataFrame for clipping and metadata
-    poly = gpd.GeoDataFrame([fire_series], crs=poly_crs)
 
-    fire_id = fire_series.fire_id
-    
-    name = unique_fire_name
+    # Make a single-row GeoDataFrame for clipping; ensure CRS
+    poly = gpd.GeoDataFrame([fire_series], crs=poly_crs).copy()
+    poly = poly.to_crs('EPSG:4283')  # ensure clip CRS matches vectors
 
-    # --- Check if output file already exists ---
-    output_geojson_name = os.path.join(
-        OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}.geojson')
-    
-    if os.path.exists(output_geojson_name):
-        # This check is now handled in main() to allow for better skip counting
-        # This function assumes it needs to run
-        pass
+    fire_id = fire_series.get('fire_id', None)
+    fire_name_part = unique_fire_name
 
-    # FIXME: 'fire_date' was used in the original script but not defined.
-    # I am assuming it comes from an 'ignition_date' column.
-    # Please check your GeoJSON and update this column name if incorrect.
+    # --- Dates
     try:
         fire_date = str(fire_series.ignition_date)[:10]
     except AttributeError:
-        print("Error: Could not find 'ignition_date' column.")
-        print("Please define 'fire_date' manually or check column name.")
-        raise # Re-raise to be caught by main loop
+        print("Error: Could not find 'ignition_date' column in input polygons.")
+        raise
 
-    # Safely extract extinguish date
     try:
         if pd.isna(fire_series.extinguish_date):
             extinguish_date = 'None'
         else:
             extinguish_date = str(fire_series.extinguish_date)[:10]
     except (AttributeError, KeyError):
-        print("No 'extinguish' date column found. Will use default buffer.")
         extinguish_date = 'None'
-    
-    print(f"  Fire ID: {fire_id}")
-    print(f"  Ignition: {fire_date}")
-    print(f"  Extinguish: {extinguish_date}")
 
-    # --- 2. Calculate Time Windows ---
-    start_date_pre = (datetime.strptime(fire_date, '%Y-%m-%d') - 
-                      timedelta(days=PRE_FIRE_BUFFER_DAYS)).strftime('%Y-%m-%d')
-    end_date_pre = (datetime.strptime(fire_date, '%Y-%m-%d') - 
-                    timedelta(days=1)).strftime('%Y-%m-%d')
+    # --- Time windows
+    start_date_pre = (datetime.strptime(fire_date, '%Y-%m-%d')
+                      - timedelta(days=PRE_FIRE_BUFFER_DAYS)).strftime('%Y-%m-%d')
+    end_date_pre = (datetime.strptime(fire_date, '%Y-%m-%d')
+                    - timedelta(days=1)).strftime('%Y-%m-%d')
 
     if extinguish_date == 'None':
-        start_date_post = (datetime.strptime(fire_date, '%Y-%m-%d') + 
-                           timedelta(days=POST_FIRE_START_DAYS)).strftime('%Y-%m-%d')
+        start_date_post = (datetime.strptime(fire_date, '%Y-%m-%d')
+                           + timedelta(days=POST_FIRE_START_DAYS)).strftime('%Y-%m-%d')
     else:
         start_date_post = extinguish_date
-    
-    end_date_post = (datetime.strptime(start_date_post, '%Y-%m-%d') + 
-                     timedelta(days=POST_FIRE_WINDOW_DAYS)).strftime('%Y-%m-%d')
-                     
+
+    end_date_post = (datetime.strptime(start_date_post, '%Y-%m-%d')
+                     + timedelta(days=POST_FIRE_WINDOW_DAYS)).strftime('%Y-%m-%d')
+
+    # Landcover year: use previous year for Jan–Sep ignitions
     month_number = int(fire_date[5:7])
-    if month_number >= 10:
-        landcover_year = fire_date[0:4]
-    else:
-        landcover_year = str(int(fire_date[0:4]) - 1)
+    landcover_year = fire_date[0:4] if month_number >= 10 else str(int(fire_date[0:4]) - 1)
 
-    print(f"Pre-fire window: {start_date_pre} to {end_date_pre}")
-    print(f"Post-fire window: {start_date_post} to {end_date_post}")
-    print(f"Landcover year: {landcover_year}")
-
-    # --- 3. Load Data ---
-    baseline = load_ard_with_fallback(dc, gpgon, 
-                                      time=(start_date_pre, end_date_pre),
-                                      min_gooddata_thresholds=[0.99, 0.90])
+    # --- Load data
+    baseline = load_ard_with_fallback(dc, gpgon, time=(start_date_pre, end_date_pre),
+                                      min_gooddata_thresholds=(0.99, 0.90))
     if baseline.time.size == 0:
-        print("Error: No baseline data found for this fire. Skipping.")
-        return # Skip this fire
-
+        print("No baseline data for this part. Skipping.")
+        return None
     closest_bl = baseline.isel(time=-1)
 
-    post = load_ard_with_fallback(dc, gpgon, 
-                                  time=(start_date_post, end_date_post),
-                                  min_gooddata_thresholds=[0.90])
+    post = load_ard_with_fallback(dc, gpgon, time=(start_date_post, end_date_post),
+                                  min_gooddata_thresholds=(0.90,))
     if post.time.size == 0:
-        print("Error: No post-fire data found for this fire. Skipping.")
-        return # Skip this fire
-        
+        print("No post-fire data for this part. Skipping.")
+        return None
+
     landcover = dc.load(
         product='ga_ls_landcover_class_cyear_3',
         geopolygon=gpgon,
@@ -350,177 +319,197 @@ def process_single_fire(fire_series: pd.Series,
         output_crs=OUTPUT_CRS,
         resolution=RESOLUTION,
         group_by='solar_day',
-        dask_chunks={},
+        dask_chunks={}
     )
     if landcover.time.size == 0:
-        print(f"Error: No landcover data found for year {landcover_year}. Skipping.")
-        return # Skip this fire
+        print(f"No landcover data for year {landcover_year}. Skipping.")
+        return None
     landcover = landcover.isel(time=0)
 
-    # --- 4. Calculate Indices and Severity ---
-    pre_nbr = calculate_indices(closest_bl, 
-                                index='NBR', 
-                                collection='ga_s2_3', 
-                                drop=True)
-    post_nbr = calculate_indices(post, 
-                                 index='NBR', 
-                                 collection='ga_s2_3', 
-                                 drop=True)
+    # --- Indices and severity
+    pre_nbr = calculate_indices(closest_bl, index='NBR', collection='ga_s2_3', drop=True)
+    post_nbr = calculate_indices(post, index='NBR', collection='ga_s2_3', drop=True)
     min_post_nbr = post_nbr.min('time')
     delta_nbr = pre_nbr - min_post_nbr
+
     severity = calculate_severity(delta_nbr, landcover, GRASS_CLASSES)
 
-    # --- 5. Masking ---
-    new_debug = create_debug_mask(closest_bl, post)
-    final_severity = severity.where(new_debug == 0, 6)
+    # --- Masking
+    debug_mask = create_debug_mask(closest_bl, post)
+    final_severity = severity.where(debug_mask == 0, 6)
     final_severity.name = 'burn_severity'
 
-    # We explicitly copy them back from a known good source.
-    # We'll use a DataArray from the 'closest_bl' dataset (e.g., nbart_red)
-    # as the Dataset's (closest_bl) attrs may be empty.
-    source_attrs = closest_bl.nbart_red.attrs
-    
-
-    # --- 6. Vectorize and Save ---
-    print("Vectorizing severity raster...")
-    severity_vectors = xr_vectorize(final_severity, 
-                                    attribute_col='severity', 
+    # --- Vectorize (exclude unburnt class 0)
+    print("Vectorizing severity raster (per-part)...")
+    severity_vectors = xr_vectorize(final_severity,
+                                    attribute_col='severity',
                                     crs=OUTPUT_CRS,
                                     mask=final_severity != 0)
-    
     if severity_vectors.empty:
-        print("No burn area detected (vectors are empty). Skipping save.")
-        return
+        print("No burn area detected for this part.")
+        return None
 
+    # Reproject vectors to geographic CRS for output & clip to part geometry
     severity_vectors = severity_vectors.to_crs('EPSG:4283')
-    clipped_severity_vectors = severity_vectors.clip(poly)
-    aggregated_severity = clipped_severity_vectors.dissolve(by='severity')
-    
-    aggregated_severity['fire_id'] = fire_id
-    aggregated_severity['fire_name'] = name # This will be the unique_fire_name
-    aggregated_severity['ignition_date'] = fire_date
-    aggregated_severity['extinguish_date'] = extinguish_date
+    clipped = severity_vectors.clip(poly)
 
-    # --- Save Vector Files ---
-    base_output_name = os.path.join(OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}')
-    
-    #output_shp_name = f'{base_output_name}.shp'
-    #aggregated_severity.to_file(output_shp_name)
-    #print(f"Saved severity shapefile to: {output_shp_name}")
-    
-    # The output_geojson_name variable is already defined at the top
-    aggregated_severity.to_file(output_geojson_name, driver='GeoJSON')
-    print(f"Saved severity GeoJSON to: {output_geojson_name}")
+    # Dissolve by severity so each severity class is a (Multi)Polygon
+    aggregated = clipped.dissolve(by='severity').reset_index()
 
-    # --- Save Raster Files (COGs) ---
-    output_cog_preview = os.path.join(
-        OUTPUT_PRODUCT_DIR, f's2_postfire_preview_{name}.tif')
-    write_cog(post.isel(time=0).to_array().compute(), 
-              fname=output_cog_preview,
-              overwrite=True) # Added overwrite
-    print(f"Saved post-fire preview COG to: {output_cog_preview}")
-    
-    output_cog_debug = os.path.join(
-        OUTPUT_PRODUCT_DIR, f'debug_mask_raster_{name}.tif')
-    write_cog(new_debug.compute(), 
-              fname=output_cog_debug,
-              overwrite=True)
-    print(f"Saved debug mask raster COG to: {output_cog_debug}")
-    
-    print(f"Successfully processed fire part: {name}")
+    # Add metadata for traceability
+    aggregated['fire_id'] = fire_id
+    aggregated['fire_name'] = fire_series.get('fire_name', fire_name_part)
+    aggregated['ignition_date'] = fire_date
+    aggregated['extinguish_date'] = extinguish_date
 
+    # --- Optional per-part saves
+    if save_per_part_vectors:
+        out_vec = os.path.join(OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{fire_name_part}.geojson')
+        aggregated.to_file(out_vec, driver='GeoJSON')
+        print(f"Saved per-part severity GeoJSON: {out_vec}")
+
+    if save_per_part_rasters:
+        out_cog_preview = os.path.join(OUTPUT_PRODUCT_DIR, f's2_postfire_preview_{fire_name_part}.tif')
+        write_cog(post.isel(time=0).to_array().compute(), fname=out_cog_preview, overwrite=True)
+        print(f"Saved post-fire preview COG: {out_cog_preview}")
+
+        out_cog_debug = os.path.join(OUTPUT_PRODUCT_DIR, f'debug_mask_raster_{fire_name_part}.tif')
+        write_cog(debug_mask.compute(), fname=out_cog_debug, overwrite=True)
+        print(f"Saved debug mask COG: {out_cog_debug}")
+
+    print(f"Successfully processed part: {fire_name_part}")
+    return aggregated
+
+
+# =========================
+# ========= MAIN ==========
+# =========================
 
 def main():
-    """Main processing workflow to loop over fires."""
-    
-    # --- 0. Setup ---
     os.makedirs(OUTPUT_PRODUCT_DIR, exist_ok=True)
     print(f"All outputs will be saved to: {OUTPUT_PRODUCT_DIR}")
-    
+
     dc = datacube.Datacube(app="Burnt_Area_Mapping")
-    
+
     all_polys = load_and_prepare_polygons(POLYGON_PATH)
-    
     if all_polys is None or all_polys.empty:
         print("No polygons loaded. Exiting.")
         return
 
-    # --- 1. Start Loop ---
-    
-    # Get the slice of *fires* we want to process
+    # Limit number of features for this run
     num_fires_to_process = min(MAX_POLYGONS_TO_PROCESS, len(all_polys))
-    print(f"Found {len(all_polys)} total fires. Selecting first {num_fires_to_process} for processing.")
-    
-    # Get the subset of *fires* BEFORE exploding
+    print(f"Found {len(all_polys)} total features. Processing first {num_fires_to_process}.")
     polys_to_process = all_polys.iloc[:num_fires_to_process]
-    
-    # --- NEW: Explode MultiPolygons ---
-    # This turns any MultiPolygon row into multiple rows, one for each Polygon.
-    # index_parts=True creates a MultiIndex, e.g., (original_index, part_num)
-    # which we use to create a unique name.
+
+    # Explode MultiPolygons into individual parts and keep a MultiIndex
     try:
         all_polys_exploded = polys_to_process.explode(index_parts=True)
     except TypeError:
-        # Fallback for older geopandas versions that don't have 'index_parts'
-        print("Using fallback for geopandas.explode().")
-        all_polys_exploded = polys_to_process.explode()
+        print("GeoPandas without index_parts: building a MultiIndex fallback...")
+        tmp = polys_to_process.explode()
+        tmp["__part_id__"] = tmp.groupby(tmp.index).cumcount()
+        all_polys_exploded = tmp.set_index([tmp.index, "__part_id__"])
+        all_polys_exploded.index.names = [None, None]
 
-    num_parts_to_process = len(all_polys_exploded)
-    print(f"The {num_fires_to_process} selected fires contain {num_parts_to_process} individual polygons (parts). Processing all parts.")
-    
-    success_count = 0
-    fail_count = 0
-    skip_count = 0  
-    
-    # Loop over the *exploded* polygons
-    for i in range(num_parts_to_process):
-        fire_series = all_polys_exploded.iloc[i]
-        
-        # --- NEW: Create a unique name for this polygon part ---
-        # Get the original name
-        original_fire_name = fire_series.get('fire_name', f"fire_id_{fire_series.get('fire_id', i)}")
-        
-        # The series index (fire_series.name) will be a tuple (original_index, part_index)
-        # if it came from an exploded MultiPolygon.
-        if isinstance(fire_series.name, tuple):
-            # fire_series.name[0] is original index (e.g., fire_id)
-            # fire_series.name[1] is the part number (0, 1, 2...)
-            unique_fire_name = f"{original_fire_name}_part_{fire_series.name[1]}"
+    print(f"Exploded into {len(all_polys_exploded)} polygon parts.")
+
+    # Group parts by original pre-explosion row (level=0 of MultiIndex)
+    if isinstance(all_polys_exploded.index, pd.MultiIndex):
+        group_iter = all_polys_exploded.groupby(level=0, sort=False)
+    else:
+        # No MultiIndex: each row is its own group
+        group_iter = [(idx, all_polys_exploded.loc[[idx]]) for idx in all_polys_exploded.index]
+
+    part_success = part_fail = 0
+    combined_success = combined_skip = 0
+
+    print("\nBeginning grouped processing (combine parts per original feature)...")
+    for orig_idx, parts_df in group_iter:
+        # Pick stable metadata/name from the original (pre-explosion) row
+        orig_row = polys_to_process.loc[orig_idx]
+
+        # Choose a group name (prefer fire_name; fallback to fire_id or row index)
+        if 'fire_name' in orig_row and pd.notna(orig_row['fire_name']):
+            base_fire_name = str(orig_row['fire_name']).strip()
+        elif 'fire_id' in orig_row:
+            base_fire_name = f"fire_id_{orig_row['fire_id']}"
         else:
-            # It was a simple Polygon, index is not a tuple
-            unique_fire_name = original_fire_name
-        # ---
-        
+            base_fire_name = f"fire_{orig_idx}"
+
+        # Very simple file slug: collapse whitespace to underscores; remove path separators
+        base_fire_slug = "_".join(base_fire_name.split())
+        base_fire_slug = base_fire_slug.replace(os.sep, "_")
+        if os.altsep:
+            base_fire_slug = base_fire_slug.replace(os.altsep, "_")
+
+        combined_path = os.path.join(OUTPUT_PRODUCT_DIR, f"burn_severity_polygons_{base_fire_slug}.geojson")
+        if SAVE_COMBINED_PER_FIRE_GEOJSON and os.path.exists(combined_path):
+            print(f"[Group '{base_fire_name}'] Combined GeoJSON exists. Skipping combined write.")
+            combined_skip += 1
+            continue
+
         print("\n" + "="*80)
-        print(f"Processing polygon {i+1}/{num_parts_to_process}: {unique_fire_name}")
+        print(f"Processing original feature group: '{base_fire_name}'")
         print("="*80)
-        
-        try:
-            # Check for existing file using the new unique name
-            output_geojson_name = os.path.join(
-                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{unique_fire_name}.geojson')
-            
-            if os.path.exists(output_geojson_name):
-                print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
-                skip_count += 1
-                continue # Go to the next loop iteration
-                
-            # Pass the unique_fire_name to the processing function
-            process_single_fire(fire_series, all_polys.crs, dc, unique_fire_name)
-            success_count += 1
-            
-        except Exception as e:
-            # Use unique_fire_name in error message
-            fail_count += 1
-            print(f"!!! FAILED to process {unique_fire_name}: {e}")
-            traceback.print_exc() # Print full error trace
-            print("Continuing to next polygon...")
-    
+
+        per_part_gdfs: list[gpd.GeoDataFrame] = []
+
+        # Iterate each polygon part in this original feature
+        for (orig_idx2, part_id), fire_series in parts_df.iterrows():
+            unique_fire_name = f"{base_fire_slug}_part_{part_id}"
+            try:
+                gdf_part = process_single_fire(
+                    fire_series=fire_series,
+                    poly_crs=all_polys.crs,
+                    dc=dc,
+                    unique_fire_name=unique_fire_name,
+                    save_per_part_vectors=SAVE_PER_PART_GEOJSON,
+                    save_per_part_rasters=SAVE_PER_PART_RASTERS
+                )
+                if gdf_part is not None and len(gdf_part) > 0:
+                    per_part_gdfs.append(gdf_part)
+                    part_success += 1
+            except Exception as e:
+                part_fail += 1
+                print(f"!!! FAILED to process part '{unique_fire_name}': {e}")
+                traceback.print_exc()
+                print("Continuing to next part...")
+
+        # Combine parts for this group into one MultiPolygon per severity
+        if SAVE_COMBINED_PER_FIRE_GEOJSON:
+            if per_part_gdfs:
+                try:
+                    crs_out = per_part_gdfs[0].crs or 'EPSG:4283'
+                    combined_gdf = gpd.GeoDataFrame(
+                        pd.concat(per_part_gdfs, ignore_index=True), crs=crs_out
+                    )
+                    combined_gdf = combined_gdf.dissolve(by='severity').reset_index()
+
+                    # Attach group-level metadata from original row
+                    combined_gdf['fire_id'] = orig_row.get('fire_id', None)
+                    combined_gdf['fire_name'] = base_fire_name
+
+                    ign = orig_row.get('ignition_date', None)
+                    ext = orig_row.get('extinguish_date', None)
+                    combined_gdf['ignition_date'] = (str(ign)[:10] if pd.notna(ign) else "")
+                    combined_gdf['extinguish_date'] = ("None" if (ext is None or pd.isna(ext)) else str(ext)[:10])
+
+                    combined_gdf.to_file(combined_path, driver="GeoJSON")
+                    print(f"[COMBINED] Saved MultiPolygon GeoJSON: {combined_path}")
+                    combined_success += 1
+                except Exception as e:
+                    print(f"!!! FAILED to save combined GeoJSON for '{base_fire_name}': {e}")
+                    traceback.print_exc()
+            else:
+                print(f"No per-part severity vectors to combine for '{base_fire_name}'.")
+
     print("\n" + "="*80)
     print("Batch processing complete.")
-    print(f"  Successfully processed: {success_count} (polygon parts)")
-    print(f"  Skipped (already complete): {skip_count} (polygon parts)")
-    print(f"  Failed: {fail_count} (polygon parts)")
+    print(f"  Per-part success: {part_success}")
+    print(f"  Per-part failed: {part_fail}")
+    if SAVE_COMBINED_PER_FIRE_GEOJSON:
+        print(f"  Combined (group) success: {combined_success}")
+        print(f"  Combined (group) skipped (exists): {combined_skip}")
     print("="*80)
 
 
