@@ -315,7 +315,7 @@ def _s3_key_exists_and_nonempty(fs, bucket: str, key: str) -> bool:
 
 def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
     """
-    Upload local_dir recursively to s3_prefix/<basename(local_dir)> and,
+    Upload local_dir recursively to <s3_prefix>/<basename(local_dir)> and,
     on success (existence + size checks for all files), delete local_dir.
     """
     if not os.path.isdir(local_dir):
@@ -324,17 +324,17 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
 
     try:
         import s3fs  # type: ignore
-    except Exception as e:
+    except Exception:
         print("Error: S3 upload requires 's3fs'. Install with: pip install s3fs")
         return False
 
-    bucket, key_prefix = _parse_s3_uri(s3_prefix)
-    slug = os.path.basename(os.path.normpath(local_dir))
-    dest_prefix = f"{key_prefix}/{slug}".strip("/")
+    bucket, key_prefix = _parse_s3_uri(s3_prefix)               # e.g. bucket='dea-public-data-dev',
+    dest_base = key_prefix.strip("/")                           #      key_prefix='.../result'
+    slug = os.path.basename(os.path.normpath(local_dir))        # e.g. 'HAMA_Fowlers_East_SFAZ'
 
     fs = s3fs.S3FileSystem(anon=False)
 
-    # Build manifest of local files with sizes
+    # Manifest of local files
     local_files = []
     for root, _, files in os.walk(local_dir):
         for name in files:
@@ -342,43 +342,44 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
             rel = os.path.relpath(full, local_dir).replace("\\", "/")
             size = os.path.getsize(full)
             local_files.append((rel, size, full))
-
     if not local_files:
         print(f"[S3 upload] Nothing to upload from {local_dir}")
         return False
 
-    # Upload recursively using s3fs.put (it mirrors the folder under prefix)
-    s3_target = f"{bucket}/{dest_prefix}"
-    print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{s3_target}/' ...")
+    # IMPORTANT: upload to the base prefix ONLY; s3fs.put() will append <slug> automatically
+    s3_target = f"{bucket}/{dest_base}"
+    print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{s3_target}/{slug}/' ...")
     fs.put(local_dir, s3_target, recursive=True)
 
-    # Verify existence and size (best-effort)
+    # Verify at <dest_base>/<slug>/<rel>
     all_ok = True
     for rel, size, _ in local_files:
-        key = f"{dest_prefix}/{rel}"
-        exists = fs.exists(f"{bucket}/{key}")
-        if not exists:
-            print(f"[S3 upload] Missing object after upload: s3://{bucket}/{key}")
+        key = f"{dest_base}/{slug}/{rel}"
+        s3_path = f"{bucket}/{key}"
+        if not fs.exists(s3_path):
+            print(f"[S3 upload] Missing object after upload: s3://{s3_path}")
             all_ok = False
             break
         try:
-            sz = fs.info(f"{bucket}/{key}").get("Size", -1)
-            if int(sz) != int(size):
-                print(f"[S3 upload] Size mismatch for s3://{bucket}/{key} ({sz} != {size})")
+            sz = int(fs.info(s3_path).get("Size", -1))
+            if sz != int(size):
+                print(f"[S3 upload] Size mismatch for s3://{s3_path} ({sz} != {size})")
                 all_ok = False
                 break
         except Exception as e:
-            print(f"[S3 upload] Could not stat s3://{bucket}/{key}: {e}")
+            print(f"[S3 upload] Could not stat s3://{s3_path}: {e}")
             all_ok = False
             break
 
     if all_ok:
         print(f"[S3 upload] Verified. Removing local folder: {local_dir}")
+        import shutil
         shutil.rmtree(local_dir, ignore_errors=True)
         return True
 
     print("[S3 upload] Verification failed; NOT deleting local folder.")
     return False
+
 
 
 def process_single_fire(
