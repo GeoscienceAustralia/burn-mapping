@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-Burnt Severity Classification Script (Grouped MultiPolygon Output)
+Burnt Severity Classification Script (Grouped MultiPolygon Output) — CLI
 
 This script processes Sentinel-2 ARD (Analysis Ready Data) to map the extent
 and severity of a bushfire. It compares a pre-fire baseline image with a
@@ -8,18 +9,23 @@ post-fire time series to calculate the delta Normalized Burn Ratio (dNBR).
 It classifies severity differently for woody vs. grassy landcover types,
 masks out bad data (clouds, water), and writes:
   - ONE combined MultiPolygon GeoJSON per original feature (named by fire_name)
-  - Optional per-part GeoJSON/COG previews (off by default)
+  - Optional per-part GeoJSON/COG previews (debug toggles)
+  - All outputs are saved into a subfolder: products/<fire_name_slug>/
 
-Key implementation detail:
-- Uses GeoPandas `explode(index_parts=True)` so each MultiPolygon becomes
-  multiple polygon rows with a MultiIndex (original_row_id, part_id).
-- Groups parts back with `groupby(level=0)` and dissolves by `severity`
-  to produce MultiPolygon geometries per severity class.
+CLI additions:
+- --polygons accepts local paths or S3 URIs (s3://...). For S3, requires s3fs.
+- Standard toggles exposed as flags.
+
+Usage:
+  python burn_severity_cli.py --polygons s3://bucket/path/to/polygons.geojson
 """
 
 # Standard library imports
 import os
 import sys
+import shutil
+import argparse
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 import traceback  # For detailed error logging
@@ -50,18 +56,11 @@ except ImportError as e:
 # ======= CONSTANTS =======
 # =========================
 
-# Input data
-POLYGON_PATH = '10k_sampled_fires.geojson'
-
-# Batch processing setting
-MAX_POLYGONS_TO_PROCESS = 10  # Process the first N features
-
-# Output directory
+# Defaults (can be overridden by CLI)
 OUTPUT_PRODUCT_DIR = 'products'
-
-# Output toggles
-SAVE_PER_PART_GEOJSON = True         # Per-part vector outputs (debug)
-SAVE_PER_PART_RASTERS = True         # Per-part COG rasters (debug)
+MAX_POLYGONS_TO_PROCESS = 10  # Process the first N features
+SAVE_PER_PART_GEOJSON = True          # Per-part vector outputs (debug)
+SAVE_PER_PART_RASTERS = True          # Per-part COG rasters (debug)
 SAVE_COMBINED_PER_FIRE_GEOJSON = True # The new grouped output
 FORCE_REBUILD = False                 # If True, ignore existing combined outputs
 
@@ -101,6 +100,46 @@ GRASS_CLASSES = [
 # ======= CORE HELPERS ========
 # =============================
 
+def _read_geojson_maybe_s3(path: str) -> gpd.GeoDataFrame:
+    """
+    Read a GeoJSON from a local path or S3 URI into a GeoDataFrame.
+    If S3 is used, this will stream to a temporary local file (requires s3fs).
+    """
+    if isinstance(path, str) and path.lower().startswith("s3://"):
+        try:
+            import s3fs  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "Reading from s3:// requires the 's3fs' package. "
+                "Install with: pip install s3fs"
+            ) from e
+
+        # Try anonymous first; if fails, fallback to default creds
+        gdf = None
+        errs = []
+        for anon in (True, False):
+            try:
+                fs = s3fs.S3FileSystem(anon=anon)
+                with fs.open(path, "rb") as fsrc, tempfile.NamedTemporaryFile(
+                    suffix=".geojson", delete=False
+                ) as tmp:
+                    shutil.copyfileobj(fsrc, tmp)
+                    tmp_path = tmp.name
+                gdf = gpd.read_file(tmp_path)
+                os.remove(tmp_path)
+                break
+            except Exception as ee:
+                errs.append(str(ee))
+                gdf = None
+        if gdf is None:
+            raise RuntimeError(
+                f"Failed to read GeoJSON from S3 path '{path}'. Errors: {errs}"
+            )
+        return gdf
+    else:
+        return gpd.read_file(path)
+
+
 def load_and_prepare_polygons(path: str) -> gpd.GeoDataFrame | None:
     """
     Loads the fire polygon GeoJSON and prepares it for processing.
@@ -111,9 +150,12 @@ def load_and_prepare_polygons(path: str) -> gpd.GeoDataFrame | None:
     """
     print(f"Loading polygons from: {path}")
     try:
-        poly_gdf = gpd.read_file(path)
+        poly_gdf = _read_geojson_maybe_s3(path)
     except FileNotFoundError:
         print(f"Error: Input polygon file not found at {path}")
+        return None
+    except Exception as e:
+        print(f"Error: Failed reading polygons from {path}: {e}")
         return None
 
     try:
@@ -241,6 +283,7 @@ def create_debug_mask(pre_fire_scene: xr.Dataset,
     return new_debug
 
 
+# --- Tiny helper to append a line to the group log ---
 def _append_log(log_path: str, line: str) -> None:
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
@@ -254,7 +297,9 @@ def process_single_fire(
     unique_fire_name: str,
     save_per_part_vectors: bool = SAVE_PER_PART_GEOJSON,
     save_per_part_rasters: bool = SAVE_PER_PART_RASTERS,
-    log_path: str | None = None
+    log_path: str | None = None,
+    # per-fire output directory to place per-part files in the subfolder
+    out_dir: str | None = None,
 ) -> gpd.GeoDataFrame | None:
     """
     Full burn mapping workflow for a single polygon (part).
@@ -323,11 +368,9 @@ def process_single_fire(
                                   min_gooddata_thresholds=(0.90,))
     if post.time.size == 0:
         if log_path:
-            # We can still report baseline pixel grid
             yy = int(closest_bl.sizes.get('y', 0))
             xx = int(closest_bl.sizes.get('x', 0))
             total_px = yy * xx
-            # Using contiguity to estimate valid pixels in baseline
             bl_valid_px = int((closest_bl.oa_nbart_contiguity == 1).sum().item()) if 'oa_nbart_contiguity' in closest_bl.data_vars else 0
             _append_log(
                 log_path,
@@ -371,6 +414,7 @@ def process_single_fire(
     final_severity = severity.where(debug_mask == 0, 6)
     final_severity.name = 'burn_severity'
 
+    # --- Per-part pixel stats (for log)
     try:
         yy = int(final_severity.sizes.get('y', 0))
         xx = int(final_severity.sizes.get('x', 0))
@@ -384,7 +428,6 @@ def process_single_fire(
         valid_px = 0
 
     try:
-        # Count burn classes 1–5
         burn_px = int(final_severity.isin([1, 2, 3, 4, 5]).sum().item())
     except Exception:
         burn_px = 0
@@ -421,10 +464,12 @@ def process_single_fire(
 
     # --- Vectorize (exclude unburnt class 0)
     print("Vectorizing severity raster (per-part)...")
-    severity_vectors = xr_vectorize(final_severity,
-                                    attribute_col='severity',
-                                    crs=OUTPUT_CRS,
-                                    mask=final_severity != 0)
+    severity_vectors = xr_vectorize(
+        final_severity,
+        attribute_col='severity',
+        crs=OUTPUT_CRS,
+        mask=final_severity != 0
+    )
     if severity_vectors.empty:
         print("No burn area detected for this part.")
         return None
@@ -442,18 +487,21 @@ def process_single_fire(
     aggregated['ignition_date'] = fire_date
     aggregated['extinguish_date'] = extinguish_date
 
-    # --- Optional per-part saves
+    # --- Optional per-part saves (under out_dir)
+    base_dir = out_dir if out_dir else OUTPUT_PRODUCT_DIR
+    os.makedirs(base_dir, exist_ok=True)
+
     if save_per_part_vectors:
-        out_vec = os.path.join(OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{fire_name_part}.geojson')
+        out_vec = os.path.join(base_dir, f'burn_severity_polygons_{fire_name_part}.geojson')
         aggregated.to_file(out_vec, driver='GeoJSON')
         print(f"Saved per-part severity GeoJSON: {out_vec}")
 
     if save_per_part_rasters:
-        out_cog_preview = os.path.join(OUTPUT_PRODUCT_DIR, f's2_postfire_preview_{fire_name_part}.tif')
+        out_cog_preview = os.path.join(base_dir, f's2_postfire_preview_{fire_name_part}.tif')
         write_cog(post.isel(time=0).to_array().compute(), fname=out_cog_preview, overwrite=True)
         print(f"Saved post-fire preview COG: {out_cog_preview}")
 
-        out_cog_debug = os.path.join(OUTPUT_PRODUCT_DIR, f'debug_mask_raster_{fire_name_part}.tif')
+        out_cog_debug = os.path.join(base_dir, f'debug_mask_raster_{fire_name_part}.tif')
         write_cog(debug_mask.compute(), fname=out_cog_debug, overwrite=True)
         print(f"Saved debug mask COG: {out_cog_debug}")
 
@@ -478,13 +526,32 @@ def _is_valid_geojson(path: str) -> bool:
 # ========= MAIN ==========
 # =========================
 
-def main():
+def main(polygons_path: str,
+         output_dir: str = OUTPUT_PRODUCT_DIR,
+         max_fires: int = MAX_POLYGONS_TO_PROCESS,
+         save_per_part_vectors: bool = SAVE_PER_PART_GEOJSON,
+         save_per_part_rasters: bool = SAVE_PER_PART_RASTERS,
+         save_combined: bool = SAVE_COMBINED_PER_FIRE_GEOJSON,
+         force_rebuild: bool = FORCE_REBUILD,
+         app_name: str = "Burnt_Area_Mapping"):
+    # Bind runtime options to globals (kept minimal)
+    global OUTPUT_PRODUCT_DIR, MAX_POLYGONS_TO_PROCESS
+    global SAVE_PER_PART_GEOJSON, SAVE_PER_PART_RASTERS
+    global SAVE_COMBINED_PER_FIRE_GEOJSON, FORCE_REBUILD
+
+    OUTPUT_PRODUCT_DIR = output_dir
+    MAX_POLYGONS_TO_PROCESS = max_fires
+    SAVE_PER_PART_GEOJSON = save_per_part_vectors
+    SAVE_PER_PART_RASTERS = save_per_part_rasters
+    SAVE_COMBINED_PER_FIRE_GEOJSON = save_combined
+    FORCE_REBUILD = force_rebuild
+
     os.makedirs(OUTPUT_PRODUCT_DIR, exist_ok=True)
     print(f"All outputs will be saved to: {OUTPUT_PRODUCT_DIR}")
 
-    dc = datacube.Datacube(app="Burnt_Area_Mapping")
+    dc = datacube.Datacube(app=app_name)
 
-    all_polys = load_and_prepare_polygons(POLYGON_PATH)
+    all_polys = load_and_prepare_polygons(polygons_path)
     if all_polys is None or all_polys.empty:
         print("No polygons loaded. Exiting.")
         return
@@ -535,10 +602,14 @@ def main():
         if os.altsep:
             base_fire_slug = base_fire_slug.replace(os.altsep, "_")
 
-        combined_path = os.path.join(OUTPUT_PRODUCT_DIR, f"burn_severity_polygons_{base_fire_slug}.geojson")
+        # Per-fire subfolder
+        group_dir = os.path.join(OUTPUT_PRODUCT_DIR, base_fire_slug)
+        os.makedirs(group_dir, exist_ok=True)
 
-        # --- NEW (minimal): per-group log file; write a one-line header once
-        log_path = os.path.join(OUTPUT_PRODUCT_DIR, f"{base_fire_slug}_processing.log")
+        combined_path = os.path.join(group_dir, f"burn_severity_polygons_{base_fire_slug}.geojson")
+
+        # Per-group log file (inside the subfolder)
+        log_path = os.path.join(group_dir, f"{base_fire_slug}_processing.log")
         if not os.path.exists(log_path):
             _append_log(log_path, f"# Processing log for {base_fire_name} (group index {orig_idx})")
             _append_log(log_path, "# part_name\tbaseline_scenes\tpost_scenes\tgrid\ttotal_px\tvalid_px\tburn_px\tmasked_px\tvalid_px_baseline\tvalid_px_post_any")
@@ -565,8 +636,8 @@ def main():
                     unique_fire_name=unique_fire_name,
                     save_per_part_vectors=SAVE_PER_PART_GEOJSON,
                     save_per_part_rasters=SAVE_PER_PART_RASTERS,
-                    # --- NEW (minimal): pass the log path down
-                    log_path=log_path
+                    log_path=log_path,
+                    out_dir=group_dir,  # save per-part outputs inside subfolder
                 )
                 if gdf_part is not None and len(gdf_part) > 0:
                     per_part_gdfs.append(gdf_part)
@@ -596,18 +667,20 @@ def main():
                     combined_gdf['ignition_date'] = (str(ign)[:10] if pd.notna(ign) else "")
                     combined_gdf['extinguish_date'] = ("None" if (ext is None or pd.isna(ext)) else str(ext)[:10])
 
-                    # Atomic write: write to temp then replace
+                    # Atomic write: write to temp then replace (inside subfolder)
                     tmp_path = combined_path + ".tmp"
                     combined_gdf.to_file(tmp_path, driver="GeoJSON")
                     os.replace(tmp_path, combined_path)
 
                     print(f"[COMBINED] Saved MultiPolygon GeoJSON: {combined_path}")
+                    _append_log(log_path, f"# Combined saved: {combined_path}")
                     combined_success += 1
                 except Exception as e:
                     print(f"!!! FAILED to save combined GeoJSON for '{base_fire_name}': {e}")
                     traceback.print_exc()
             else:
                 print(f"No per-part severity vectors to combine for '{base_fire_name}'.")
+                _append_log(log_path, "# No per-part vectors to combine.")
 
     print("\n" + "="*80)
     print("Batch processing complete.")
@@ -619,5 +692,72 @@ def main():
     print("="*80)
 
 
+# =========================
+# ======== CLI ============
+# =========================
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Burn severity mapping over Sentinel-2 ARD with grouped MultiPolygon outputs."
+    )
+    parser.add_argument(
+        "--polygons", required=True,
+        help="Path to input polygons GeoJSON. Local path or S3 URI (s3://...)."
+    )
+    parser.add_argument(
+        "--output-dir", default=OUTPUT_PRODUCT_DIR,
+        help=f"Output base directory (default: {OUTPUT_PRODUCT_DIR})."
+    )
+    parser.add_argument(
+        "--max-fires", type=int, default=MAX_POLYGONS_TO_PROCESS,
+        help=f"Process at most this many features (default: {MAX_POLYGONS_TO_PROCESS})."
+    )
+    # Python 3.9+: BooleanOptionalAction
+    bool_action = argparse.BooleanOptionalAction if hasattr(argparse, "BooleanOptionalAction") else None
+    parser.add_argument(
+        "--save-per-part-vectors",
+        action=bool_action or "store_true",
+        default=SAVE_PER_PART_GEOJSON,
+        help=f"Save per-part GeoJSONs (default: {SAVE_PER_PART_GEOJSON}). "
+             f"Use --no-save-per-part-vectors to disable if supported."
+    )
+    parser.add_argument(
+        "--save-per-part-rasters",
+        action=bool_action or "store_true",
+        default=SAVE_PER_PART_RASTERS,
+        help=f"Save per-part COG rasters (default: {SAVE_PER_PART_RASTERS}). "
+             f"Use --no-save-per-part-rasters to disable if supported."
+    )
+    parser.add_argument(
+        "--save-combined-per-fire",
+        action=bool_action or "store_true",
+        default=SAVE_COMBINED_PER_FIRE_GEOJSON,
+        help=f"Save combined MultiPolygon GeoJSON per fire (default: {SAVE_COMBINED_PER_FIRE_GEOJSON}). "
+             f"Use --no-save-combined-per-fire to disable if supported."
+    )
+    parser.add_argument(
+        "--force-rebuild",
+        action=bool_action or "store_true",
+        default=FORCE_REBUILD,
+        help=f"Rebuild even if combined outputs exist (default: {FORCE_REBUILD}). "
+             f"Use --no-force-rebuild to skip rebuilding if supported."
+    )
+    parser.add_argument(
+        "--app-name", default="Burnt_Area_Mapping",
+        help="Datacube app name (default: Burnt_Area_Mapping)."
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(
+        polygons_path=args.polygons,
+        output_dir=args.output_dir,
+        max_fires=args.max_fires,
+        save_per_part_vectors=args.save_per_part_vectors,
+        save_per_part_rasters=args.save_per_part_rasters,
+        save_combined=args.save_combined_per_fire,
+        force_rebuild=args.force_rebuild,
+        app_name=args.app_name,
+    )
