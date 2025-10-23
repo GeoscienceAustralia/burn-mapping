@@ -315,8 +315,8 @@ def _s3_key_exists_and_nonempty(fs, bucket: str, key: str) -> bool:
 
 def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
     """
-    Upload local_dir recursively to <s3_prefix>/<basename(local_dir)> and,
-    on success (existence + size checks for all files), delete local_dir.
+    Upload local_dir recursively to <s3_prefix>/<basename(local_dir)>/*
+    and, on success (existence + size checks), delete local_dir.
     """
     if not os.path.isdir(local_dir):
         print(f"[S3 upload] Local directory does not exist: {local_dir}")
@@ -328,13 +328,14 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
         print("Error: S3 upload requires 's3fs'. Install with: pip install s3fs")
         return False
 
-    bucket, key_prefix = _parse_s3_uri(s3_prefix)               # e.g. bucket='dea-public-data-dev',
-    dest_base = key_prefix.strip("/")                           #      key_prefix='.../result'
-    slug = os.path.basename(os.path.normpath(local_dir))        # e.g. 'HAMA_Fowlers_East_SFAZ'
+    bucket, key_prefix = _parse_s3_uri(s3_prefix)          # e.g. ('dea-public-data-dev', '.../result')
+    dest_base = key_prefix.strip("/")                       # '.../result'
+    slug = os.path.basename(os.path.normpath(local_dir))    # e.g. 'HAMA_Fowlers_East_SFAZ'
+    dest_dir_key = f"{dest_base}/{slug}"
 
     fs = s3fs.S3FileSystem(anon=False)
 
-    # Manifest of local files
+    # Build manifest of local files (relative paths).
     local_files = []
     for root, _, files in os.walk(local_dir):
         for name in files:
@@ -342,22 +343,30 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
             rel = os.path.relpath(full, local_dir).replace("\\", "/")
             size = os.path.getsize(full)
             local_files.append((rel, size, full))
+
     if not local_files:
         print(f"[S3 upload] Nothing to upload from {local_dir}")
         return False
 
-    # IMPORTANT: upload to the base prefix ONLY; s3fs.put() will append <slug> automatically
-    s3_target = f"{bucket}/{dest_base}"
-    print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{s3_target}/{slug}/' ...")
-    fs.put(local_dir, s3_target, recursive=True)
+    # (Optional) create a "folder marker" so some browsers show an actual folder line
+    try:
+        fs.touch(f"{bucket}/{dest_dir_key}/")
+    except Exception:
+        pass  # not required
 
-    # Verify at <dest_base>/<slug>/<rel>
+    # Upload each file to the EXACT key we want: <prefix>/<slug>/<rel>
+    print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{bucket}/{dest_dir_key}/' ...")
+    for rel, _, full in local_files:
+        remote_key = f"{dest_dir_key}/{rel}"
+        fs.put(full, f"{bucket}/{remote_key}")
+
+    # Verify existence + sizes
     all_ok = True
     for rel, size, _ in local_files:
-        key = f"{dest_base}/{slug}/{rel}"
-        s3_path = f"{bucket}/{key}"
+        remote_key = f"{dest_dir_key}/{rel}"
+        s3_path = f"{bucket}/{remote_key}"
         if not fs.exists(s3_path):
-            print(f"[S3 upload] Missing object after upload: s3://{s3_path}")
+            print(f"[S3 upload] Missing object: s3://{s3_path}")
             all_ok = False
             break
         try:
