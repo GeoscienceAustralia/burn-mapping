@@ -63,6 +63,7 @@ OUTPUT_PRODUCT_DIR = 'products'
 SAVE_PER_PART_GEOJSON = True         # Per-part vector outputs (debug)
 SAVE_PER_PART_RASTERS = True         # Per-part COG rasters (debug)
 SAVE_COMBINED_PER_FIRE_GEOJSON = True # The new grouped output
+FORCE_REBUILD = False                 # If True, ignore existing combined outputs
 
 # Datacube / product parameters
 OUTPUT_CRS = 'EPSG:3577'
@@ -381,6 +382,19 @@ def process_single_fire(
     return aggregated
 
 
+def _is_valid_geojson(path: str) -> bool:
+    """
+    Check if a GeoJSON exists, is non-empty, and has severity column.
+    """
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return False
+        gdf = gpd.read_file(path)
+        return (len(gdf) > 0) and ("severity" in gdf.columns)
+    except Exception:
+        return False
+
+
 # =========================
 # ========= MAIN ==========
 # =========================
@@ -443,8 +457,8 @@ def main():
             base_fire_slug = base_fire_slug.replace(os.altsep, "_")
 
         combined_path = os.path.join(OUTPUT_PRODUCT_DIR, f"burn_severity_polygons_{base_fire_slug}.geojson")
-        if SAVE_COMBINED_PER_FIRE_GEOJSON and os.path.exists(combined_path):
-            print(f"[Group '{base_fire_name}'] Combined GeoJSON exists. Skipping combined write.")
+        if (not FORCE_REBUILD) and SAVE_COMBINED_PER_FIRE_GEOJSON and _is_valid_geojson(combined_path):
+            print(f"[Group '{base_fire_name}'] Combined GeoJSON exists and is valid. Skipping.")
             combined_skip += 1
             continue
 
@@ -494,7 +508,11 @@ def main():
                     combined_gdf['ignition_date'] = (str(ign)[:10] if pd.notna(ign) else "")
                     combined_gdf['extinguish_date'] = ("None" if (ext is None or pd.isna(ext)) else str(ext)[:10])
 
-                    combined_gdf.to_file(combined_path, driver="GeoJSON")
+                    # Atomic write: write to temp then replace
+                    tmp_path = combined_path + ".tmp"
+                    combined_gdf.to_file(tmp_path, driver="GeoJSON")
+                    os.replace(tmp_path, combined_path)
+
                     print(f"[COMBINED] Saved MultiPolygon GeoJSON: {combined_path}")
                     combined_success += 1
                 except Exception as e:
