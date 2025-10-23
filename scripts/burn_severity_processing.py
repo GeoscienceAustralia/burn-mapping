@@ -398,6 +398,10 @@ def process_single_fire(
         GeoDataFrame dissolved by 'severity' (with 'severity' column),
         reprojected to 'EPSG:4283', or None if nothing to save.
     """
+
+    # Set AWS credentials for accessing public data
+    os.environ["AWS_NO_SIGN_REQUEST"] = "Yes"
+
     # --- Geometry and metadata
     gpgon = Geometry(fire_series.geometry, crs=poly_crs)
 
