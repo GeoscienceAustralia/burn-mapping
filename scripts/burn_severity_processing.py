@@ -34,7 +34,7 @@ import traceback  # For detailed error logging
 # Third-party imports
 import datacube
 import geopandas as gpd
-import numpy as pd
+import numpy as np
 import pandas as pd
 import xarray as xr
 from datacube.utils.cog import write_cog
