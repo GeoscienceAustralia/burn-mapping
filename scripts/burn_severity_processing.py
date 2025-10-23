@@ -241,13 +241,20 @@ def create_debug_mask(pre_fire_scene: xr.Dataset,
     return new_debug
 
 
+def _append_log(log_path: str, line: str) -> None:
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(line.rstrip("\n") + "\n")
+
+
 def process_single_fire(
     fire_series: pd.Series,
     poly_crs: CRS,
     dc: datacube.Datacube,
     unique_fire_name: str,
     save_per_part_vectors: bool = SAVE_PER_PART_GEOJSON,
-    save_per_part_rasters: bool = SAVE_PER_PART_RASTERS
+    save_per_part_rasters: bool = SAVE_PER_PART_RASTERS,
+    log_path: str | None = None
 ) -> gpd.GeoDataFrame | None:
     """
     Full burn mapping workflow for a single polygon (part).
@@ -303,6 +310,11 @@ def process_single_fire(
     baseline = load_ard_with_fallback(dc, gpgon, time=(start_date_pre, end_date_pre),
                                       min_gooddata_thresholds=(0.99, 0.90))
     if baseline.time.size == 0:
+        if log_path:
+            _append_log(
+                log_path,
+                f"{fire_name_part}\tbaseline_scenes=0\tpost_scenes=0\tgrid=0x0\ttotal_px=0\tvalid_px=0\tburn_px=0\tmasked_px=0"
+            )
         print("No baseline data for this part. Skipping.")
         return None
     closest_bl = baseline.isel(time=-1)
@@ -310,6 +322,17 @@ def process_single_fire(
     post = load_ard_with_fallback(dc, gpgon, time=(start_date_post, end_date_post),
                                   min_gooddata_thresholds=(0.90,))
     if post.time.size == 0:
+        if log_path:
+            # We can still report baseline pixel grid
+            yy = int(closest_bl.sizes.get('y', 0))
+            xx = int(closest_bl.sizes.get('x', 0))
+            total_px = yy * xx
+            # Using contiguity to estimate valid pixels in baseline
+            bl_valid_px = int((closest_bl.oa_nbart_contiguity == 1).sum().item()) if 'oa_nbart_contiguity' in closest_bl.data_vars else 0
+            _append_log(
+                log_path,
+                f"{fire_name_part}\tbaseline_scenes={baseline.time.size}\tpost_scenes=0\tgrid={yy}x{xx}\ttotal_px={total_px}\tvalid_px_baseline={bl_valid_px}\tburn_px=0\tmasked_px=0"
+            )
         print("No post-fire data for this part. Skipping.")
         return None
 
@@ -323,6 +346,14 @@ def process_single_fire(
         dask_chunks={}
     )
     if landcover.time.size == 0:
+        if log_path:
+            yy = int(closest_bl.sizes.get('y', 0))
+            xx = int(closest_bl.sizes.get('x', 0))
+            total_px = yy * xx
+            _append_log(
+                log_path,
+                f"{fire_name_part}\tbaseline_scenes={baseline.time.size}\tpost_scenes={post.time.size}\tgrid={yy}x{xx}\ttotal_px={total_px}\tvalid_px=0\tburn_px=0\tmasked_px=0\tlandcover=missing"
+            )
         print(f"No landcover data for year {landcover_year}. Skipping.")
         return None
     landcover = landcover.isel(time=0)
@@ -339,6 +370,54 @@ def process_single_fire(
     debug_mask = create_debug_mask(closest_bl, post)
     final_severity = severity.where(debug_mask == 0, 6)
     final_severity.name = 'burn_severity'
+
+    try:
+        yy = int(final_severity.sizes.get('y', 0))
+        xx = int(final_severity.sizes.get('x', 0))
+        total_px = yy * xx
+    except Exception:
+        yy = xx = total_px = 0
+
+    try:
+        valid_px = int((debug_mask == 0).sum().item())
+    except Exception:
+        valid_px = 0
+
+    try:
+        # Count burn classes 1–5
+        burn_px = int(final_severity.isin([1, 2, 3, 4, 5]).sum().item())
+    except Exception:
+        burn_px = 0
+
+    try:
+        masked_px = int((final_severity == 6).sum().item())
+    except Exception:
+        masked_px = 0
+
+    try:
+        bl_valid_px = int((closest_bl.oa_nbart_contiguity == 1).sum().item()) if 'oa_nbart_contiguity' in closest_bl.data_vars else 0
+        post_any_contig = post.oa_nbart_contiguity.max('time') if 'oa_nbart_contiguity' in post.data_vars else None
+        post_valid_px_any = int((post_any_contig == 1).sum().item()) if post_any_contig is not None else 0
+    except Exception:
+        bl_valid_px = 0
+        post_valid_px_any = 0
+
+    if log_path:
+        _append_log(
+            log_path,
+            (
+                f"{fire_name_part}"
+                f"\tbaseline_scenes={baseline.time.size}"
+                f"\tpost_scenes={post.time.size}"
+                f"\tgrid={yy}x{xx}"
+                f"\ttotal_px={total_px}"
+                f"\tvalid_px={valid_px}"
+                f"\tburn_px={burn_px}"
+                f"\tmasked_px={masked_px}"
+                f"\tvalid_px_baseline={bl_valid_px}"
+                f"\tvalid_px_post_any={post_valid_px_any}"
+            )
+        )
 
     # --- Vectorize (exclude unburnt class 0)
     print("Vectorizing severity raster (per-part)...")
@@ -457,6 +536,13 @@ def main():
             base_fire_slug = base_fire_slug.replace(os.altsep, "_")
 
         combined_path = os.path.join(OUTPUT_PRODUCT_DIR, f"burn_severity_polygons_{base_fire_slug}.geojson")
+
+        # --- NEW (minimal): per-group log file; write a one-line header once
+        log_path = os.path.join(OUTPUT_PRODUCT_DIR, f"{base_fire_slug}_processing.log")
+        if not os.path.exists(log_path):
+            _append_log(log_path, f"# Processing log for {base_fire_name} (group index {orig_idx})")
+            _append_log(log_path, "# part_name\tbaseline_scenes\tpost_scenes\tgrid\ttotal_px\tvalid_px\tburn_px\tmasked_px\tvalid_px_baseline\tvalid_px_post_any")
+
         if (not FORCE_REBUILD) and SAVE_COMBINED_PER_FIRE_GEOJSON and _is_valid_geojson(combined_path):
             print(f"[Group '{base_fire_name}'] Combined GeoJSON exists and is valid. Skipping.")
             combined_skip += 1
@@ -478,7 +564,9 @@ def main():
                     dc=dc,
                     unique_fire_name=unique_fire_name,
                     save_per_part_vectors=SAVE_PER_PART_GEOJSON,
-                    save_per_part_rasters=SAVE_PER_PART_RASTERS
+                    save_per_part_rasters=SAVE_PER_PART_RASTERS,
+                    # --- NEW (minimal): pass the log path down
+                    log_path=log_path
                 )
                 if gdf_part is not None and len(gdf_part) > 0:
                     per_part_gdfs.append(gdf_part)
