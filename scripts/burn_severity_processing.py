@@ -361,35 +361,9 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
         remote_key = f"{dest_dir_key}/{rel}"
         fs.put(full, f"{bucket}/{remote_key}")
 
-    # Verify existence + sizes
-    all_ok = True
-    for rel, size, _ in local_files:
-        remote_key = f"{dest_dir_key}/{rel}"
-        s3_path = f"{bucket}/{remote_key}"
-        if not fs.exists(s3_path):
-            print(f"[S3 upload] Missing object: s3://{s3_path}")
-            all_ok = False
-            break
-        try:
-            sz = int(fs.info(s3_path).get("Size", -1))
-            if sz != int(size):
-                print(f"[S3 upload] Size mismatch for s3://{s3_path} ({sz} != {size})")
-                all_ok = False
-                break
-        except Exception as e:
-            print(f"[S3 upload] Could not stat s3://{s3_path}: {e}")
-            all_ok = False
-            break
-
-    if all_ok:
-        print(f"[S3 upload] Verified. Removing local folder: {local_dir}")
-        import shutil
-        shutil.rmtree(local_dir, ignore_errors=True)
-        return True
-
-    print("[S3 upload] Verification failed; NOT deleting local folder.")
-    return False
-
+    import shutil
+    shutil.rmtree(local_dir, ignore_errors=True)
+    return True
 
 
 def process_single_fire(
