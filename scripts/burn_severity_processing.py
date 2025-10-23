@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Burnt Severity Classification Script (Grouped MultiPolygon Output) — CLI
+with per-fire S3 upload and local cleanup.
 
 This script processes Sentinel-2 ARD (Analysis Ready Data) to map the extent
 and severity of a bushfire. It compares a pre-fire baseline image with a
@@ -10,14 +11,14 @@ It classifies severity differently for woody vs. grassy landcover types,
 masks out bad data (clouds, water), and writes:
   - ONE combined MultiPolygon GeoJSON per original feature (named by fire_name)
   - Optional per-part GeoJSON/COG previews (debug toggles)
-  - All outputs are saved into a subfolder: products/<fire_name_slug>/
+  - All outputs are saved into a subfolder: <output_dir>/<fire_name_slug>/
+  - Each per-fire subfolder is uploaded to S3 and deleted locally on success
+    at: <s3_upload_prefix>/<fire_name_slug>/
 
-CLI additions:
-- --polygons accepts local paths or S3 URIs (s3://...). For S3, requires s3fs.
-- Standard toggles exposed as flags.
-
-Usage:
-  python burn_severity_cli.py --polygons s3://bucket/path/to/polygons.geojson
+Usage examples:
+  python burn_severity_cli.py \
+    --polygons s3://dea-public-data-dev/projects/burn_cube/derivative/dea_burn_severity/polygon_set/10k_sampled_fires.geojson \
+    --upload-to-s3-prefix s3://dea-public-data-dev/projects/burn_cube/derivative/dea_burn_severity/result
 """
 
 # Standard library imports
@@ -33,7 +34,7 @@ import traceback  # For detailed error logging
 # Third-party imports
 import datacube
 import geopandas as gpd
-import numpy as np
+import numpy as pd
 import pandas as pd
 import xarray as xr
 from datacube.utils.cog import write_cog
@@ -62,7 +63,11 @@ MAX_POLYGONS_TO_PROCESS = 10  # Process the first N features
 SAVE_PER_PART_GEOJSON = True          # Per-part vector outputs (debug)
 SAVE_PER_PART_RASTERS = True          # Per-part COG rasters (debug)
 SAVE_COMBINED_PER_FIRE_GEOJSON = True # The new grouped output
-FORCE_REBUILD = False                 # If True, ignore existing combined outputs
+FORCE_REBUILD = False                 # If True, ignore existing outputs
+
+# S3 upload defaults
+DEFAULT_S3_UPLOAD_PREFIX = "s3://dea-public-data-dev/projects/burn_cube/derivative/dea_burn_severity/result"
+UPLOAD_TO_S3 = True  # can be disabled via CLI
 
 # Datacube / product parameters
 OUTPUT_CRS = 'EPSG:3577'
@@ -103,7 +108,7 @@ GRASS_CLASSES = [
 def _read_geojson_maybe_s3(path: str) -> gpd.GeoDataFrame:
     """
     Read a GeoJSON from a local path or S3 URI into a GeoDataFrame.
-    If S3 is used, this will stream to a temporary local file (requires s3fs).
+    For S3, streams to a temporary local file (requires s3fs).
     """
     if isinstance(path, str) and path.lower().startswith("s3://"):
         try:
@@ -114,7 +119,6 @@ def _read_geojson_maybe_s3(path: str) -> gpd.GeoDataFrame:
                 "Install with: pip install s3fs"
             ) from e
 
-        # Try anonymous first; if fails, fallback to default creds
         gdf = None
         errs = []
         for anon in (True, False):
@@ -288,6 +292,93 @@ def _append_log(log_path: str, line: str) -> None:
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(line.rstrip("\n") + "\n")
+
+
+def _parse_s3_uri(s3_uri: str) -> tuple[str, str]:
+    if not s3_uri.lower().startswith("s3://"):
+        raise ValueError(f"Not an S3 URI: {s3_uri}")
+    no_scheme = s3_uri[5:]
+    bucket, _, key = no_scheme.partition("/")
+    return bucket, key.rstrip("/")
+
+
+def _s3_key_exists_and_nonempty(fs, bucket: str, key: str) -> bool:
+    s3_path = f"{bucket}/{key}"
+    try:
+        if fs.exists(s3_path):
+            info = fs.info(s3_path)
+            return info.get("Size", 0) > 0
+        return False
+    except Exception:
+        return False
+
+
+def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
+    """
+    Upload local_dir recursively to s3_prefix/<basename(local_dir)> and,
+    on success (existence + size checks for all files), delete local_dir.
+    """
+    if not os.path.isdir(local_dir):
+        print(f"[S3 upload] Local directory does not exist: {local_dir}")
+        return False
+
+    try:
+        import s3fs  # type: ignore
+    except Exception as e:
+        print("Error: S3 upload requires 's3fs'. Install with: pip install s3fs")
+        return False
+
+    bucket, key_prefix = _parse_s3_uri(s3_prefix)
+    slug = os.path.basename(os.path.normpath(local_dir))
+    dest_prefix = f"{key_prefix}/{slug}".strip("/")
+
+    fs = s3fs.S3FileSystem(anon=False)
+
+    # Build manifest of local files with sizes
+    local_files = []
+    for root, _, files in os.walk(local_dir):
+        for name in files:
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, local_dir).replace("\\", "/")
+            size = os.path.getsize(full)
+            local_files.append((rel, size, full))
+
+    if not local_files:
+        print(f"[S3 upload] Nothing to upload from {local_dir}")
+        return False
+
+    # Upload recursively using s3fs.put (it mirrors the folder under prefix)
+    s3_target = f"{bucket}/{dest_prefix}"
+    print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{s3_target}/' ...")
+    fs.put(local_dir, s3_target, recursive=True)
+
+    # Verify existence and size (best-effort)
+    all_ok = True
+    for rel, size, _ in local_files:
+        key = f"{dest_prefix}/{rel}"
+        exists = fs.exists(f"{bucket}/{key}")
+        if not exists:
+            print(f"[S3 upload] Missing object after upload: s3://{bucket}/{key}")
+            all_ok = False
+            break
+        try:
+            sz = fs.info(f"{bucket}/{key}").get("Size", -1)
+            if int(sz) != int(size):
+                print(f"[S3 upload] Size mismatch for s3://{bucket}/{key} ({sz} != {size})")
+                all_ok = False
+                break
+        except Exception as e:
+            print(f"[S3 upload] Could not stat s3://{bucket}/{key}: {e}")
+            all_ok = False
+            break
+
+    if all_ok:
+        print(f"[S3 upload] Verified. Removing local folder: {local_dir}")
+        shutil.rmtree(local_dir, ignore_errors=True)
+        return True
+
+    print("[S3 upload] Verification failed; NOT deleting local folder.")
+    return False
 
 
 def process_single_fire(
@@ -533,6 +624,8 @@ def main(polygons_path: str,
          save_per_part_rasters: bool = SAVE_PER_PART_RASTERS,
          save_combined: bool = SAVE_COMBINED_PER_FIRE_GEOJSON,
          force_rebuild: bool = FORCE_REBUILD,
+         upload_to_s3: bool = UPLOAD_TO_S3,
+         s3_upload_prefix: str = DEFAULT_S3_UPLOAD_PREFIX,
          app_name: str = "Burnt_Area_Mapping"):
     # Bind runtime options to globals (kept minimal)
     global OUTPUT_PRODUCT_DIR, MAX_POLYGONS_TO_PROCESS
@@ -548,6 +641,17 @@ def main(polygons_path: str,
 
     os.makedirs(OUTPUT_PRODUCT_DIR, exist_ok=True)
     print(f"All outputs will be saved to: {OUTPUT_PRODUCT_DIR}")
+
+    # If uploading, prep S3 fs and a skip check against S3 for combined file
+    s3_fs = None
+    if upload_to_s3:
+        try:
+            import s3fs  # type: ignore
+            s3_fs = s3fs.S3FileSystem(anon=False)
+        except Exception as e:
+            print("Warning: '--upload-to-s3-prefix' requested but 's3fs' not available.")
+            print("         Install with: pip install s3fs")
+            upload_to_s3 = False
 
     dc = datacube.Datacube(app=app_name)
 
@@ -614,9 +718,26 @@ def main(polygons_path: str,
             _append_log(log_path, f"# Processing log for {base_fire_name} (group index {orig_idx})")
             _append_log(log_path, "# part_name\tbaseline_scenes\tpost_scenes\tgrid\ttotal_px\tvalid_px\tburn_px\tmasked_px\tvalid_px_baseline\tvalid_px_post_any")
 
-        if (not FORCE_REBUILD) and SAVE_COMBINED_PER_FIRE_GEOJSON and _is_valid_geojson(combined_path):
-            print(f"[Group '{base_fire_name}'] Combined GeoJSON exists and is valid. Skipping.")
-            combined_skip += 1
+        # SKIP check:
+        #  1) local combined valid?
+        #  2) or (if uploading) S3 combined exists (non-empty)?
+        skip_due_to_output = False
+        if (not FORCE_REBUILD) and SAVE_COMBINED_PER_FIRE_GEOJSON:
+            if _is_valid_geojson(combined_path):
+                print(f"[Group '{base_fire_name}'] Local combined exists & valid. Skipping processing.")
+                combined_skip += 1
+                skip_due_to_output = True
+            elif upload_to_s3 and s3_fs is not None:
+                bucket, prefix = _parse_s3_uri(s3_upload_prefix)
+                remote_key = f"{prefix}/{base_fire_slug}/burn_severity_polygons_{base_fire_slug}.geojson"
+                if _s3_key_exists_and_nonempty(s3_fs, bucket, remote_key):
+                    print(f"[Group '{base_fire_name}'] Combined exists in S3. Skipping processing.")
+                    combined_skip += 1
+                    skip_due_to_output = True
+
+        if skip_due_to_output:
+            # If local folder exists but we're skipping due to S3, we can optionally clean it up
+            # (keep it to avoid losing logs / artifacts unintentionally)
             continue
 
         print("\n" + "="*80)
@@ -649,6 +770,7 @@ def main(polygons_path: str,
                 print("Continuing to next part...")
 
         # Combine parts for this group into one MultiPolygon per severity
+        wrote_combined = False
         if SAVE_COMBINED_PER_FIRE_GEOJSON:
             if per_part_gdfs:
                 try:
@@ -675,6 +797,7 @@ def main(polygons_path: str,
                     print(f"[COMBINED] Saved MultiPolygon GeoJSON: {combined_path}")
                     _append_log(log_path, f"# Combined saved: {combined_path}")
                     combined_success += 1
+                    wrote_combined = True
                 except Exception as e:
                     print(f"!!! FAILED to save combined GeoJSON for '{base_fire_name}': {e}")
                     traceback.print_exc()
@@ -682,10 +805,16 @@ def main(polygons_path: str,
                 print(f"No per-part severity vectors to combine for '{base_fire_name}'.")
                 _append_log(log_path, "# No per-part vectors to combine.")
 
+        # Upload this group's folder to S3 and remove local copy if successful
+        if upload_to_s3:
+            ok = _upload_dir_to_s3_and_cleanup(group_dir, s3_upload_prefix)
+            if not ok:
+                print(f"[S3 upload] WARNING: '{group_dir}' was not removed (upload verification failed).")
+
     print("\n" + "="*80)
     print("Batch processing complete.")
     print(f"  Per-part success: {part_success}")
-    print(f"  Per-part failed: {part_fail}")
+    print(f"  Per-part failed:  {part_fail}")
     if SAVE_COMBINED_PER_FIRE_GEOJSON:
         print(f"  Combined (group) success: {combined_success}")
         print(f"  Combined (group) skipped (exists): {combined_skip}")
@@ -698,7 +827,7 @@ def main(polygons_path: str,
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Burn severity mapping over Sentinel-2 ARD with grouped MultiPolygon outputs."
+        description="Burn severity mapping over Sentinel-2 ARD with grouped MultiPolygon outputs, per-fire S3 upload, and local cleanup."
     )
     parser.add_argument(
         "--polygons", required=True,
@@ -712,7 +841,6 @@ def parse_args(argv=None):
         "--max-fires", type=int, default=MAX_POLYGONS_TO_PROCESS,
         help=f"Process at most this many features (default: {MAX_POLYGONS_TO_PROCESS})."
     )
-    # Python 3.9+: BooleanOptionalAction
     bool_action = argparse.BooleanOptionalAction if hasattr(argparse, "BooleanOptionalAction") else None
     parser.add_argument(
         "--save-per-part-vectors",
@@ -739,8 +867,20 @@ def parse_args(argv=None):
         "--force-rebuild",
         action=bool_action or "store_true",
         default=FORCE_REBUILD,
-        help=f"Rebuild even if combined outputs exist (default: {FORCE_REBUILD}). "
+        help=f"Rebuild even if outputs exist (default: {FORCE_REBUILD}). "
              f"Use --no-force-rebuild to skip rebuilding if supported."
+    )
+    parser.add_argument(
+        "--upload-to-s3-prefix",
+        default=DEFAULT_S3_UPLOAD_PREFIX,
+        help=f"S3 prefix to upload each per-fire subfolder to (default: {DEFAULT_S3_UPLOAD_PREFIX})."
+    )
+    parser.add_argument(
+        "--upload-to-s3",
+        action=bool_action or "store_true",
+        default=UPLOAD_TO_S3,
+        help=f"Enable S3 upload and local cleanup (default: {UPLOAD_TO_S3}). "
+             f"Use --no-upload-to-s3 to disable if supported."
     )
     parser.add_argument(
         "--app-name", default="Burnt_Area_Mapping",
@@ -759,5 +899,7 @@ if __name__ == "__main__":
         save_per_part_rasters=args.save_per_part_rasters,
         save_combined=args.save_combined_per_fire,
         force_rebuild=args.force_rebuild,
+        upload_to_s3=args.upload_to_s3,
+        s3_upload_prefix=args.upload_to_s3_prefix,
         app_name=args.app_name,
     )
