@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Burnt Severity Classification Script
 
@@ -8,8 +7,7 @@ post-fire time series to calculate the delta Normalized Burn Ratio (dNBR).
 
 It classifies severity differently for woody vs. grassy landcover types,
 masks out bad data (clouds, water), and saves the final classification
-as both a GeoJSON shapefile (one per fire) and preview GeoTIFFs (one per
-polygon part).
+as both a GeoJSON shapefile and a preview GeoTIFF.
 """
 
 # Standard library imports
@@ -70,7 +68,7 @@ S2_MEASUREMENTS = [
 
 # Analysis parameters
 PRE_FIRE_BUFFER_DAYS = 50
-POST_FIRE_START_DAYS = 15   # Used if no extinguish date
+POST_FIRE_START_DAYS = 15  # Used if no extinguish date
 POST_FIRE_WINDOW_DAYS = 60
 
 # Landcover class definitions for "grass"
@@ -248,37 +246,36 @@ def create_debug_mask(pre_fire_scene: xr.Dataset,
 def process_single_fire(fire_series: pd.Series, 
                         poly_crs: CRS, 
                         dc: datacube.Datacube,
-                        unique_part_name: str) -> gpd.GeoDataFrame | None:
+                        unique_fire_name: str):
     """
-    Runs the full burn mapping workflow for a single fire polygon (part).
-    
-    This function now SAVES RASTER (COG) files using the `unique_part_name`
-    and RETURNS the vectorized GeoDataFrame for later aggregation.
+    Runs the full burn mapping workflow for a single fire polygon.
     
     Args:
-        fire_series: A single row (pd.Series) containing metadata for the
-                     *original fire* but the *geometry* for the *specific part*.
+        fire_series: A single row (pd.Series) from the *exploded* GeoDataFrame.
         poly_crs: The CRS of the input polygons.
         dc: An active Datacube instance.
-        unique_part_name: A unique name for this specific polygon part,
-                          used for saving RASTER files.
-
-    Returns:
-        A GeoDataFrame of the vectorized severity, or None if processing
-        fails or no burn area is detected.
+        unique_fire_name: A unique name for this specific (poly) part.
     """
     
     # --- 1. Extract Metadata and Geometry ---
-    # fire_series.geometry is a single Polygon (a part of the original)
+    # fire_series.geometry is now guaranteed to be a single Polygon
     gpgon = Geometry(fire_series.geometry, crs=poly_crs)
     
-    # Create a single-row GeoDataFrame for clipping
+    # Create a single-row GeoDataFrame for clipping and metadata
     poly = gpd.GeoDataFrame([fire_series], crs=poly_crs)
 
     fire_id = fire_series.fire_id
     
-    # 'name' is the unique name for *this part*
-    name = unique_part_name
+    name = unique_fire_name
+
+    # --- Check if output file already exists ---
+    output_geojson_name = os.path.join(
+        OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}.geojson')
+    
+    if os.path.exists(output_geojson_name):
+        # This check is now handled in main() to allow for better skip counting
+        # This function assumes it needs to run
+        pass
 
     # FIXME: 'fire_date' was used in the original script but not defined.
     # I am assuming it comes from an 'ignition_date' column.
@@ -300,9 +297,9 @@ def process_single_fire(fire_series: pd.Series,
         print("No 'extinguish' date column found. Will use default buffer.")
         extinguish_date = 'None'
     
-    print(f"   Fire ID: {fire_id}")
-    print(f"   Ignition: {fire_date}")
-    print(f"   Extinguish: {extinguish_date}")
+    print(f"  Fire ID: {fire_id}")
+    print(f"  Ignition: {fire_date}")
+    print(f"  Extinguish: {extinguish_date}")
 
     # --- 2. Calculate Time Windows ---
     start_date_pre = (datetime.strptime(fire_date, '%Y-%m-%d') - 
@@ -335,7 +332,7 @@ def process_single_fire(fire_series: pd.Series,
                                       min_gooddata_thresholds=[0.99, 0.90])
     if baseline.time.size == 0:
         print("Error: No baseline data found for this fire. Skipping.")
-        return None # Skip this fire part
+        return # Skip this fire
 
     closest_bl = baseline.isel(time=-1)
 
@@ -344,7 +341,7 @@ def process_single_fire(fire_series: pd.Series,
                                   min_gooddata_thresholds=[0.90])
     if post.time.size == 0:
         print("Error: No post-fire data found for this fire. Skipping.")
-        return None # Skip this fire part
+        return # Skip this fire
         
     landcover = dc.load(
         product='ga_ls_landcover_class_cyear_3',
@@ -357,7 +354,7 @@ def process_single_fire(fire_series: pd.Series,
     )
     if landcover.time.size == 0:
         print(f"Error: No landcover data found for year {landcover_year}. Skipping.")
-        return None # Skip this fire part
+        return # Skip this fire
     landcover = landcover.isel(time=0)
 
     # --- 4. Calculate Indices and Severity ---
@@ -393,29 +390,29 @@ def process_single_fire(fire_series: pd.Series,
     
     if severity_vectors.empty:
         print("No burn area detected (vectors are empty). Skipping save.")
-        return None # MODIFIED: Return None instead of just returning
+        return
 
-    # Clip vectors to the precise boundary of this *part*
+    severity_vectors = severity_vectors.to_crs('EPSG:4283')
     clipped_severity_vectors = severity_vectors.clip(poly)
-    
-    if clipped_severity_vectors.empty:
-        print("No burn area detected after clipping to polygon part. Skipping save.")
-        return None
-        
     aggregated_severity = clipped_severity_vectors.dissolve(by='severity')
     
-    # Add metadata (will be used in the combined GDF)
     aggregated_severity['fire_id'] = fire_id
     aggregated_severity['fire_name'] = name # This will be the unique_fire_name
     aggregated_severity['ignition_date'] = fire_date
     aggregated_severity['extinguish_date'] = extinguish_date
 
-    # --- MODIFIED: Save Vector Files (REMOVED) ---
-    # Vector files are no longer saved here. They are returned
-    # to main() to be combined.
+    # --- Save Vector Files ---
+    base_output_name = os.path.join(OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{name}')
+    
+    #output_shp_name = f'{base_output_name}.shp'
+    #aggregated_severity.to_file(output_shp_name)
+    #print(f"Saved severity shapefile to: {output_shp_name}")
+    
+    # The output_geojson_name variable is already defined at the top
+    aggregated_severity.to_file(output_geojson_name, driver='GeoJSON')
+    print(f"Saved severity GeoJSON to: {output_geojson_name}")
 
     # --- Save Raster Files (COGs) ---
-    # These *are* saved here, using the unique_part_name
     output_cog_preview = os.path.join(
         OUTPUT_PRODUCT_DIR, f's2_postfire_preview_{name}.tif')
     write_cog(post.isel(time=0).to_array().compute(), 
@@ -423,13 +420,6 @@ def process_single_fire(fire_series: pd.Series,
               overwrite=True) # Added overwrite
     print(f"Saved post-fire preview COG to: {output_cog_preview}")
     
-    output_cog_severity = os.path.join(
-        OUTPUT_PRODUCT_DIR, f'burn_severity_raster_{name}.tif')
-    write_cog(final_severity.compute(), 
-              fname=output_cog_severity,
-              overwrite=True)
-    print(f"Saved severity raster COG to: {output_cog_severity}")
-
     output_cog_debug = os.path.join(
         OUTPUT_PRODUCT_DIR, f'debug_mask_raster_{name}.tif')
     write_cog(new_debug.compute(), 
@@ -438,9 +428,6 @@ def process_single_fire(fire_series: pd.Series,
     print(f"Saved debug mask raster COG to: {output_cog_debug}")
     
     print(f"Successfully processed fire part: {name}")
-    
-    # --- MODIFIED: Return the vector data ---
-    return aggregated_severity
 
 
 def main():
@@ -458,7 +445,7 @@ def main():
         print("No polygons loaded. Exiting.")
         return
 
-    # --- 1. Select Fires to Process ---
+    # --- 1. Start Loop ---
     
     # Get the slice of *fires* we want to process
     num_fires_to_process = min(MAX_POLYGONS_TO_PROCESS, len(all_polys))
@@ -466,148 +453,74 @@ def main():
     
     # Get the subset of *fires* BEFORE exploding
     polys_to_process = all_polys.iloc[:num_fires_to_process]
+    
+    # --- NEW: Explode MultiPolygons ---
+    # This turns any MultiPolygon row into multiple rows, one for each Polygon.
+    # index_parts=True creates a MultiIndex, e.g., (original_index, part_num)
+    # which we use to create a unique name.
+    try:
+        all_polys_exploded = polys_to_process.explode(index_parts=True)
+    except TypeError:
+        # Fallback for older geopandas versions that don't have 'index_parts'
+        print("Using fallback for geopandas.explode().")
+        all_polys_exploded = polys_to_process.explode()
 
+    num_parts_to_process = len(all_polys_exploded)
+    print(f"The {num_fires_to_process} selected fires contain {num_parts_to_process} individual polygons (parts). Processing all parts.")
+    
     success_count = 0
     fail_count = 0
     skip_count = 0  
     
-    # --- 2. MODIFIED: Loop over ORIGINAL fires ---
-    for original_index, original_fire_series in polys_to_process.iterrows():
+    # Loop over the *exploded* polygons
+    for i in range(num_parts_to_process):
+        fire_series = all_polys_exploded.iloc[i]
         
-        # --- Get original fire name (using fire_id) ---
-        # We use the index, which *is* the fire_id after dissolve
-        original_fire_id = original_fire_series.get('fire_id', original_index)
-        original_fire_name = f"fire_id_{original_fire_id}"
+        # --- NEW: Create a unique name for this polygon part ---
+        # Get the original name
+        original_fire_name = fire_series.get('fire_name', f"fire_id_{fire_series.get('fire_id', i)}")
+        
+        # The series index (fire_series.name) will be a tuple (original_index, part_index)
+        # if it came from an exploded MultiPolygon.
+        if isinstance(fire_series.name, tuple):
+            # fire_series.name[0] is original index (e.g., fire_id)
+            # fire_series.name[1] is the part number (0, 1, 2...)
+            unique_fire_name = f"{original_fire_name}_part_{fire_series.name[1]}"
+        else:
+            # It was a simple Polygon, index is not a tuple
+            unique_fire_name = original_fire_name
+        # ---
         
         print("\n" + "="*80)
-        print(f"Processing Fire: {original_fire_name} (Index: {original_index})")
+        print(f"Processing polygon {i+1}/{num_parts_to_process}: {unique_fire_name}")
         print("="*80)
-
-        # --- Check if COMBINED vector file already exists ---
-        output_geojson_name = os.path.join(
-            OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{original_fire_name}.geojson')
         
-        if os.path.exists(output_geojson_name):
-            print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping entire fire.")
-            skip_count += 1
-            continue
-
-        # --- Prepare for part processing ---
-        all_parts_vectors = [] # To store vector GDFs from each part
-        fire_failed_parts = 0  # To count failed parts
-        
-        # Explode this single fire into its parts
-        current_fire_gdf = gpd.GeoDataFrame([original_fire_series], crs=all_polys.crs)
         try:
-            fire_parts_gdf = current_fire_gdf.explode(index_parts=True)
-        except TypeError:
-            # Fallback for older geopandas versions
-            fire_parts_gdf = current_fire_gdf.explode()
-        
-        num_parts = len(fire_parts_gdf)
-        print(f"Fire consists of {num_parts} polygon part(s).")
-
-        # --- 3. Inner loop over each part of this fire ---
-        for part_i, (part_index, part_series) in enumerate(fire_parts_gdf.iterrows()):
+            # Check for existing file using the new unique name
+            output_geojson_name = os.path.join(
+                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{unique_fire_name}.geojson')
             
-            # Create a unique name for this part's *raster* files
-            if num_parts > 1:
-                unique_part_name = f"{original_fire_name}_part_{part_i}"
-            else:
-                unique_part_name = original_fire_name
-            
-            print(f"\n--- Processing Part {part_i + 1}/{num_parts}: {unique_part_name} ---")
-
-            try:
-                # Create the series to process:
-                # It has the *metadata* of the original fire
-                # but the *geometry* of the specific part.
-                processing_series = original_fire_series.copy()
-                processing_series.geometry = part_series.geometry
+            if os.path.exists(output_geojson_name):
+                print(f"Output GeoJSON already exists: {output_geojson_name}. Skipping.")
+                skip_count += 1
+                continue # Go to the next loop iteration
                 
-                # Call the modified function. It will save rasters
-                # and return the vector GDF (or None)
-                part_vector_result = process_single_fire(
-                    processing_series, 
-                    all_polys.crs, 
-                    dc, 
-                    unique_part_name # This name is for the rasters
-                )
-                
-                if part_vector_result is not None and not part_vector_result.empty:
-                    all_parts_vectors.append(part_vector_result)
-                else:
-                    print(f"Part {unique_part_name} produced no vector data (unburnt or masked).")
-                    
-            except Exception as e:
-                fire_failed_parts += 1
-                print(f"!!! FAILED to process {unique_part_name}: {e}")
-                traceback.print_exc()
-                print(f"Continuing to next part, but vector output for {original_fire_name} will be incomplete.")
-
-        # --- 4. After all parts are processed, combine vectors ---
-        if fire_failed_parts > 0:
-            print(f"!!! Skipping vector save for {original_fire_name} because {fire_failed_parts} part(s) failed.")
-            fail_count += 1 # Mark the whole fire as failed
-            continue
-        
-        if not all_parts_vectors:
-            print(f"No burn area detected for any parts of {original_fire_name}. No vector file saved.")
-            success_count += 1 # Processed successfully, just no data
-            continue
-
-        # --- 5. Combine, re-project, and save combined vector ---
-        print(f"Combining {len(all_parts_vectors)} vector part(s) for {original_fire_name}...")
-        try:
-            combined_vectors = pd.concat(all_parts_vectors)
-            
-            # Re-project to the final desired CRS for vector output
-            combined_vectors = combined_vectors.to_crs('EPSG:4283')
-            
-            # We dissolve *again* after concat to merge shapes
-            # of the same severity class that might span across parts
-            print("Dissolving combined vectors by severity...")
-            combined_vectors = combined_vectors.dissolve(by='severity')
-            
-            # Re-add metadata (dissolve keeps 'severity' as index)
-            combined_vectors['fire_id'] = original_fire_id
-            combined_vectors['fire_name'] = original_fire_name
-            try:
-                combined_vectors['ignition_date'] = str(original_fire_series.ignition_date)[:10]
-            except: pass
-            try:
-                if pd.isna(original_fire_series.extinguish_date):
-                    combined_vectors['extinguish_date'] = 'None'
-                else:
-                    combined_vectors['extinguish_date'] = str(original_fire_series.extinguish_date)[:10]
-            except:
-                 combined_vectors['extinguish_date'] = 'None'
-
-
-            # Save COMBINED Vector Files (using original_fire_name)
-            base_output_name = os.path.join(
-                OUTPUT_PRODUCT_DIR, f'burn_severity_polygons_{original_fire_name}')
-            
-            output_shp_name = f'{base_output_name}.shp'
-            combined_vectors.to_file(output_shp_name)
-            print(f"Saved COMBINED severity shapefile to: {output_shp_name}")
-            
-            # 'output_geojson_name' was defined earlier for the skip check
-            combined_vectors.to_file(output_geojson_name, driver='GeoJSON')
-            print(f"Saved COMBINED severity GeoJSON to: {output_geojson_name}")
-            
+            # Pass the unique_fire_name to the processing function
+            process_single_fire(fire_series, all_polys.crs, dc, unique_fire_name)
             success_count += 1
             
         except Exception as e:
+            # Use unique_fire_name in error message
             fail_count += 1
-            print(f"!!! FAILED to combine and save vectors for {original_fire_name}: {e}")
-            traceback.print_exc()
+            print(f"!!! FAILED to process {unique_fire_name}: {e}")
+            traceback.print_exc() # Print full error trace
+            print("Continuing to next polygon...")
     
     print("\n" + "="*80)
     print("Batch processing complete.")
-    print(f"  Successfully processed: {success_count} (fires)")
-    print(f"  Skipped (already complete): {skip_count} (fires)")
-    print(f"  Failed: {fail_count} (fires)")
+    print(f"  Successfully processed: {success_count} (polygon parts)")
+    print(f"  Skipped (already complete): {skip_count} (polygon parts)")
+    print(f"  Failed: {fail_count} (polygon parts)")
     print("="*80)
 
 
