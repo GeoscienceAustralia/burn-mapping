@@ -287,11 +287,12 @@ def create_debug_mask(pre_fire_scene: xr.Dataset,
     return new_debug
 
 
-# --- Tiny helper to append a line to the group log ---
 def _append_log(log_path: str, line: str) -> None:
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(line.rstrip("\n") + "\n")
+        f.flush()                 # push to OS buffers
+        os.fsync(f.fileno())      # ensure it hits disk
 
 
 def _parse_s3_uri(s3_uri: str) -> tuple[str, str]:
