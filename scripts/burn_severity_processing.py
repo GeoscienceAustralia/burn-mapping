@@ -322,12 +322,8 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
     if not os.path.isdir(local_dir):
         print(f"[S3 upload] Local directory does not exist: {local_dir}")
         return False
-
-    try:
-        import s3fs  # type: ignore
-    except Exception:
-        print("Error: S3 upload requires 's3fs'. Install with: pip install s3fs")
-        return False
+        
+    import s3fs  # type: ignore
 
     bucket, key_prefix = _parse_s3_uri(s3_prefix)          # e.g. ('dea-public-data-dev', '.../result')
     dest_base = key_prefix.strip("/")                       # '.../result'
@@ -348,12 +344,6 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
     if not local_files:
         print(f"[S3 upload] Nothing to upload from {local_dir}")
         return False
-
-    # (Optional) create a "folder marker" so some browsers show an actual folder line
-    try:
-        fs.touch(f"{bucket}/{dest_dir_key}/")
-    except Exception:
-        pass  # not required
 
     # Upload each file to the EXACT key we want: <prefix>/<slug>/<rel>
     print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{bucket}/{dest_dir_key}/' ...")
