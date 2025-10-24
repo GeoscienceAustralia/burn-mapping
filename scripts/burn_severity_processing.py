@@ -345,12 +345,6 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
         print(f"[S3 upload] Nothing to upload from {local_dir}")
         return False
 
-    # (Optional) create a "folder marker" so some browsers show an actual folder line
-    try:
-        fs.touch(f"{bucket}/{dest_dir_key}/")
-    except Exception:
-        pass  # not required
-
     # Upload each file to the EXACT key we want: <prefix>/<slug>/<rel>
     print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{bucket}/{dest_dir_key}/' ...")
     for rel, _, full in local_files:
