@@ -49,7 +49,7 @@ try:
     from dea_tools.spatial import xr_vectorize
 except ImportError as e:
     print("Error: Could not import 'dea-tools'.")
-    print("       Please ensure the path added to sys.path is correct.")
+    print("        Please ensure the path added to sys.path is correct.")
     print(f"Details: {e}")
     sys.exit(1)
 
@@ -60,10 +60,10 @@ except ImportError as e:
 # Defaults (can be overridden by CLI)
 OUTPUT_PRODUCT_DIR = 'products'
 MAX_POLYGONS_TO_PROCESS = 10  # Process the first N features
-SAVE_PER_PART_GEOJSON = True          # Per-part vector outputs (debug)
-SAVE_PER_PART_RASTERS = True          # Per-part COG rasters (debug)
+SAVE_PER_PART_GEOJSON = True        # Per-part vector outputs (debug)
+SAVE_PER_PART_RASTERS = True        # Per-part COG rasters (debug)
 SAVE_COMBINED_PER_FIRE_GEOJSON = True # The new grouped output
-FORCE_REBUILD = False                 # If True, ignore existing outputs
+FORCE_REBUILD = False               # If True, ignore existing outputs
 
 # S3 upload defaults
 DEFAULT_S3_UPLOAD_PREFIX = "s3://dea-public-data-dev/projects/burn_cube/derivative/dea_burn_severity/result"
@@ -81,7 +81,7 @@ S2_MEASUREMENTS = [
 
 # Analysis parameters
 PRE_FIRE_BUFFER_DAYS = 50
-POST_FIRE_START_DAYS = 15   # Used if no extinguish date
+POST_FIRE_START_DAYS = 15    # Used if no extinguish date
 POST_FIRE_WINDOW_DAYS = 60
 
 # Landcover class definitions for "grass"
@@ -291,8 +291,8 @@ def _append_log(log_path: str, line: str) -> None:
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(line.rstrip("\n") + "\n")
-        f.flush()                 # push to OS buffers
-        os.fsync(f.fileno())      # ensure it hits disk
+        f.flush()            # push to OS buffers
+        os.fsync(f.fileno())     # ensure it hits disk
 
 
 def _parse_s3_uri(s3_uri: str) -> tuple[str, str]:
@@ -344,6 +344,12 @@ def _upload_dir_to_s3_and_cleanup(local_dir: str, s3_prefix: str) -> bool:
     if not local_files:
         print(f"[S3 upload] Nothing to upload from {local_dir}")
         return False
+
+    # (Optional) create a "folder marker" so some browsers show an actual folder line
+    try:
+        fs.touch(f"{bucket}/{dest_dir_key}/")
+    except Exception:
+        pass  # not required
 
     # Upload each file to the EXACT key we want: <prefix>/<slug>/<rel>
     print(f"[S3 upload] Uploading '{local_dir}' -> 's3://{bucket}/{dest_dir_key}/' ...")
@@ -797,7 +803,7 @@ def main(polygons_path: str,
     if SAVE_COMBINED_PER_FIRE_GEOJSON:
         print(f"  Combined (group) success: {combined_success}")
         print(f"  Combined (group) skipped (exists): {combined_skip}")
-    print("="*80)
+    print("="*88)
 
 
 # =========================
